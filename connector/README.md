@@ -42,29 +42,10 @@ This configures the USB Bluetooth adapter as the default (once plugged into jets
 
 ### Configure Paths
 
-Edit `config.yaml` and set your paths:
-
-```yaml
-classifier:
-  mode: subprocess
-  subprocess_cmd:
-    - python3
-    - /opt/capstone/ML-classifications/rocknet_infer.py
-    - --weights
-    - /opt/capstone/ML-classifications/best_rocknet.pt
-    - --image
-    - /opt/capstone/ML-classifications/latest.jpg
-
-transcriber:
-  mode: subprocess
-  subprocess_cmd:
-    - python3
-    - /opt/capstone/voice-to-text/improved2.py
-```
-
 Or use environment variable:
 ```bash
-export CAPSTONE_ROOT=/opt/capstone
+git rev-parse --show-toplevel
+export CAPSTONE_ROOT=/media/jetson/storage/capstone
 # Scripts will auto-detect from this
 ```
 
@@ -72,7 +53,7 @@ export CAPSTONE_ROOT=/opt/capstone
 
 ```bash
 # Development mode
-cd /opt/capstone/connector
+cd capstone/connector
 bash scripts/run_dev.sh
 ```
 
