@@ -23,9 +23,9 @@ def main():
     args = parser.parse_args()
 
     cap_root = os.environ.get("CAPSTONE_ROOT", guess_capstone_root())
-    script = args.script or os.path.join(cap_root, "voice-to-text", "improved2.py")
+    script = args.script or os.path.join(cap_root, "voiceNotes", "improved2.py")
     if not os.path.exists(script):
-        alt = os.path.join(cap_root, "voice-to-text", "voiceTranscription.py")
+        alt = os.path.join(cap_root, "voiceNotes", "voiceTranscription.py")
         script = alt
 
     env = os.environ.copy()
