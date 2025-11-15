@@ -1,53 +1,16 @@
-# Connector - Jetson BLE Bridge
+# Connector
 
 BLE bridge connecting Apple Watch to ML models on NVIDIA Jetson.
-
-## What It Does
 
 Exposes two BLE services that the Watch app uses:
 - **Classification Service** - Triggers `rocknet_infer.py` to classify rocks
 - **Transcription Service** - Runs `improved2.py` for voice-to-text
 
-**ML models are automatically invoked** when the Watch sends commands - you don't run them manually.
+**ML models are automatically invoked** when the Watch sends commands
 
 ---
 
-## Quick Setup (From Scratch)
-
-### Prerequisites
-- NVIDIA Jetson (Nano/Xavier/Orin) with JetPack installed
-- USB Bluetooth adapter (e.g., USB-BT500) - built-in BT often unreliable
-- Python 3.8+
-
-### 1. Clone Repository to Jetson
-
-```bash
-# SSH into Jetson
-ssh jetson@<jetson-ip>
-
-# Clone to /opt/capstone (recommended)
-sudo mkdir -p /opt/capstone
-sudo chown $USER:$USER /opt/capstone
-cd /opt/capstone
-git clone <your-repo-url> .
-```
-
-**Expected structure:**
-```
-/opt/capstone/
-├── ML-classifications/
-│   ├── rocknet_infer.py        # Your ML classification script
-│   ├── best_rocknet.pt         # Model weights
-│   └── latest.jpg              # Image to classify (camera updates this)
-├── voice-to-text/
-│   └── improved2.py            # Your voice ASR script
-└── connector/                  # This folder
-    ├── capstone_connector/
-    ├── scripts/
-    └── config.yaml
-```
-
-### 2. Install Dependencies
+### Dependencies
 
 ```bash
 cd /opt/capstone/connector
@@ -59,7 +22,7 @@ pip3 install -r requirements.txt
 pip3 install -r requirements-test.txt
 ```
 
-**ML dependencies** (install separately in your ML environment):
+**other file dependencies**
 ```bash
 # For rocknet_infer.py
 pip3 install torch torchvision timm pillow
@@ -68,16 +31,16 @@ pip3 install torch torchvision timm pillow
 pip3 install sounddevice nemo_toolkit numpy
 ```
 
-### 3. Setup Bluetooth
+### Setup Bluetooth
 
 ```bash
 cd /opt/capstone/connector
 sudo bash scripts/setup_bluetooth.sh
 ```
 
-This configures the USB Bluetooth adapter as the default.
+This configures the USB Bluetooth adapter as the default (once plugged into jetson).
 
-### 4. Configure Paths
+### Configure Paths
 
 Edit `config.yaml` and set your paths:
 
@@ -105,7 +68,7 @@ export CAPSTONE_ROOT=/opt/capstone
 # Scripts will auto-detect from this
 ```
 
-### 5. Run Connector
+### Run Connector
 
 ```bash
 # Development mode
@@ -113,13 +76,13 @@ cd /opt/capstone/connector
 bash scripts/run_dev.sh
 ```
 
-You should see:
+should see:
 ```
 [connector] Advertising 'GeoFieldAssistant-01' on /org/bluez/hci0
 [connector] Services ready: Classification + Transcription
 ```
 
-### 6. Connect from Apple Watch
+### Connect from Apple Watch
 
 1. Open SAGE app on Watch
 2. Watch auto-scans and connects to "GeoFieldAssistant-01"
@@ -132,7 +95,7 @@ You should see:
 
 ---
 
-## Run on Boot (Production)
+## Production Run (implementation still tbd...)
 
 ```bash
 # Install as systemd service
@@ -145,50 +108,6 @@ sudo systemctl start capstone-connector
 sudo systemctl status capstone-connector
 sudo journalctl -u capstone-connector -f
 ```
-
----
-
-## Testing
-
-```bash
-cd /opt/capstone/connector
-
-# Run all tests
-pytest
-
-# Run specific test suites
-pytest tests/test_protocol_compliance.py -v   # BLE protocol
-pytest tests/test_watch_app_simulation.py -v  # Watch integration
-pytest tests/test_timing_and_timeouts.py -v   # Timing scenarios
-
-# With coverage
-pytest --cov=capstone_connector --cov-report=html
-```
-
-See `tests/README.md` for detailed test documentation.
-
----
-
-## How It Works
-
-### Classification Flow
-```
-Watch sends 0x01 → Connector runs rocknet_infer.py
-→ Parses {"label":"Basalt","confidence":0.95}
-→ Normalizes to {"label":"Basalt","confidence":95}
-→ Sends to Watch via BLE notification
-```
-
-### Transcription Flow
-```
-Watch sends 0x01 → Connector runs improved2.py
-→ Streams NDJSON tokens: {"type":"token","t":"the "}
-→ Converts to plain UTF-8: "the "
-→ Sends to Watch via BLE notifications
-→ Watch sends 0x02 → Connector stops improved2.py
-```
-
-**ML models are subprocess-based** - connector spawns them on-demand and parses their output.
 
 ---
 
@@ -209,77 +128,6 @@ Watch sends 0x01 → Connector runs improved2.py
 - `__START__` - Transcription started
 - `__END__` - Transcription ended
 - `__ERROR:CODE:message__` - Error occurred
-
----
-
-## Troubleshooting
-
-**"No Bluetooth adapter found"**
-```bash
-# Check adapter
-lsusb | grep Bluetooth
-hciconfig
-
-# Re-plug USB adapter and reboot
-sudo reboot
-```
-
-**"Classification returns error"**
-```bash
-# Verify ML files exist
-ls -la /opt/capstone/ML-classifications/best_rocknet.pt
-ls -la /opt/capstone/ML-classifications/latest.jpg
-
-# Test manually
-cd /opt/capstone/ML-classifications
-python3 rocknet_infer.py --weights best_rocknet.pt --image latest.jpg
-```
-
-**"Transcription not working"**
-```bash
-# Check audio device
-python3 -c "import sounddevice; print(sounddevice.query_devices())"
-
-# Test manually
-cd /opt/capstone/voice-to-text
-python3 improved2.py
-# Should see "RECORDING NOW..." and transcription output
-```
-
-**"Watch can't connect"**
-```bash
-# Check connector is advertising
-sudo systemctl status capstone-connector
-sudo bluetoothctl
-# > scan on
-# Should see "GeoFieldAssistant-01"
-```
-
-**Tests failing**
-```bash
-# Run with verbose output
-pytest -vv --tb=long
-
-# Check test README
-cat tests/README.md
-```
-
----
-
-## Configuration
-
-Edit `config.yaml` to customize:
-
-```yaml
-device:
-  adapter: hci0                    # Bluetooth adapter
-  advertised_name: GeoFieldAssistant-01
-
-runtime:
-  asr_idle_timeout_s: 60          # Stop if no speech for 60s
-  asr_hard_cap_min: 15            # Max 15min transcription
-  notify_rate_hz: 15              # BLE notification rate
-```
 
 ---
 
@@ -305,11 +153,4 @@ connector/
 ├── config.yaml                   # Configuration
 └── requirements.txt              # Python dependencies
 ```
-
 ---
-
-## Further Reading
-
-- **BLE Protocol Details:** See `/watch/JETSON_CONFIGURATION.md`
-- **Test Documentation:** See `tests/README.md`
-- **Watch App Setup:** See `/watch/README.md`
