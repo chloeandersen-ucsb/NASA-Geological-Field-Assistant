@@ -3,22 +3,16 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.Python
+env/
+venv/
 .venv/
-.env/
-.envrc
 
 # VSCode
 .vscode/
 
 # Outputs
-work/
 outputs/
-logs/
-*.ply
 *.obj
-*.db
-*.mp4
-
-# OS
-.DS_Store
-Thumbs.db
+*.ply
+*.glb
