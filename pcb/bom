@@ -1,0 +1,5 @@
+"Reference","Value","Datasheet","Footprint","Qty","DNP"
+"C1","100 nF","~","Capacitor_Tantalum_SMD:CP_EIA-3528-12_Kemet-T_Pad1.50x2.35mm_HandSolder","1",""
+"J2","Conn_02x04_Odd_Even","~","Connector_PinHeader_2.00mm:PinHeader_2x04_P2.00mm_Vertical","1",""
+"MK1","MMICT5848-00-012","","t5848:MIC_MMICT5848-00-012","1",""
+"R1","100k","~","Resistor_SMD:R_01005_0402Metric_Pad0.57x0.30mm_HandSolder","1",""
