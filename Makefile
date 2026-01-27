@@ -103,7 +103,7 @@ check:
 	@echo "Checking project structure..."
 	@test -d $(LED_DISPLAY_DIR) || (echo "ERROR: led-display directory not found" && exit 1)
 	@test -d $(PROJECT_ROOT)/ML-classifications || (echo "WARNING: ML-classifications directory not found" && exit 1)
-	@test -d $(PROJECT_ROOT)/voice-to-text || (echo "WARNING: voice-to-text directory not found" && exit 1)
+	@test -d $(PROJECT_ROOT)/voiceNotes|| (echo "WARNING: voice-to-text directory not found" && exit 1)
 	@test -f $(PROJECT_ROOT)/connector.py || (echo "ERROR: connector.py not found" && exit 1)
 	@echo "✓ Project structure OK"
 	@echo ""
