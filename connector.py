@@ -62,14 +62,14 @@ def get_ml_classifications_dir() -> Path:
 
 def get_voice_to_text_dir() -> Path:
     """
-    Get the voice-to-text directory path.
+    Get the voiceNotes directory path.
     
     Can be overridden with SAGE_VOICE_TO_TEXT_DIR environment variable.
     """
     env_path = os.environ.get("SAGE_VOICE_TO_TEXT_DIR")
     if env_path:
         return Path(env_path).absolute()
-    return get_project_root() / "voice-to-text"
+    return get_project_root() / "voiceNotes"
 
 
 def get_data_store_dir() -> Path:
