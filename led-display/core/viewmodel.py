@@ -106,45 +106,38 @@ class ViewModel(QObject):
 
     def __init__(self, store_dir: str, parent=None):
         super().__init__(parent)
-        import sys
-        print("DEBUG: ViewModel.__init__() called", file=sys.stderr)
-        print(f"DEBUG: store_dir = {store_dir}", file=sys.stderr)
         
         try:
-            print("DEBUG: Creating Store...", file=sys.stderr)
             self.store = Store(store_dir)
-            print("DEBUG: Store created", file=sys.stderr)
         except Exception as e:
+            import sys
             print(f"ERROR: Failed to create Store: {e}", file=sys.stderr)
             import traceback
             traceback.print_exc(file=sys.stderr)
             raise
         
         try:
-            print("DEBUG: Creating CameraService...", file=sys.stderr)
             self.camera = CameraService(self)
-            print("DEBUG: CameraService created", file=sys.stderr)
         except Exception as e:
+            import sys
             print(f"ERROR: Failed to create CameraService: {e}", file=sys.stderr)
             import traceback
             traceback.print_exc(file=sys.stderr)
             raise
         
         try:
-            print("DEBUG: Creating ClassificationService...", file=sys.stderr)
             self.classifier = ClassificationService(self)
-            print("DEBUG: ClassificationService created", file=sys.stderr)
         except Exception as e:
+            import sys
             print(f"ERROR: Failed to create ClassificationService: {e}", file=sys.stderr)
             import traceback
             traceback.print_exc(file=sys.stderr)
             raise
         
         try:
-            print("DEBUG: Creating TranscriptionService...", file=sys.stderr)
             self.transcriber = TranscriptionService(self)
-            print("DEBUG: TranscriptionService created", file=sys.stderr)
         except Exception as e:
+            import sys
             print(f"ERROR: Failed to create TranscriptionService: {e}", file=sys.stderr)
             import traceback
             traceback.print_exc(file=sys.stderr)
@@ -153,7 +146,6 @@ class ViewModel(QObject):
         self.state = AppStateType.HOME
         self.current_classification: ClassificationResult | None = None
         self.transcription_text = ""
-        print("DEBUG: ViewModel initialization complete", file=sys.stderr)
 
         self.classification_timeout_ms = 20_000
         self._classify_timeout = QTimer(self)
@@ -221,12 +213,16 @@ class ViewModel(QObject):
         self._fail("Classification timeout (20s)")
 
     def start_voice_to_text(self) -> None:
+        import sys
+        print("[VIEWMODEL] start_voice_to_text() called", file=sys.stderr)
         self.transcription_text = ""
         self.transcription_changed.emit("")
         self._set_state(AppStateType.VOICE_TO_TEXT)
         self.transcriber.start()
 
     def stop_voice_to_text(self) -> None:
+        import sys
+        print("[VIEWMODEL] stop_voice_to_text() called", file=sys.stderr)
         self.transcriber.stop()
 
     def redo_voice_to_text(self) -> None:
@@ -245,13 +241,23 @@ class ViewModel(QObject):
         self.go_home()
 
     def _on_transcription_token(self, chunk: str) -> None:
+        import sys
+        print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
         self.transcription_text += chunk
+        print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
         self.transcription_changed.emit(self.transcription_text)
 
     def _on_transcription_completed(self, final_text: str) -> None:
+        import sys
+        print(f"[VIEWMODEL] Received transcription completed signal", file=sys.stderr)
+        print(f"[VIEWMODEL] Final text received: '{final_text}'", file=sys.stderr)
+        print(f"[VIEWMODEL] Final text length: {len(final_text)}", file=sys.stderr)
         if final_text.strip():
             self.transcription_text = final_text
+            print(f"[VIEWMODEL] Setting transcription_text and emitting signal", file=sys.stderr)
             self.transcription_changed.emit(self.transcription_text)
+        else:
+            print("[VIEWMODEL] Final text is empty, not updating", file=sys.stderr)
 
     def _publish_trip(self) -> None:
         rocks = self.store.list_rocks()

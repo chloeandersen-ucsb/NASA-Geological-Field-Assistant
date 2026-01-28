@@ -5,6 +5,7 @@ import queue
 import time
 from datetime import datetime
 import torch
+import sys
 
 # ------------------------------
 # Setup torch device (GPU if available)
@@ -96,7 +97,7 @@ try:
             timestamp = datetime.now().strftime("%H:%M:%S")
             for phrase in phrases:
                 if phrase != last_text and phrase.strip() != "":
-                    print(f"[{timestamp}] ['{phrase}']")
+                    print(f"[{timestamp}] ['{phrase}']", flush=True)
                     final_transcript.append((timestamp, phrase))
                     last_text = phrase
 
@@ -104,7 +105,8 @@ try:
 
 except KeyboardInterrupt:
     stream.stop()
-    print("\nSTREAMING COMPLETE.\n")
-    print("FINAL TRANSCRIPT:\n")
+    print("\nSTREAMING COMPLETE.\n", flush=True)
+    print("FINAL TRANSCRIPT:\n", flush=True)
     for ts, phrase in final_transcript:
-        print(f"[{ts}] ['{phrase}']")
+        print(f"[{ts}] ['{phrase}']", flush=True)
+    sys.stdout.flush()
