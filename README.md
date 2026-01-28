@@ -15,3 +15,8 @@ make run            # Production mode
 make run-mock       # Test with mock data
 make run-mock-ml    # Test with real voice-transcriptions, mock ML data
 ```
+
+## Display:
+- ESC: escape out of full screen
+- CTRL + C: quit application 
+- Can also press "Quit" to quit application  

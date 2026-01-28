@@ -17,7 +17,7 @@ class AppStateType(Enum):
     HOME = auto()
     CLASSIFYING = auto()
     CLASSIFIED = auto()
-    VOICE_TO_TEXT_LOADING = auto()  # Loading state while model initializes
+    VOICE_TO_TEXT_LOADING = auto()
     VOICE_TO_TEXT = auto()
     TRIP_LOAD = auto()
 
@@ -44,10 +44,9 @@ class TripSummary:
     rocks: List[RockEntry]
     total_volume: float
     total_weight: float
-    voice_notes: List[dict]  # List of voice note dicts
+    voice_notes: List[dict]
 
 
-# Storage
 class Store:
     def __init__(self, base_dir: str):
         self.base_dir = base_dir
@@ -98,7 +97,6 @@ class Store:
             f.write(json.dumps(rec) + "\n")
     
     def list_voice_notes(self) -> List[dict]:
-        """List all voice notes, most recent first."""
         if not os.path.exists(self.voice_path):
             return []
         notes: List[dict] = []
@@ -111,17 +109,15 @@ class Store:
                 if rec.get("type") != "voice":
                     continue
                 notes.append(rec)
-        # Sort by timestamp descending (most recent first)
         notes.sort(key=lambda x: x.get("ts", 0), reverse=True)
         return notes
 
 
-# ViewModel
 class ViewModel(QObject):
-    state_changed = Signal(object)  # AppStateType
-    classification_changed = Signal(object)  # ClassificationResult
+    state_changed = Signal(object)
+    classification_changed = Signal(object)
     transcription_changed = Signal(str)
-    trip_changed = Signal(object)  # TripSummary
+    trip_changed = Signal(object)
     error = Signal(str)
 
     def __init__(self, store_dir: str, parent=None):
@@ -252,7 +248,6 @@ class ViewModel(QObject):
     def save_transcription(self) -> None:
         text = self.transcription_text.strip()
         if text:
-            # Save with cleaned version (same as transcript for now, but could be improved)
             self.store.save_voice_note(text, cleaned=text)
         self.transcription_text = ""
         self.go_home()
@@ -264,7 +259,6 @@ class ViewModel(QObject):
     def _on_transcription_token(self, chunk: str) -> None:
         import sys
         print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
-        # Switch to active transcription state once we get first token
         if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
             self._set_state(AppStateType.VOICE_TO_TEXT)
         self.transcription_text += chunk

@@ -4,7 +4,6 @@ import sys
 import datetime
 from pathlib import Path
 
-# Add project root to path to import connector
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -64,7 +63,6 @@ class LoadingPage(QWidget):
         layout.addStretch(1)
     
     def set_message(self, message: str) -> None:
-        """Update the loading message."""
         for i in range(self.layout().count()):
             item = self.layout().itemAt(i)
             if item and item.widget() and isinstance(item.widget(), QLabel):
@@ -73,7 +71,6 @@ class LoadingPage(QWidget):
 
 
 class VoiceLoadingPage(QWidget):
-    """Loading page specifically for voice-to-text initialization."""
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
@@ -98,7 +95,7 @@ class ClassifiedPage(QWidget):
         self.lbl_conf.setAlignment(Qt.AlignCenter)
         self.lbl_conf.setStyleSheet("font-size: 18px;")
 
-        self.lbl_extra = QLabel("")  # volume/weight optional
+        self.lbl_extra = QLabel("")
         self.lbl_extra.setAlignment(Qt.AlignCenter)
         self.lbl_extra.setStyleSheet("font-size: 16px;")
 
@@ -160,7 +157,6 @@ class TripLoadPage(QWidget):
         self.lbl_totals.setStyleSheet("font-size: 16px;")
         layout.addWidget(self.lbl_totals)
 
-        # Rocks section
         rocks_label = QLabel("Rocks:")
         rocks_label.setStyleSheet("font-size: 18px; font-weight: 600;")
         layout.addWidget(rocks_label)
@@ -169,7 +165,6 @@ class TripLoadPage(QWidget):
         self.list.setStyleSheet("font-size: 14px;")
         layout.addWidget(self.list, stretch=1)
 
-        # Voice notes section
         notes_label = QLabel("Voice Notes:")
         notes_label.setStyleSheet("font-size: 18px; font-weight: 600;")
         layout.addWidget(notes_label)
@@ -181,7 +176,6 @@ class TripLoadPage(QWidget):
         self.btn_back = big_button("Back")
         layout.addWidget(self.btn_back)
         
-        # Store voice notes data for access when clicked
         self._voice_notes_data = []
 
 
@@ -202,24 +196,22 @@ class AppWindow(QMainWindow):
         self.voice = VoicePage()
         self.trip = TripLoadPage()
 
-        self.stack.addWidget(self.home)          # index 0
-        self.stack.addWidget(self.loading)       # index 1
-        self.stack.addWidget(self.classified)    # index 2
-        self.stack.addWidget(self.voice_loading) # index 3
-        self.stack.addWidget(self.voice)         # index 4
-        self.stack.addWidget(self.trip)          # index 5
+        self.stack.addWidget(self.home)
+        self.stack.addWidget(self.loading)
+        self.stack.addWidget(self.classified)
+        self.stack.addWidget(self.voice_loading)
+        self.stack.addWidget(self.voice)
+        self.stack.addWidget(self.trip)
 
         self._wire_ui()
         self._wire_vm()
 
         self._show_state(AppStateType.HOME)
 
-        # Always fullscreen on Jetson, windowed mode on other platforms
         is_jetson = connector.is_jetson()
         
         if is_jetson:
             try:
-                # Set window flags for kiosk mode (no decorations, always on top)
                 self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
                 self.showFullScreen()
             except Exception as e:
@@ -227,47 +219,36 @@ class AppWindow(QMainWindow):
                 print(f"ERROR: Failed to show fullscreen: {e}", file=sys.stderr)
                 import traceback
                 traceback.print_exc(file=sys.stderr)
-                # Fallback to windowed mode
                 self.resize(800, 600)
                 self.show()
         else:
-            # Windowed mode for development/testing
             self.resize(800, 600)
             self.show()
         
-        # Set up keyboard shortcuts
         self._setup_shortcuts()
 
     def _setup_shortcuts(self) -> None:
-        """Set up keyboard shortcuts for the application."""
-        # F11 - Toggle fullscreen
         shortcut_f11 = QShortcut(QKeySequence(Qt.Key_F11), self)
         shortcut_f11.activated.connect(self._toggle_fullscreen)
         
-        # Escape - Exit fullscreen (only if in fullscreen)
         shortcut_escape = QShortcut(QKeySequence(Qt.Key_Escape), self)
         shortcut_escape.activated.connect(self._exit_fullscreen)
         
-        # Ctrl+C - Quit application
         shortcut_quit = QShortcut(QKeySequence("Ctrl+C"), self)
         shortcut_quit.activated.connect(self._quit_application)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        """Handle key press events."""
-        # Handle F11 for fullscreen toggle
         if event.key() == Qt.Key_F11:
             self._toggle_fullscreen()
             event.accept()
             return
         
-        # Handle Escape to exit fullscreen
         if event.key() == Qt.Key_Escape:
             if self.isFullScreen():
                 self._exit_fullscreen()
                 event.accept()
                 return
         
-        # Handle Ctrl+C to quit
         if event.key() == Qt.Key_C and event.modifiers() == Qt.ControlModifier:
             self._quit_application()
             event.accept()
@@ -276,40 +257,33 @@ class AppWindow(QMainWindow):
         super().keyPressEvent(event)
 
     def _toggle_fullscreen(self) -> None:
-        """Toggle fullscreen mode."""
         if self.isFullScreen():
             self.showNormal()
         else:
             self.showFullScreen()
 
     def _exit_fullscreen(self) -> None:
-        """Exit fullscreen mode if currently in fullscreen."""
         if self.isFullScreen():
             self.showNormal()
 
     def _quit_application(self) -> None:
-        """Quit the application."""
         self.close()
 
     def _wire_ui(self) -> None:
-        # Home
         self.home.btn_classify.clicked.connect(self.vm.start_classification)
         self.home.btn_voice.clicked.connect(self.vm.start_voice_to_text)
         self.home.btn_trip.clicked.connect(self.vm.open_trip_load)
         self.home.btn_quit.clicked.connect(self._quit_application)
 
-        # Classified
         self.classified.btn_reclassify.clicked.connect(self.vm.reclassify)
         self.classified.btn_save.clicked.connect(self.vm.save_classification)
         self.classified.btn_delete.clicked.connect(self.vm.delete_classification)
 
-        # Voice
         self.voice.btn_stop.clicked.connect(self.vm.stop_voice_to_text)
         self.voice.btn_redo.clicked.connect(self.vm.redo_voice_to_text)
         self.voice.btn_save.clicked.connect(self.vm.save_transcription)
         self.voice.btn_delete.clicked.connect(self.vm.delete_transcription)
 
-        # Trip
         self.trip.btn_back.clicked.connect(self.vm.go_home)
         self.trip.notes_list.itemClicked.connect(self._on_voice_note_clicked)
 
@@ -356,7 +330,6 @@ class AppWindow(QMainWindow):
         for r in summary.rocks:
             label = r.result.label
             conf = int(r.result.confidence * 100)
-            # Add date/time to rock classification display
             ts = r.ts
             if ts:
                 dt = datetime.datetime.fromtimestamp(ts)
@@ -369,9 +342,8 @@ class AppWindow(QMainWindow):
             f"Total volume: {summary.total_volume:.2f}   Total weight: {summary.total_weight:.2f}"
         )
         
-        # Update voice notes list
         self.trip.notes_list.clear()
-        self.trip._voice_notes_data = []  # Store full note data
+        self.trip._voice_notes_data = []
         for note in summary.voice_notes:
             ts = note.get("ts", 0)
             if ts:
@@ -380,26 +352,21 @@ class AppWindow(QMainWindow):
             else:
                 time_str = "Unknown"
             cleaned = note.get("cleaned", note.get("transcript", ""))
-            # Truncate long notes for display
             display_text = cleaned[:100] + "..." if len(cleaned) > 100 else cleaned
             item = f"[{time_str}] {display_text}"
             self.trip.notes_list.addItem(item)
-            # Store the full note data for access when clicked
             self.trip._voice_notes_data.append(note)
 
     def _on_error(self, message: str) -> None:
-        # MVP: pop a modal, then ViewModel returns to HOME
         QMessageBox.warning(self, "Error", message)
     
     def _on_voice_note_clicked(self, item) -> None:
-        """Show full voice note text in a dialog when clicked."""
         index = self.trip.notes_list.row(item)
         if 0 <= index < len(self.trip._voice_notes_data):
             note = self.trip._voice_notes_data[index]
             cleaned = note.get("cleaned", note.get("transcript", ""))
             transcript = note.get("transcript", "")
             
-            # Create dialog to show full note
             dialog = QDialog(self)
             dialog.setWindowTitle("Voice Note")
             dialog.setMinimumWidth(600)
@@ -407,7 +374,6 @@ class AppWindow(QMainWindow):
             
             layout = QVBoxLayout(dialog)
             
-            # Show timestamp
             ts = note.get("ts", 0)
             if ts:
                 dt = datetime.datetime.fromtimestamp(ts)
@@ -418,14 +384,12 @@ class AppWindow(QMainWindow):
             time_label.setStyleSheet("font-size: 14px; font-weight: 600;")
             layout.addWidget(time_label)
             
-            # Show full text
             text_edit = QTextEdit()
             text_edit.setReadOnly(True)
             text_edit.setPlainText(cleaned if cleaned else transcript)
             text_edit.setStyleSheet("font-size: 14px;")
             layout.addWidget(text_edit, stretch=1)
             
-            # Close button
             button_box = QDialogButtonBox(QDialogButtonBox.Ok)
             button_box.accepted.connect(dialog.accept)
             layout.addWidget(button_box)

@@ -2,7 +2,6 @@ import os
 import sys
 from pathlib import Path
 
-# Add project root to path to import connector
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -22,11 +21,9 @@ def main() -> int:
         traceback.print_exc(file=sys.stderr)
         return 1
     
-    # Jetson-specific initialization
     try:
         is_jetson = connector.is_jetson()
         if is_jetson:
-            # Set display backend if needed
             jetson_config = connector.get_jetson_config()
             if jetson_config["display_backend"]:
                 os.environ.setdefault("QT_QPA_PLATFORM", jetson_config["display_backend"])
@@ -36,7 +33,6 @@ def main() -> int:
         traceback.print_exc(file=sys.stderr)
         return 1
     
-    # Use connector to get data store directory
     try:
         store_dir = connector.ensure_data_dir()
     except Exception as e:
