@@ -87,7 +87,11 @@ class ClassificationService(ProcessService):
         super().__init__(parent)
         
         # Use connector to get paths
-        if os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes"):
+        # Check for SAGE_USE_MOCKS (mocks everything) or SAGE_USE_MOCK_ML (mocks only ML)
+        use_mocks = os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes")
+        use_mock_ml = os.environ.get("SAGE_USE_MOCK_ML", "").lower() in ("1", "true", "yes")
+        
+        if use_mocks or use_mock_ml:
             self.python = connector.get_python_executable()
             self.rocknet_script = connector.get_mock_rocknet_script_path()
             self.default_weights = "mock_weights.pt"  # Dummy path for mock
@@ -158,7 +162,7 @@ class ClassificationService(ProcessService):
 
 
 class TranscriptionService(ProcessService):
-    """Service for voice-to-text transcription."""
+    """Service for voiceNotes transcription."""
     
     token = Signal(str)       # streaming text chunk
     completed = Signal(str)   # full accumulated transcript

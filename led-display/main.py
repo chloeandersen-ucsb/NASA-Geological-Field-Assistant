@@ -18,16 +18,19 @@ def main() -> int:
     
     # Jetson-specific initialization
     if connector.is_jetson():
+        # Set display backend if needed
         jetson_config = connector.get_jetson_config()
         if jetson_config["display_backend"]:
             os.environ.setdefault("QT_QPA_PLATFORM", jetson_config["display_backend"])
     
+    # Use connector to get data store directory
     store_dir = connector.ensure_data_dir()
     
     vm = ViewModel(store_dir=str(store_dir))
     win = AppWindow(vm)
 
     return app.exec()
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
