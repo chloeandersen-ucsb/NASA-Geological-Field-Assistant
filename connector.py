@@ -119,14 +119,18 @@ def get_camera_script_path() -> Path:
     """
     Get the path to camera capture script.
     
-    Returns mock script if SAGE_USE_MOCKS is set, otherwise returns
-    the real camera_capture.py path (which may not exist yet).
+    Returns mock script if SAGE_USE_MOCKS or SAGE_USE_MOCK_ML is set,
+    otherwise returns the real camera script path from ML-classifications
+    (which may not exist yet).
     """
     led_display = get_led_display_dir()
-    if os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes"):
+    use_mocks = os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes")
+    use_mock_ml = os.environ.get("SAGE_USE_MOCK_ML", "").lower() in ("1", "true", "yes")
+    
+    if use_mocks or use_mock_ml:
         return led_display / "scripts" / "mock_camera_capture.py"
     else:
-        return led_display / "scripts" / "camera_capture.py"
+        return get_ml_classifications_dir() / "camera-pipeline"
 
 
 def get_mock_rocknet_script_path() -> Path:

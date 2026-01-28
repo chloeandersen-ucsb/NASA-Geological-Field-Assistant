@@ -4,7 +4,6 @@ import sys
 import time
 from datetime import datetime
 
-# Mock phrases that will be "transcribed" for UI testing
 MOCK_PHRASES = [
     "hello world",
     "this is a test",
@@ -40,20 +39,16 @@ def main():
     phrases_used = []
     
     while _running:
-        # Simulate streaming transcription
         phrase = random.choice(MOCK_PHRASES)
         phrases_used.append(phrase)
         
-        # Format exactly like the real script: [HH:MM:SS] ['phrase']
         now = datetime.now()
         timestamp = now.strftime("%H:%M:%S")
         print(f"[{timestamp}] ['{phrase}']")
         sys.stdout.flush()
         
-        # Wait a bit before next phrase (simulate real-time transcription)
         time.sleep(random.uniform(1.0, 3.0))
     
-    # This shouldn't be reached due to signal handler, but just in case
     print("\nSTREAMING COMPLETE.\n")
     print("FINAL TRANSCRIPT:\n")
     sys.exit(0)
