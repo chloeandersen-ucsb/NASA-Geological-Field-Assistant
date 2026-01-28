@@ -17,6 +17,7 @@ class AppStateType(Enum):
     HOME = auto()
     CLASSIFYING = auto()
     CLASSIFIED = auto()
+    VOICE_TO_TEXT_LOADING = auto()  # Loading state while model initializes
     VOICE_TO_TEXT = auto()
     TRIP_LOAD = auto()
 
@@ -43,6 +44,7 @@ class TripSummary:
     rocks: List[RockEntry]
     total_volume: float
     total_weight: float
+    voice_notes: List[dict]  # List of voice note dicts
 
 
 # Storage
@@ -94,6 +96,24 @@ class Store:
         }
         with open(self.voice_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec) + "\n")
+    
+    def list_voice_notes(self) -> List[dict]:
+        """List all voice notes, most recent first."""
+        if not os.path.exists(self.voice_path):
+            return []
+        notes: List[dict] = []
+        with open(self.voice_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                if rec.get("type") != "voice":
+                    continue
+                notes.append(rec)
+        # Sort by timestamp descending (most recent first)
+        notes.sort(key=lambda x: x.get("ts", 0), reverse=True)
+        return notes
 
 
 # ViewModel
@@ -217,7 +237,7 @@ class ViewModel(QObject):
         print("[VIEWMODEL] start_voice_to_text() called", file=sys.stderr)
         self.transcription_text = ""
         self.transcription_changed.emit("")
-        self._set_state(AppStateType.VOICE_TO_TEXT)
+        self._set_state(AppStateType.VOICE_TO_TEXT_LOADING)
         self.transcriber.start()
 
     def stop_voice_to_text(self) -> None:
@@ -232,7 +252,8 @@ class ViewModel(QObject):
     def save_transcription(self) -> None:
         text = self.transcription_text.strip()
         if text:
-            self.store.save_voice_note(text)
+            # Save with cleaned version (same as transcript for now, but could be improved)
+            self.store.save_voice_note(text, cleaned=text)
         self.transcription_text = ""
         self.go_home()
 
@@ -243,6 +264,9 @@ class ViewModel(QObject):
     def _on_transcription_token(self, chunk: str) -> None:
         import sys
         print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
+        # Switch to active transcription state once we get first token
+        if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
+            self._set_state(AppStateType.VOICE_TO_TEXT)
         self.transcription_text += chunk
         print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
         self.transcription_changed.emit(self.transcription_text)
@@ -256,11 +280,14 @@ class ViewModel(QObject):
             self.transcription_text = final_text
             print(f"[VIEWMODEL] Setting transcription_text and emitting signal", file=sys.stderr)
             self.transcription_changed.emit(self.transcription_text)
+            if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
+                self._set_state(AppStateType.VOICE_TO_TEXT)
         else:
             print("[VIEWMODEL] Final text is empty, not updating", file=sys.stderr)
 
     def _publish_trip(self) -> None:
         rocks = self.store.list_rocks()
+        voice_notes = self.store.list_voice_notes()
         total_volume = 0.0
         total_weight = 0.0
         for r in rocks:
@@ -268,7 +295,7 @@ class ViewModel(QObject):
                 total_volume += float(r.result.estimated_volume)
             if r.result.estimated_weight is not None:
                 total_weight += float(r.result.estimated_weight)
-        summary = TripSummary(rocks=rocks, total_volume=total_volume, total_weight=total_weight)
+        summary = TripSummary(rocks=rocks, total_volume=total_volume, total_weight=total_weight, voice_notes=voice_notes)
         self.trip_changed.emit(summary)
 
     def _fail(self, message: str) -> None:

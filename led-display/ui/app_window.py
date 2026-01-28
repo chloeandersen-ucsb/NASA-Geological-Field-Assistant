@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import sys
+import datetime
 from pathlib import Path
 
 # Add project root to path to import connector
@@ -38,7 +39,7 @@ class HomePage(QWidget):
 
         self.btn_classify = big_button("Classify Rock")
         self.btn_voice = big_button("Voice to Text")
-        self.btn_trip = big_button("Current Trip Load")
+        self.btn_trip = big_button("Trip & Notes")
         self.btn_quit = QPushButton("Quit")
         self.btn_quit.setMinimumHeight(50)
         self.btn_quit.setStyleSheet("font-size: 16px;")
@@ -55,6 +56,27 @@ class LoadingPage(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         label = QLabel("Analyzing…")
+        label.setAlignment(Qt.AlignCenter)
+        label.setStyleSheet("font-size: 22px;")
+        layout.addStretch(1)
+        layout.addWidget(label)
+        layout.addStretch(1)
+    
+    def set_message(self, message: str) -> None:
+        """Update the loading message."""
+        for i in range(self.layout().count()):
+            item = self.layout().itemAt(i)
+            if item and item.widget() and isinstance(item.widget(), QLabel):
+                item.widget().setText(message)
+                break
+
+
+class VoiceLoadingPage(QWidget):
+    """Loading page specifically for voice-to-text initialization."""
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        label = QLabel("Initializing voice transcription…\nPlease wait…")
         label.setAlignment(Qt.AlignCenter)
         label.setStyleSheet("font-size: 22px;")
         layout.addStretch(1)
@@ -127,7 +149,7 @@ class TripLoadPage(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
 
-        title = QLabel("Current Trip Load")
+        title = QLabel("Trip & Notes")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
         layout.addWidget(title)
@@ -137,9 +159,23 @@ class TripLoadPage(QWidget):
         self.lbl_totals.setStyleSheet("font-size: 16px;")
         layout.addWidget(self.lbl_totals)
 
+        # Rocks section
+        rocks_label = QLabel("Rocks:")
+        rocks_label.setStyleSheet("font-size: 18px; font-weight: 600;")
+        layout.addWidget(rocks_label)
+        
         self.list = QListWidget()
         self.list.setStyleSheet("font-size: 14px;")
         layout.addWidget(self.list, stretch=1)
+
+        # Voice notes section
+        notes_label = QLabel("Voice Notes:")
+        notes_label.setStyleSheet("font-size: 18px; font-weight: 600;")
+        layout.addWidget(notes_label)
+        
+        self.notes_list = QListWidget()
+        self.notes_list.setStyleSheet("font-size: 14px;")
+        layout.addWidget(self.notes_list, stretch=1)
 
         self.btn_back = big_button("Back")
         layout.addWidget(self.btn_back)
@@ -158,14 +194,16 @@ class AppWindow(QMainWindow):
         self.home = HomePage()
         self.loading = LoadingPage()
         self.classified = ClassifiedPage()
+        self.voice_loading = VoiceLoadingPage()
         self.voice = VoicePage()
         self.trip = TripLoadPage()
 
-        self.stack.addWidget(self.home)       # index 0
-        self.stack.addWidget(self.loading)    # index 1
-        self.stack.addWidget(self.classified) # index 2
-        self.stack.addWidget(self.voice)      # index 3
-        self.stack.addWidget(self.trip)        # index 4
+        self.stack.addWidget(self.home)          # index 0
+        self.stack.addWidget(self.loading)       # index 1
+        self.stack.addWidget(self.classified)    # index 2
+        self.stack.addWidget(self.voice_loading) # index 3
+        self.stack.addWidget(self.voice)         # index 4
+        self.stack.addWidget(self.trip)          # index 5
 
         self._wire_ui()
         self._wire_vm()
@@ -284,6 +322,8 @@ class AppWindow(QMainWindow):
             self.stack.setCurrentWidget(self.loading)
         elif state == AppStateType.CLASSIFIED:
             self.stack.setCurrentWidget(self.classified)
+        elif state == AppStateType.VOICE_TO_TEXT_LOADING:
+            self.stack.setCurrentWidget(self.voice_loading)
         elif state == AppStateType.VOICE_TO_TEXT:
             self.stack.setCurrentWidget(self.voice)
         elif state == AppStateType.TRIP_LOAD:
@@ -316,6 +356,21 @@ class AppWindow(QMainWindow):
         self.trip.lbl_totals.setText(
             f"Total volume: {summary.total_volume:.2f}   Total weight: {summary.total_weight:.2f}"
         )
+        
+        # Update voice notes list
+        self.trip.notes_list.clear()
+        for note in summary.voice_notes:
+            ts = note.get("ts", 0)
+            if ts:
+                dt = datetime.datetime.fromtimestamp(ts)
+                time_str = dt.strftime("%Y-%m-%d %H:%M")
+            else:
+                time_str = "Unknown"
+            cleaned = note.get("cleaned", note.get("transcript", ""))
+            # Truncate long notes for display
+            display_text = cleaned[:100] + "..." if len(cleaned) > 100 else cleaned
+            item = f"[{time_str}] {display_text}"
+            self.trip.notes_list.addItem(item)
 
     def _on_error(self, message: str) -> None:
         # MVP: pop a modal, then ViewModel returns to HOME
