@@ -51,9 +51,9 @@ conda install pyside6
 make run
 ```
 
-Uses real ML models and voice-to-text. Requires:
+Uses real ML models and voiceNotes. Requires:
 - `ML-classifications/rocknet_infer.py` and `best_rocknet.pt`
-- `voice-to-text/improved2.py`
+- `voiceNotes/improved2.py`
 
 ### Mock Mode (Testing)
 
@@ -74,7 +74,7 @@ make run-conda
 - `SAGE_STORE_DIR` - Data directory (default: `/data/sage` on Jetson, `./led-display/sage_data` on Mac)
 - `SAGE_USE_MOCKS=1` - Use mock services
 - `SAGE_ML_CLASSIFICATIONS_DIR` - Override ML-classifications path
-- `SAGE_VOICE_TO_TEXT_DIR` - Override voice-to-text path
+- `SAGE_VOICE_TO_TEXT_DIR` - Override voiceNotes path
 - `SAGE_ROCKNET_WEIGHTS` - Override model weights path
 - `JETSON_PLATFORM=1` - Force Jetson mode detection
 
@@ -89,7 +89,7 @@ capstone/
 │   ├── requirements.txt # Python dependencies (PySide6)
 │   └── venv/            # Virtual environment (not in git)
 ├── ML-classifications/  # Rock classification model
-└── voice-to-text/      # Voice transcription
+└── voiceNotes/      # Voice transcription
 ```
 
 ### Dependencies

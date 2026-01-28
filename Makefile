@@ -1,4 +1,4 @@
-.PHONY: help setup run run-mock run-conda clean check
+.PHONY: help setup run run-mock run-mock-ml run-conda clean check
 
 # Project configuration
 PYTHON := python3
@@ -28,15 +28,17 @@ help:
 	@echo "  make setup       - Install dependencies on Jetson"
 	@echo "  make run         - Start application in production mode"
 	@echo "  make run-mock    - Start with mock services for testing"
+	@echo "  make run-mock-ml - Start with mock ML, real voiceNotes"
 	@echo "  make run-conda   - Start with conda environment (Mac)"
 	@echo "  make clean       - Clean build artifacts"
 	@echo "  make check       - Verify all paths and dependencies"
 	@echo ""
 	@echo "Environment variables:"
 	@echo "  SAGE_STORE_DIR           - Data storage directory"
-	@echo "  SAGE_USE_MOCKS           - Set to 1 to use mock services"
+	@echo "  SAGE_USE_MOCKS           - Set to 1 to use mock services (all)"
+	@echo "  SAGE_USE_MOCK_ML         - Set to 1 to use mock ML only"
 	@echo "  SAGE_ML_CLASSIFICATIONS_DIR - Override ML-classifications path"
-	@echo "  SAGE_VOICE_TO_TEXT_DIR   - Override voice-to-text path"
+	@echo "  SAGE_VOICE_TO_TEXT_DIR   - Override voiceNotes path"
 	@echo "  SAGE_ROCKNET_WEIGHTS     - Override model weights path"
 	@echo "  JETSON_PLATFORM          - Set to 1 to force Jetson mode"
 	@echo ""
@@ -78,6 +80,16 @@ run-mock:
 		export JETSON_PLATFORM=$(IS_JETSON) && \
 		$(PYTHON) main.py
 
+run-mock-ml:
+	@echo "Platform: $(JETSON_DETECT)"
+	@echo "Data directory: $(SAGE_STORE_DIR)"
+	@echo "Mode: Mock ML, Real voiceNotes"
+	@cd $(LED_DISPLAY_DIR) && \
+		export SAGE_STORE_DIR=$(SAGE_STORE_DIR) && \
+		export SAGE_USE_MOCK_ML=1 && \
+		export JETSON_PLATFORM=$(IS_JETSON) && \
+		$(PYTHON) main.py
+
 run-conda:
 	@if [ ! -f "$(CONDA_SH)" ]; then \
 		echo "Error: Conda script not found at $(CONDA_SH)"; \
@@ -103,7 +115,7 @@ check:
 	@echo "Checking project structure..."
 	@test -d $(LED_DISPLAY_DIR) || (echo "ERROR: led-display directory not found" && exit 1)
 	@test -d $(PROJECT_ROOT)/ML-classifications || (echo "WARNING: ML-classifications directory not found" && exit 1)
-	@test -d $(PROJECT_ROOT)/voiceNotes|| (echo "WARNING: voice-to-text directory not found" && exit 1)
+	@test -d $(PROJECT_ROOT)/voiceNotes || (echo "WARNING: voiceNotes directory not found" && exit 1)
 	@test -f $(PROJECT_ROOT)/connector.py || (echo "ERROR: connector.py not found" && exit 1)
 	@echo "✓ Project structure OK"
 	@echo ""
@@ -115,7 +127,7 @@ check:
 	@$(PYTHON) -c "import sys; sys.path.insert(0, '$(PROJECT_ROOT)'); import connector; \
 		print('Project root:', connector.get_project_root()); \
 		print('ML dir:', connector.get_ml_classifications_dir()); \
-		print('Voice-to-text dir:', connector.get_voice_to_text_dir()); \
+		print('voiceNotes dir:', connector.get_voice_to_text_dir()); \
 		print('Data dir:', connector.get_data_store_dir()); \
 		print('Is Jetson:', connector.is_jetson())" || (echo "ERROR: Path check failed" && exit 1)
 	@echo "✓ Path resolution OK"

@@ -152,24 +152,57 @@ def validate_path(path: Path, description: str) -> None:
         description: Human-readable description for error message
     """
     if not path.exists():
-        raise FileNotFoundError(f"{description} not found: {path}")
+        # Provide helpful guidance for missing model weights
+        if "weights" in description.lower() or "best_rocknet.pt" in str(path):
+            parent_dir = path.parent
+            error_msg = f"{description} not found: {path}\n\n"
+            if not parent_dir.exists():
+                error_msg += f"Directory does not exist: {parent_dir}\n"
+            else:
+                error_msg += f"Directory exists: {parent_dir}\n"
+            error_msg += "\nTo fix this:\n"
+            error_msg += "1. Copy your trained model weights file to the ML-classifications directory:\n"
+            error_msg += f"   cp /path/to/your/best_rocknet.pt {parent_dir}/\n\n"
+            error_msg += "2. Or set the SAGE_ROCKNET_WEIGHTS environment variable:\n"
+            error_msg += "   export SAGE_ROCKNET_WEIGHTS=/path/to/your/best_rocknet.pt\n\n"
+            error_msg += "3. Or use mock mode for testing:\n"
+            error_msg += "   make run-mock\n"
+            raise FileNotFoundError(error_msg)
+        else:
+            raise FileNotFoundError(f"{description} not found: {path}")
 
 
 def validate_ml_paths() -> None:
     """Validate that ML-classifications paths exist (when not using mocks)."""
-    if os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes"):
+    # Skip validation when using mocks (either all mocks or just ML mocks)
+    use_mocks = os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes")
+    use_mock_ml = os.environ.get("SAGE_USE_MOCK_ML", "").lower() in ("1", "true", "yes")
+    if use_mocks or use_mock_ml:
         return  # Skip validation when using mocks
+    
+    # Check ML-classifications directory first
+    ml_dir = get_ml_classifications_dir()
+    if not ml_dir.exists():
+        raise FileNotFoundError(
+            f"ML-classifications directory not found: {ml_dir}\n\n"
+            f"This directory should contain:\n"
+            f"  - rocknet_infer.py\n"
+            f"  - best_rocknet.pt (model weights)\n\n"
+            f"To fix:\n"
+            f"1. Ensure the ML-classifications directory exists in your project\n"
+            f"2. Or set SAGE_ML_CLASSIFICATIONS_DIR environment variable:\n"
+            f"   export SAGE_ML_CLASSIFICATIONS_DIR=/path/to/ML-classifications\n"
+        )
     
     validate_path(get_rocknet_script_path(), "RockNet script")
     validate_path(get_rocknet_weights_path(), "Model weights")
 
 
 def validate_voice_to_text_paths() -> None:
-    """Validate that voice-to-text paths exist (when not using mocks)."""
     if os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes"):
         return  # Skip validation when using mocks
     
-    validate_path(get_voice_to_text_script_path(), "Voice-to-text script")
+    validate_path(get_voice_to_text_script_path(), "voiceNotes script")
 
 
 # ============================================================================
