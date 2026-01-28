@@ -8,7 +8,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
     QMainWindow, QStackedWidget, QMessageBox,
     QWidget, QVBoxLayout, QLabel, QPushButton,
@@ -39,11 +39,15 @@ class HomePage(QWidget):
         self.btn_classify = big_button("Classify Rock")
         self.btn_voice = big_button("Voice to Text")
         self.btn_trip = big_button("Current Trip Load")
+        self.btn_quit = QPushButton("Quit")
+        self.btn_quit.setMinimumHeight(50)
+        self.btn_quit.setStyleSheet("font-size: 16px;")
 
         layout.addWidget(self.btn_classify)
         layout.addWidget(self.btn_voice)
         layout.addWidget(self.btn_trip)
         layout.addStretch(1)
+        layout.addWidget(self.btn_quit)
 
 
 class LoadingPage(QWidget):
@@ -208,12 +212,69 @@ class AppWindow(QMainWindow):
             print(f"DEBUG: Window shown in windowed mode, visible: {self.isVisible()}", file=sys.stderr)
         
         print("DEBUG: AppWindow initialization complete", file=sys.stderr)
+        
+        # Set up keyboard shortcuts
+        self._setup_shortcuts()
+
+    def _setup_shortcuts(self) -> None:
+        """Set up keyboard shortcuts for the application."""
+        # F11 - Toggle fullscreen
+        shortcut_f11 = QShortcut(QKeySequence(Qt.Key_F11), self)
+        shortcut_f11.activated.connect(self._toggle_fullscreen)
+        
+        # Escape - Exit fullscreen (only if in fullscreen)
+        shortcut_escape = QShortcut(QKeySequence(Qt.Key_Escape), self)
+        shortcut_escape.activated.connect(self._exit_fullscreen)
+        
+        # Ctrl+C - Quit application
+        shortcut_quit = QShortcut(QKeySequence("Ctrl+C"), self)
+        shortcut_quit.activated.connect(self._quit_application)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Handle key press events."""
+        # Handle F11 for fullscreen toggle
+        if event.key() == Qt.Key_F11:
+            self._toggle_fullscreen()
+            event.accept()
+            return
+        
+        # Handle Escape to exit fullscreen
+        if event.key() == Qt.Key_Escape:
+            if self.isFullScreen():
+                self._exit_fullscreen()
+                event.accept()
+                return
+        
+        # Handle Ctrl+C to quit
+        if event.key() == Qt.Key_C and event.modifiers() == Qt.ControlModifier:
+            self._quit_application()
+            event.accept()
+            return
+        
+        super().keyPressEvent(event)
+
+    def _toggle_fullscreen(self) -> None:
+        """Toggle fullscreen mode."""
+        if self.isFullScreen():
+            self.showNormal()
+        else:
+            self.showFullScreen()
+
+    def _exit_fullscreen(self) -> None:
+        """Exit fullscreen mode if currently in fullscreen."""
+        if self.isFullScreen():
+            self.showNormal()
+
+    def _quit_application(self) -> None:
+        """Quit the application."""
+        self.close()
 
     def _wire_ui(self) -> None:
         # Home
         self.home.btn_classify.clicked.connect(self.vm.start_classification)
         self.home.btn_voice.clicked.connect(self.vm.start_voice_to_text)
         self.home.btn_trip.clicked.connect(self.vm.open_trip_load)
+        self.home.btn_quit.clicked.connect(self._quit_application)
 
         # Classified
         self.classified.btn_reclassify.clicked.connect(self.vm.reclassify)
