@@ -106,13 +106,54 @@ class ViewModel(QObject):
 
     def __init__(self, store_dir: str, parent=None):
         super().__init__(parent)
-        self.store = Store(store_dir)
-        self.camera = CameraService(self)
-        self.classifier = ClassificationService(self)
-        self.transcriber = TranscriptionService(self)
+        import sys
+        print("DEBUG: ViewModel.__init__() called", file=sys.stderr)
+        print(f"DEBUG: store_dir = {store_dir}", file=sys.stderr)
+        
+        try:
+            print("DEBUG: Creating Store...", file=sys.stderr)
+            self.store = Store(store_dir)
+            print("DEBUG: Store created", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR: Failed to create Store: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            raise
+        
+        try:
+            print("DEBUG: Creating CameraService...", file=sys.stderr)
+            self.camera = CameraService(self)
+            print("DEBUG: CameraService created", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR: Failed to create CameraService: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            raise
+        
+        try:
+            print("DEBUG: Creating ClassificationService...", file=sys.stderr)
+            self.classifier = ClassificationService(self)
+            print("DEBUG: ClassificationService created", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR: Failed to create ClassificationService: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            raise
+        
+        try:
+            print("DEBUG: Creating TranscriptionService...", file=sys.stderr)
+            self.transcriber = TranscriptionService(self)
+            print("DEBUG: TranscriptionService created", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR: Failed to create TranscriptionService: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            raise
+        
         self.state = AppStateType.HOME
         self.current_classification: ClassificationResult | None = None
         self.transcription_text = ""
+        print("DEBUG: ViewModel initialization complete", file=sys.stderr)
 
         self.classification_timeout_ms = 20_000
         self._classify_timeout = QTimer(self)

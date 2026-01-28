@@ -144,38 +144,70 @@ class TripLoadPage(QWidget):
 class AppWindow(QMainWindow):
     def __init__(self, vm):
         super().__init__()
+        import sys
+        print("DEBUG: AppWindow.__init__() called", file=sys.stderr)
+        
         self.vm = vm
         self.setWindowTitle("SAGE Jetson UI")
+        print("DEBUG: Window title set", file=sys.stderr)
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
+        print("DEBUG: Stack widget created and set as central widget", file=sys.stderr)
 
+        print("DEBUG: Creating page widgets...", file=sys.stderr)
         self.home = HomePage()
         self.loading = LoadingPage()
         self.classified = ClassifiedPage()
         self.voice = VoicePage()
         self.trip = TripLoadPage()
+        print("DEBUG: All page widgets created", file=sys.stderr)
 
         self.stack.addWidget(self.home)       # index 0
         self.stack.addWidget(self.loading)    # index 1
         self.stack.addWidget(self.classified) # index 2
         self.stack.addWidget(self.voice)      # index 3
         self.stack.addWidget(self.trip)       # index 4
+        print("DEBUG: All widgets added to stack", file=sys.stderr)
 
+        print("DEBUG: Wiring UI and VM...", file=sys.stderr)
         self._wire_ui()
         self._wire_vm()
+        print("DEBUG: UI and VM wired", file=sys.stderr)
 
+        print("DEBUG: Showing HOME state...", file=sys.stderr)
         self._show_state(AppStateType.HOME)
 
         # Always fullscreen on Jetson, windowed mode on other platforms
-        if connector.is_jetson():
-            self.showFullScreen()
-            # Set window flags for kiosk mode (no decorations, always on top)
-            self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+        is_jetson = connector.is_jetson()
+        print(f"DEBUG: is_jetson = {is_jetson}", file=sys.stderr)
+        
+        if is_jetson:
+            print("DEBUG: Jetson detected - setting up fullscreen...", file=sys.stderr)
+            try:
+                # Set window flags for kiosk mode (no decorations, always on top)
+                self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+                print("DEBUG: Window flags set", file=sys.stderr)
+                self.showFullScreen()
+                print("DEBUG: showFullScreen() called", file=sys.stderr)
+                print(f"DEBUG: Window visible after fullscreen: {self.isVisible()}", file=sys.stderr)
+                print(f"DEBUG: Window geometry: {self.geometry()}", file=sys.stderr)
+            except Exception as e:
+                print(f"ERROR: Failed to show fullscreen: {e}", file=sys.stderr)
+                import traceback
+                traceback.print_exc(file=sys.stderr)
+                # Fallback to windowed mode
+                self.resize(800, 600)
+                self.show()
+                print("DEBUG: Fallback to windowed mode", file=sys.stderr)
         else:
             # Windowed mode for development/testing
+            print("DEBUG: Non-Jetson platform - using windowed mode", file=sys.stderr)
             self.resize(800, 600)
             self.show()
+            print(f"DEBUG: Window shown in windowed mode, visible: {self.isVisible()}", file=sys.stderr)
+        
+        print("DEBUG: AppWindow initialization complete", file=sys.stderr)
 
     def _wire_ui(self) -> None:
         # Home
