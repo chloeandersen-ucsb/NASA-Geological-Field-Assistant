@@ -190,7 +190,6 @@ class TranscriptionService(ProcessService):
         self._active = False
         self._in_final_dump = False
         self._user_stopped = False
-        self._last_phrase = ""  # For deduplication
     
     def start(self) -> None:
         """Start the transcription process."""
@@ -203,7 +202,6 @@ class TranscriptionService(ProcessService):
         self._active = True
         self._in_final_dump = False
         self._user_stopped = False
-        self._last_phrase = ""
         
         cmd = [self.python, str(self.script)]
         print(f"[VOICE-TO-TEXT] Starting transcription process: {' '.join(cmd)}", file=sys.stderr)
@@ -279,39 +277,14 @@ class TranscriptionService(ProcessService):
                 continue
             
             if self._in_final_dump:
-                # Collect phrases from final transcript for better accuracy
+                # Collect phrases from final transcript
                 print(f"[VOICE-TO-TEXT] Collecting phrase from final dump: '{phrase}'", file=sys.stderr)
                 self._final_phrases.append(phrase)
                 continue
             
-            # Deduplication: skip if this phrase is a substring of the last phrase or vice versa
-            # This helps avoid "so to" -> "so today" duplicates
-            if self._last_phrase:
-                phrase_lower = phrase.lower()
-                last_lower = self._last_phrase.lower()
-                # Skip if current is substring of last (e.g., "to" after "going to")
-                if phrase_lower in last_lower and phrase_lower != last_lower:
-                    print(f"[VOICE-TO-TEXT] Skipping duplicate substring: '{phrase}' (last: '{self._last_phrase}')", file=sys.stderr)
-                    continue
-                # Skip if last is substring of current and they're close (e.g., "so to" -> "so today")
-                if last_lower in phrase_lower and len(phrase_lower) - len(last_lower) < 10:
-                    # Replace the last part with the longer phrase
-                    print(f"[VOICE-TO-TEXT] Replacing with longer phrase: '{self._last_phrase}' -> '{phrase}'", file=sys.stderr)
-                    if self._text_parts:
-                        # Remove last part and add new one
-                        removed = self._text_parts.pop()
-                        # Calculate what to add: the difference between phrases
-                        diff = phrase[len(self._last_phrase):].strip()
-                        if diff:
-                            chunk = diff + " "
-                            self._text_parts.append(chunk)
-                            self.token.emit(chunk)
-                    self._last_phrase = phrase
-                    continue
-            
+            # Emit streaming phrases as-is (no deduplication/optimization)
             chunk = phrase + " "
             self._text_parts.append(chunk)
-            self._last_phrase = phrase
             print(f"[VOICE-TO-TEXT] Emitting token: '{chunk}'", file=sys.stderr)
             print(f"[VOICE-TO-TEXT] LIVE TRANSCRIPTION: {phrase}", file=sys.stdout)
             self.token.emit(chunk)
@@ -354,26 +327,9 @@ class TranscriptionService(ProcessService):
                     self._final_phrases.append(phrase)
                     continue
                 
-                # Same deduplication logic as in _on_stdout
-                if self._last_phrase:
-                    phrase_lower = phrase.lower()
-                    last_lower = self._last_phrase.lower()
-                    if phrase_lower in last_lower and phrase_lower != last_lower:
-                        continue
-                    if last_lower in phrase_lower and len(phrase_lower) - len(last_lower) < 10:
-                        if self._text_parts:
-                            removed = self._text_parts.pop()
-                            diff = phrase[len(self._last_phrase):].strip()
-                            if diff:
-                                chunk = diff + " "
-                                self._text_parts.append(chunk)
-                                self.token.emit(chunk)
-                        self._last_phrase = phrase
-                        continue
-                
+                # Emit streaming phrases as-is (no deduplication/optimization)
                 chunk = phrase + " "
                 self._text_parts.append(chunk)
-                self._last_phrase = phrase
                 print(f"[VOICE-TO-TEXT] Emitting token from remaining stdout: '{chunk}'", file=sys.stderr)
                 print(f"[VOICE-TO-TEXT] LIVE TRANSCRIPTION: {phrase}", file=sys.stdout)
                 self.token.emit(chunk)
@@ -381,19 +337,11 @@ class TranscriptionService(ProcessService):
         if remaining_stderr:
             print(f"[VOICE-TO-TEXT] Remaining stderr: {remaining_stderr[:500]}", file=sys.stderr)
         
-        # Use final transcript phrases if available (more accurate), otherwise use streaming text
+        # Use final transcript phrases if available, otherwise use streaming text
         if self._final_phrases:
-            # Clean up final phrases: remove exact duplicates while preserving order
-            cleaned_phrases = []
-            seen = set()
-            for phrase in self._final_phrases:
-                phrase_lower = phrase.lower().strip()
-                if phrase_lower and phrase_lower not in seen:
-                    cleaned_phrases.append(phrase)
-                    seen.add(phrase_lower)
-            # Join final phrases with spaces
-            final_text = " ".join(cleaned_phrases)
-            print(f"[VOICE-TO-TEXT] Using final transcript phrases ({len(cleaned_phrases)} unique phrases): '{final_text}'", file=sys.stderr)
+            # Join final phrases with spaces (as-is, no optimization)
+            final_text = " ".join(self._final_phrases)
+            print(f"[VOICE-TO-TEXT] Using final transcript phrases ({len(self._final_phrases)} phrases): '{final_text}'", file=sys.stderr)
         else:
             final_text = self.full_text()
             print(f"[VOICE-TO-TEXT] Using accumulated streaming text: '{final_text}'", file=sys.stderr)

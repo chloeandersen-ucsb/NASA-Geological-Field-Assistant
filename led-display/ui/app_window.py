@@ -13,7 +13,8 @@ from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
     QMainWindow, QStackedWidget, QMessageBox,
     QWidget, QVBoxLayout, QLabel, QPushButton,
-    QTextEdit, QListWidget, QHBoxLayout
+    QTextEdit, QListWidget, QHBoxLayout, QDialog,
+    QDialogButtonBox
 )
 
 import connector
@@ -76,7 +77,7 @@ class VoiceLoadingPage(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        label = QLabel("Initializing voice transcription…\nPlease wait…")
+        label = QLabel("Initializing voice transcription…")
         label.setAlignment(Qt.AlignCenter)
         label.setStyleSheet("font-size: 22px;")
         layout.addStretch(1)
@@ -179,6 +180,9 @@ class TripLoadPage(QWidget):
 
         self.btn_back = big_button("Back")
         layout.addWidget(self.btn_back)
+        
+        # Store voice notes data for access when clicked
+        self._voice_notes_data = []
 
 
 class AppWindow(QMainWindow):
@@ -307,6 +311,7 @@ class AppWindow(QMainWindow):
 
         # Trip
         self.trip.btn_back.clicked.connect(self.vm.go_home)
+        self.trip.notes_list.itemClicked.connect(self._on_voice_note_clicked)
 
     def _wire_vm(self) -> None:
         self.vm.state_changed.connect(self._show_state)
@@ -351,7 +356,14 @@ class AppWindow(QMainWindow):
         for r in summary.rocks:
             label = r.result.label
             conf = int(r.result.confidence * 100)
-            item = f"{label} ({conf}%)"
+            # Add date/time to rock classification display
+            ts = r.ts
+            if ts:
+                dt = datetime.datetime.fromtimestamp(ts)
+                time_str = dt.strftime("%Y-%m-%d %H:%M")
+            else:
+                time_str = "Unknown"
+            item = f"[{time_str}] {label} ({conf}%)"
             self.trip.list.addItem(item)
         self.trip.lbl_totals.setText(
             f"Total volume: {summary.total_volume:.2f}   Total weight: {summary.total_weight:.2f}"
@@ -359,6 +371,7 @@ class AppWindow(QMainWindow):
         
         # Update voice notes list
         self.trip.notes_list.clear()
+        self.trip._voice_notes_data = []  # Store full note data
         for note in summary.voice_notes:
             ts = note.get("ts", 0)
             if ts:
@@ -371,7 +384,50 @@ class AppWindow(QMainWindow):
             display_text = cleaned[:100] + "..." if len(cleaned) > 100 else cleaned
             item = f"[{time_str}] {display_text}"
             self.trip.notes_list.addItem(item)
+            # Store the full note data for access when clicked
+            self.trip._voice_notes_data.append(note)
 
     def _on_error(self, message: str) -> None:
         # MVP: pop a modal, then ViewModel returns to HOME
         QMessageBox.warning(self, "Error", message)
+    
+    def _on_voice_note_clicked(self, item) -> None:
+        """Show full voice note text in a dialog when clicked."""
+        index = self.trip.notes_list.row(item)
+        if 0 <= index < len(self.trip._voice_notes_data):
+            note = self.trip._voice_notes_data[index]
+            cleaned = note.get("cleaned", note.get("transcript", ""))
+            transcript = note.get("transcript", "")
+            
+            # Create dialog to show full note
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Voice Note")
+            dialog.setMinimumWidth(600)
+            dialog.setMinimumHeight(400)
+            
+            layout = QVBoxLayout(dialog)
+            
+            # Show timestamp
+            ts = note.get("ts", 0)
+            if ts:
+                dt = datetime.datetime.fromtimestamp(ts)
+                time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                time_str = "Unknown"
+            time_label = QLabel(f"Date/Time: {time_str}")
+            time_label.setStyleSheet("font-size: 14px; font-weight: 600;")
+            layout.addWidget(time_label)
+            
+            # Show full text
+            text_edit = QTextEdit()
+            text_edit.setReadOnly(True)
+            text_edit.setPlainText(cleaned if cleaned else transcript)
+            text_edit.setStyleSheet("font-size: 14px;")
+            layout.addWidget(text_edit, stretch=1)
+            
+            # Close button
+            button_box = QDialogButtonBox(QDialogButtonBox.Ok)
+            button_box.accepted.connect(dialog.accept)
+            layout.addWidget(button_box)
+            
+            dialog.exec()
