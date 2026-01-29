@@ -12,7 +12,7 @@ import numpy as np
 import time
 from datetime import datetime
 
-DEVICE_INDEX = 0             # setting sound device
+DEVICE_INDEX = 26             # setting sound device
 SAMPLE_RATE = 16000        
 CHUNK_DURATION = 0.5         # seconds (small blocks gathered from callback)
 WINDOW_DURATION = 1.45       # seconds (what we send to ASR)
@@ -23,7 +23,8 @@ full_audio_buffer = []
 
 # Load model
 asr_model = nemo_asr.models.EncDecCTCModelBPE.from_pretrained("stt_en_fastconformer_ctc_large")
-asr_model = asr_model.eval()
+asr_model = asr_model.to("cuda").eval()
+asr_model.encoder.sync_max_audio_length = False
 
 # Audio setup
 BLOCK_SIZE = int(SAMPLE_RATE * CHUNK_DURATION)
@@ -37,11 +38,10 @@ def audio_callback(indata, frames, time_info, status):
     return None
 
 stream = sd.InputStream(
-    samplerate=SAMPLE_RATE,
+    samplerate=16000,
     channels=1,
-    device=DEVICE_INDEX,
     callback=audio_callback,
-    blocksize=BLOCK_SIZE
+    #blocksize=BLOCK_SIZE
 )
 
 # Normalizing Outputs to String
@@ -125,9 +125,17 @@ try:
                 window_audio = window_audio / (max_val + 1e-9)
 
             # Torch Tensor
-            signal = torch.tensor(window_audio, dtype=torch.float32).to(next(asr_model.parameters()).device)
-            length = torch.tensor([signal.shape[1]], dtype=torch.int64)
-
+            #signal = torch.tensor(window_audio, dtype=torch.float32).to(next(asr_model.parameters()).device)
+            #length = torch.tensor([signal.shape[1]], dtype=torch.int64)
+            signal = torch.tensor(
+                    window_audio, dtype=torch.float32, 
+                    device=next(asr_model.parameters()).device
+            )
+            length = torch.tensor(
+                    [signal.shape[1]],
+                    dtype=torch.int64,
+                    device=signal.device
+            )
             
             with torch.no_grad():
                 out = asr_model.forward(input_signal=signal, input_signal_length=length)
@@ -188,8 +196,16 @@ if full_audio_buffer:
     if max_val > 0:
         full_audio = full_audio / (max_val + 1e-9)
 
-    signal = torch.tensor(full_audio).unsqueeze(0).to(next(asr_model.parameters()).device)
-    length = torch.tensor([signal.shape[1]], dtype=torch.int64)
+    #signal = torch.tensor(full_audio).unsqueeze(0).to(next(asr_model.parameters()).device)
+    #length = torch.tensor([signal.shape[1]], dtype=torch.int64)
+    signal = torch.tensor(full_audio).unsqueeze(0).to(
+            next(asr_model.parameters()).device
+    )
+    length = torch.tensor(
+            [signal.shape[1]],
+            dtype=torch.int64, 
+            device=signal.device
+    )
 
     with torch.no_grad():
         out = asr_model.forward(input_signal=signal, input_signal_length=length)
