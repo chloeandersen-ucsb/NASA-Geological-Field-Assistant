@@ -149,7 +149,10 @@ class TranscriptionService(ProcessService):
     token = Signal(str)
     completed = Signal(str)
     
+    # Mock format: [HH:MM:SS] ['phrase']
     _PHRASE_RE = re.compile(r"\[\d{2}:\d{2}:\d{2}\]\s*\[\s*'(.+?)'\s*\]")
+    # rtt_lav format: [HH:MM:SS] phrase (no brackets/quotes)
+    _PHRASE_ALT_RE = re.compile(r"\[\d{2}:\d{2}:\d{2}\]\s+(.+)$")
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -232,16 +235,26 @@ class TranscriptionService(ProcessService):
                 self._in_final_dump = True
                 continue
             
-            if line.startswith("Using device:") or "RECORDING NOW" in line:
+            if line.startswith("Using ") or line.startswith("Using device:") or "RECORDING NOW" in line:
                 print(f"[VOICE-TO-TEXT] Ignoring chatter line: {line}", file=sys.stderr)
                 continue
             
             m = self._PHRASE_RE.search(line)
-            if not m:
-                print(f"[VOICE-TO-TEXT] Line did not match phrase pattern: {line}", file=sys.stderr)
-                continue
+            if m:
+                phrase = m.group(1).strip()
+            else:
+                m_alt = self._PHRASE_ALT_RE.search(line)
+                if m_alt:
+                    phrase = m_alt.group(1).strip()
+                    if phrase == "(silence)":
+                        continue
+                else:
+                    if self._in_final_dump and line:
+                        self._final_phrases.append(line.strip())
+                        continue
+                    print(f"[VOICE-TO-TEXT] Line did not match phrase pattern: {line}", file=sys.stderr)
+                    continue
             
-            phrase = m.group(1).strip()
             if not phrase:
                 print("[VOICE-TO-TEXT] Extracted phrase is empty", file=sys.stderr)
                 continue
@@ -277,14 +290,23 @@ class TranscriptionService(ProcessService):
                     self._in_final_dump = True
                     continue
                 
-                if line.startswith("Using device:") or "RECORDING NOW" in line:
+                if line.startswith("Using ") or line.startswith("Using device:") or "RECORDING NOW" in line:
                     continue
                 
                 m = self._PHRASE_RE.search(line)
-                if not m:
-                    continue
+                if m:
+                    phrase = m.group(1).strip()
+                else:
+                    m_alt = self._PHRASE_ALT_RE.search(line)
+                    if m_alt:
+                        phrase = m_alt.group(1).strip()
+                        if phrase == "(silence)":
+                            continue
+                    else:
+                        if self._in_final_dump and line:
+                            self._final_phrases.append(line.strip())
+                        continue
                 
-                phrase = m.group(1).strip()
                 if not phrase:
                     continue
                 

@@ -11,6 +11,7 @@ import sounddevice as sd
 import nemo.collections.asr as nemo_asr
 import queue
 import numpy as np
+import sys
 import time
 from datetime import datetime
 
@@ -21,6 +22,7 @@ for i, dev in enumerate(sd.query_devices()):
         DEVICE_INDEX = i
         break
 print("Using LAV MIC on device index ", DEVICE_INDEX)
+sys.stdout.flush()
 SAMPLE_RATE = 16000        
 CHUNK_DURATION = 0.5         # seconds (small blocks gathered from callback)
 WINDOW_DURATION = 1.45       # seconds (what we send to ASR)
@@ -147,6 +149,7 @@ try:
                 # Silence
                 if PRINT_SILENCE and not last_printed_was_silence:
                     print(f"[{timestamp}] (silence)")
+                    sys.stdout.flush()
                     last_printed_was_silence = True
                 # Slide window forward by one chunk to keep overlap
                 rolling_buffer = rolling_buffer[:, CHUNK_SIZE:]
@@ -183,6 +186,7 @@ try:
             if normalized:
                 last_printed_was_silence = False
                 print(f"[{timestamp}] {normalized}")
+                sys.stdout.flush()
 
                 # Implementing Merge into Final Transcript
                 updated = incremental_merge(final_transcript, normalized)
@@ -198,6 +202,7 @@ try:
             else:
                 if PRINT_SILENCE and not last_printed_was_silence:
                     print(f"[{timestamp}] (silence)")
+                    sys.stdout.flush()
                     last_printed_was_silence = True
 
             # Keeps overlap
@@ -208,6 +213,7 @@ try:
 except KeyboardInterrupt:
     stream.stop()
     print("\nSTREAMING COMPLETE.\n")
+    sys.stdout.flush()
 
 # Final transcript
 if full_audio_buffer:
@@ -239,9 +245,12 @@ if full_audio_buffer:
         confidence_score = None
 
     print("FINAL TRANSCRIPT:\n")
+    sys.stdout.flush()
     print(final_text)
+    sys.stdout.flush()
     # if confidence_score is not None:
     #     print(f"\nConfidence score: {confidence_score.item():.4f}")
 
 else:
     print("No speech detected.")
+    sys.stdout.flush()
