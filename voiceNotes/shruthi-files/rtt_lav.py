@@ -1,7 +1,7 @@
 '''
 TESTED ON JETSON ORIN W/ LAV MIC (last update 01/23/26)
-- program runs! adapted to jetson orin
-- unfortunately, live transcription is not working (keeps registering sound as silence)
+- program runs successfully!!
+- ctc decoding 
 '''
 import torch 
 if not hasattr(torch.distributed, "is_initialized"):
@@ -54,8 +54,6 @@ stream = sd.InputStream(
     device=DEVICE_INDEX,
     callback=audio_callback,
 )
-
-
 
 # Normalizing Outputs to String
 def normalize_prediction(pred):
@@ -113,11 +111,10 @@ def extract_text(pred):
 
     return ""
 
-# Main
-print("Devices (selecting DEVICE_INDEX={}):".format(DEVICE_INDEX))
-print(sd.query_devices())
-print("Default device tuple:", sd.default.device)
-print("\nRECORDING NOW... (Ctrl+C to stop)\n")
+# print("Devices (selecting DEVICE_INDEX={}):".format(DEVICE_INDEX))
+# print(sd.query_devices())
+# print("Default device tuple:", sd.default.device)
+# print("\nRECORDING NOW... (Ctrl+C to stop)\n")
 
 rolling_buffer = np.zeros((1, 0), dtype=np.float32)
 final_transcript = ""
@@ -145,7 +142,7 @@ try:
             energy = rms(window_audio.flatten())
             timestamp = datetime.now().strftime("%H:%M:%S")
 
-            print(f"RMS={energy:.6f}, max={np.max(np.abs(window_audio)):.6f}")
+            # print(f"RMS={energy:.6f}, max={np.max(np.abs(window_audio)):.6f}")
             if energy < ENERGY_THRESHOLD:
                 # Silence
                 if PRINT_SILENCE and not last_printed_was_silence:
@@ -161,10 +158,6 @@ try:
                 window_audio = window_audio / (max_val + 1e-9)
 
             # Torch Tensor
-            #signal = torch.tensor(window_resampled).unsqueeze(0).to(next(asr_model.parameters()).device)
-            # signal = torch.tensor(window_audio, dtype=torch.float32).to(next(asr_model.parameters()).device)
-            # length = torch.tensor([signal.shape[1]], dtype=torch.int64)
-
             signal = torch.tensor(window_audio, dtype=torch.float32, device=device)
             length = torch.tensor([signal.shape[1]], dtype=torch.int64, device=device)
 
@@ -177,7 +170,6 @@ try:
             # Decoding
             pred_tokens = logits.argmax(dim=-1)
             pred = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
-            # normalized = normalize_prediction(pred)
             if isinstance(pred, list) and len(pred) > 0:
                 hyp = pred[0]
                 if hasattr(hyp, "text"):
@@ -219,7 +211,6 @@ except KeyboardInterrupt:
 
 # Final transcript
 if full_audio_buffer:
-    # print("FINAL TRANSCRIPT:\n")
 
     full_audio = np.concatenate(full_audio_buffer, axis=0).astype(np.float32)
 
@@ -237,14 +228,7 @@ if full_audio_buffer:
 
     logits = out[0] if isinstance(out, tuple) else out
 
-    # pred_tokens = logits.argmax(dim=-1)
-    # pred = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
-    
-    # final_text = extract_text(pred)
-
     pred = asr_model.transcribe([full_audio])
-
-    # final_text = hypotheses[0] if hypotheses and hypotheses[0] else ""
 
     if isinstance(pred, list) and len(pred) > 0:
         hyp = pred[0]
