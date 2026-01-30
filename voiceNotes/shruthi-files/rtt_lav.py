@@ -123,6 +123,7 @@ try:
             energy = rms(window_audio.flatten())
             timestamp = datetime.now().strftime("%H:%M:%S")
 
+            print(f"RMS={energy:.6f}, max={np.max(np.abs(window_audio)):.6f}")
             if energy < ENERGY_THRESHOLD:
                 # Silence
                 if PRINT_SILENCE and not last_printed_was_silence:
