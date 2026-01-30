@@ -1,5 +1,5 @@
 '''
-TESTED ON JETSON ORIN W/ LAV MIC (last update 01/23/26)
+TESTED ON JETSON ORIN W/ LAV MIC (last update 01/30/26)
 - program runs successfully!!
 - ctc decoding 
 '''
@@ -240,8 +240,8 @@ if full_audio_buffer:
 
     print("FINAL TRANSCRIPT:\n")
     print(final_text)
-    if confidence_score is not None:
-        print(f"\nConfidence score: {confidence_score.item():.4f}")
+    # if confidence_score is not None:
+    #     print(f"\nConfidence score: {confidence_score.item():.4f}")
 
 else:
     print("No speech detected.")
