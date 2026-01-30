@@ -7,14 +7,12 @@ import torch
 if not hasattr(torch.distributed, "is_initialized"):
     torch.distributed.is_initialized = lambda: False
 import soundfile as sf
-from scipy.signal import resample
 import sounddevice as sd
 import nemo.collections.asr as nemo_asr
 import queue
 import numpy as np
 import time
 from datetime import datetime
-import librosa
 
 
 DEVICE_INDEX = None             # setting sound device
@@ -33,11 +31,12 @@ full_audio_buffer = []
 
 # Load model
 asr_model = nemo_asr.models.EncDecCTCModelBPE.from_pretrained("stt_en_fastconformer_ctc_large")
-asr_model = asr_model.eval()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+asr_model = asr_model.to(device).eval()
+
 
 # Audio setup
 device_info = sd.query_devices(DEVICE_INDEX, 'input')
-NATIVE_RATE = int(device_info['default_samplerate'])
 TARGET_RATE = 16000
 BLOCK_SIZE = int(SAMPLE_RATE * CHUNK_DURATION)
 CHUNK_SIZE = BLOCK_SIZE
@@ -50,16 +49,12 @@ def audio_callback(indata, frames, time_info, status):
     return None
 
 stream = sd.InputStream(
-    samplerate=NATIVE_RATE,
+    samplerate=SAMPLE_RATE,
     channels=1,
     device=DEVICE_INDEX,
     callback=audio_callback,
-    blocksize=BLOCK_SIZE
 )
 
-def resample_to_16k(block_mono, orig_rate=NATIVE_RATE):
-    num_samples = int(block_mono.shape[1] * 16000 / orig_rate)
-    return resample(block_mono, num_samples, axis=1)
 
 
 # Normalizing Outputs to String
@@ -115,12 +110,6 @@ try:
             block = audio_q.get()
             block_mono = block[:, 0].reshape(1, -1)
             
-            num_samples = int(block_mono.shape[1]* TARGET_RATE/NATIVE_RATE)
-            block_resampled = resample(block_mono, num_samples, axis=1)
-
-            if block_resampled.ndim == 1:
-                block_resampled = block_resampled.reshape(1, -1)
-
             # keep existing rolling buffer
             rolling_buffer = np.concatenate((rolling_buffer, block_mono), axis=1)
 
@@ -131,7 +120,6 @@ try:
         # Run ASR on the first window if we have enough size
         if rolling_buffer.shape[1] >= WINDOW_SIZE:
             window_audio = rolling_buffer[:, :WINDOW_SIZE]  
-            window_resampled = librosa.resample(window_audio.flatten(), orig_sr=48000, target_sr=16000)
             energy = rms(window_audio.flatten())
             timestamp = datetime.now().strftime("%H:%M:%S")
 
@@ -161,7 +149,8 @@ try:
             logits = out[0] if isinstance(out, tuple) else out
 
             # Decoding
-            pred = asr_model.decoding.ctc_decoder_predictions_tensor(logits)
+            pred_tokens = logits.argmax(dim=-1)
+            pred = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
             normalized = normalize_prediction(pred)
 
             # Normalizing 
@@ -216,7 +205,8 @@ if full_audio_buffer:
 
     logits = out[0] if isinstance(out, tuple) else out
 
-    pred = asr_model.decoding.ctc_decoder_predictions_tensor(logits)
+    pred_tokens = logits.argmax(dim=-1)
+    pred = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
     final_text = normalize_prediction(pred)
 
     print("FINAL TRANSCRIPT:\n")
