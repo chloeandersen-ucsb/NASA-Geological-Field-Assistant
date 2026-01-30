@@ -91,6 +91,28 @@ def incremental_merge(prev, new):
 def rms(x):
     return np.sqrt(np.mean(np.square(x.astype(np.float64))))
 
+def extract_text(pred):
+    if pred is None:
+        return ""
+
+    # List output
+    if isinstance(pred, list) and len(pred) > 0:
+        item = pred[0]
+
+        # Case 1: Hypothesis object
+        if hasattr(item, "text"):
+            return item.text.strip()
+
+        # Case 2: list[str]
+        if isinstance(item, list) and len(item) > 0:
+            return item[0].strip()
+
+        # Case 3: str
+        if isinstance(item, str):
+            return item.strip()
+
+    return ""
+
 # Main
 print("Devices (selecting DEVICE_INDEX={}):".format(DEVICE_INDEX))
 print(sd.query_devices())
@@ -218,13 +240,7 @@ if full_audio_buffer:
     pred_tokens = logits.argmax(dim=-1)
     pred = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
     
-    if isinstance(pred, list) and len(pred) > 0:
-        if isinstance(pred[0], list):
-            final_text = pred[0][0].strip() if pred[0] else ""
-        else:
-            final_text = pred[0].strip()
-    else:
-        final_text = ""
+    final_text = extract_text(pred)
 
     print("FINAL TRANSCRIPT:\n")
     print(final_text)
