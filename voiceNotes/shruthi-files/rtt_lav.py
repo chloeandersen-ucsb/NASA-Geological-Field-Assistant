@@ -199,22 +199,16 @@ except KeyboardInterrupt:
 if full_audio_buffer:
     # print("FINAL TRANSCRIPT:\n")
 
-    full_audio = np.concatenate(full_audio_buffer, axis=0)
+    full_audio = np.concatenate(full_audio_buffer, axis=0).astype(np.float32)
 
     # normalize full audio
-    full_audio = full_audio.astype(np.float32)
     max_val = np.max(np.abs(full_audio))
     if max_val > 0:
         full_audio = full_audio / (max_val + 1e-9)
 
-    device = next(asr_model.parameters()).device
-    # signal = torch.tensor(full_audio, dtype=torch.float32, device=device).unsqueeze(0)
-    # length = torch.tensor([signal.shape[1]], dtype=torch.int64, device=device)
-
-    signal = torch.tensor(window_audio, dtype=torch.float32, device=device)
+    
+    signal = torch.tensor(full_audio, dtype=torch.float32, device=device).unsqueeze(0)
     length = torch.tensor([signal.shape[1]], dtype=torch.int64, device=device)
-
-
 
     with torch.no_grad():
         out = asr_model.forward(input_signal=signal, input_signal_length=length)
@@ -223,7 +217,11 @@ if full_audio_buffer:
 
     pred_tokens = logits.argmax(dim=-1)
     pred = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
-    final_text = normalize_prediction(pred)
+    
+    if isinstance(pred, list) and len(pred) > 0 and hasattr(pred[0], "text"):
+        final_text = pred[0].text.strip()
+    else:
+        final_text = ""
 
     print("FINAL TRANSCRIPT:\n")
     print(final_text)
