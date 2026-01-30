@@ -218,8 +218,11 @@ if full_audio_buffer:
     pred_tokens = logits.argmax(dim=-1)
     pred = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
     
-    if isinstance(pred, list) and len(pred) > 0 and hasattr(pred[0], "text"):
-        final_text = pred[0].text.strip()
+    if isinstance(pred, list) and len(pred) > 0:
+        if isinstance(pred[0], list):
+            final_text = pred[0][0].strip() if pred[0] else ""
+        else:
+            final_text = pred[0].strip()
     else:
         final_text = ""
 
