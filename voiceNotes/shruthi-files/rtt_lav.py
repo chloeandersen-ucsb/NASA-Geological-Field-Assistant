@@ -139,8 +139,11 @@ try:
 
             # Torch Tensor
             #signal = torch.tensor(window_resampled).unsqueeze(0).to(next(asr_model.parameters()).device)
-            signal = torch.tensor(window_audio, dtype=torch.float32).to(next(asr_model.parameters()).device)
-            length = torch.tensor([signal.shape[1]], dtype=torch.int64)
+            # signal = torch.tensor(window_audio, dtype=torch.float32).to(next(asr_model.parameters()).device)
+            # length = torch.tensor([signal.shape[1]], dtype=torch.int64)
+
+            signal = torch.tensor(window_audio, dtype=torch.float32, device=device)
+            length = torch.tensor([signal.shape[1]], dtype=torch.int64, device=device)
 
             
             with torch.no_grad():
@@ -196,8 +199,12 @@ if full_audio_buffer:
         full_audio = full_audio / (max_val + 1e-9)
 
     device = next(asr_model.parameters()).device
-    signal = torch.tensor(full_audio, dtype=torch.float32, device=device).unsqueeze(0)
+    # signal = torch.tensor(full_audio, dtype=torch.float32, device=device).unsqueeze(0)
+    # length = torch.tensor([signal.shape[1]], dtype=torch.int64, device=device)
+
+    signal = torch.tensor(window_audio, dtype=torch.float32, device=device)
     length = torch.tensor([signal.shape[1]], dtype=torch.int64, device=device)
+
 
 
     with torch.no_grad():
