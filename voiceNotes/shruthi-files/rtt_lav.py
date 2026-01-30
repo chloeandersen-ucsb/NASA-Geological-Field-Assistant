@@ -229,18 +229,22 @@ if full_audio_buffer:
         full_audio = full_audio / (max_val + 1e-9)
 
     
-    signal = torch.tensor(full_audio, dtype=torch.float32, device=device).unsqueeze(0)
-    length = torch.tensor([signal.shape[1]], dtype=torch.int64, device=device)
+    # signal = torch.tensor(full_audio, dtype=torch.float32, device=device).unsqueeze(0)
+    # length = torch.tensor([signal.shape[1]], dtype=torch.int64, device=device)
 
-    with torch.no_grad():
-        out = asr_model.forward(input_signal=signal, input_signal_length=length)
+    # with torch.no_grad():
+    #     out = asr_model.forward(input_signal=signal, input_signal_length=length)
 
-    logits = out[0] if isinstance(out, tuple) else out
+    # logits = out[0] if isinstance(out, tuple) else out
 
-    pred_tokens = logits.argmax(dim=-1)
-    pred = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
+    # pred_tokens = logits.argmax(dim=-1)
+    # pred = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
     
-    final_text = extract_text(pred)
+    # final_text = extract_text(pred)
+
+    hypotheses = asr_model.transcribe([full_audio])
+
+    final_text = hypotheses[0] if hypotheses and hypotheses[0] else ""
 
     print("FINAL TRANSCRIPT:\n")
     print(final_text)
