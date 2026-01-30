@@ -155,7 +155,15 @@ try:
             # Decoding
             pred_tokens = logits.argmax(dim=-1)
             pred = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
-            normalized = normalize_prediction(pred)
+            # normalized = normalize_prediction(pred)
+            if isinstance(pred, list) and len(pred) > 0:
+                hyp = pred[0]
+                if hasattr(hyp, "text"):
+                    normalized = hyp.text.strip()
+                else:
+                    normalized = str(hyp).strip()
+            else:
+                normalized = ""
 
             # Normalizing 
             if normalized:
