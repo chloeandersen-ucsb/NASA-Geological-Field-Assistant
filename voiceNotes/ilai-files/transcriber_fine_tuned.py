@@ -1,55 +1,183 @@
 '''
-NEEDS TO TEST ON JETSON WITH LAV MIC (last update 02/02/26)
-- program runs successfully!!
-- ctc decoding 
-- merged with new code
+- Last Updated: 02/02/2026
+- Merged cleanup & newest model
 '''
-import torch 
-if not hasattr(torch.distributed, "is_initialized"):
-    torch.distributed.is_initialized = lambda: False
-import soundfile as sf
 import sounddevice as sd
 import nemo.collections.asr as nemo_asr
-import queue
 import numpy as np
-import sys
+import queue
 import time
+import sys
+import torch
+import os
+import difflib
+import jellyfish 
 from datetime import datetime
+from spellchecker import SpellChecker
 
+# ------------------------------------------------------------------
+# PART 1: CONFIGURATION & GEOLOGY CONTEXT
+# ------------------------------------------------------------------
+MODEL_FILE = "geology_model2-2-2.nemo"
+CURRENT_VISUAL_CONTEXT = ["Gneiss"] 
 
-DEVICE_INDEX = None             # setting sound device
+# Audio Tunables
+SAMPLE_RATE = 16000
+CHUNK_DURATION = 0.5        # Fast updates
+WINDOW_DURATION = 2.0       # 2.0s window (Good balance for context)
+ENERGY_THRESHOLD = 0.001    # RMS threshold for silence
+PRINT_SILENCE = True
+
+# Context Helpers
+spell = SpellChecker()
+
+GEOLOGY_TRIGGERS = { 
+    # Strong Nouns
+    "rock", "stone", "sample", "specimen", "mineral", "crystal",
+    "sediment", "magma", "lava", "ash", "outcrop", "formation",
+    "granite", "basalt", "gneiss", "schist", 
+    # Specific Adjectives
+    "luster", "grain", "fine-grained", "coarse", "foliated",
+    "vesicular", "porous", "crystalline", "volcanic",
+}
+
+def has_geology_context(words, index, window=3):
+    """Checks for geology trigger words nearby."""
+    start = max(0, index - window)
+    end = min(len(words), index + window + 1)
+    nearby_words = words[start:index] + words[index+1:end]
+    
+    for w in nearby_words:
+        clean_w = w.lower().strip(".,?!")
+        if clean_w in GEOLOGY_TRIGGERS:
+            return True
+    return False
+
+def multimodal_correction(transcript, visual_keywords):
+    """Corrects transcript based on visual context and geology triggers."""
+    if not transcript: return ""
+    
+    words = transcript.split()
+    corrected_words = []
+    
+    for i, word in enumerate(words):
+        best_candidate = word
+        clean_word = word.lower().strip(".,?!")
+        
+        for visual_context in visual_keywords:
+            context_clean = visual_context.lower()
+            
+            # 1. PHONETIC CHECK
+            sounds_alike = (jellyfish.metaphone(clean_word) == jellyfish.metaphone(context_clean))
+            
+            # 2. SPELLING CHECK
+            spelling_score = jellyfish.jaro_winkler_similarity(clean_word, context_clean)
+            
+            # Condition A: Word is gibberish/unknown -> Aggressive swap
+            if clean_word not in spell and (sounds_alike or spelling_score > 0.8):
+                best_candidate = visual_context
+                break
+
+            # Condition B: Word is valid English -> Context Gate
+            elif clean_word in spell:
+                if (sounds_alike or spelling_score > 0.9):
+                    if has_geology_context(words, i):
+                        best_candidate = visual_context
+                        break
+        
+        corrected_words.append(best_candidate)
+        
+    return " ".join(corrected_words)
+
+# ------------------------------------------------------------------
+# PART 2: DEVICE & MODEL SETUP (Merged)
+# ------------------------------------------------------------------
+
+# 1. Setup Torch Device
+if torch.backends.mps.is_available():
+    device = torch.device("mps")
+elif torch.cuda.is_available():
+    device = torch.device("cuda")
+else:
+    device = torch.device("cpu")
+
+if not hasattr(torch, "distributed"):
+    import types
+    torch.distributed = types.SimpleNamespace(is_initialized=lambda: False)
+elif not hasattr(torch.distributed, "is_initialized"):
+    torch.distributed.is_initialized = lambda: False
+
+# 2. Find Mic
+DEVICE_INDEX = None
+print("Searching for Sennheiser XS LAV...")
 for i, dev in enumerate(sd.query_devices()):
     if 'Sennheiser XS LAV USB-C' in dev['name']:
         DEVICE_INDEX = i
         break
-print("Using LAV MIC on device index ", DEVICE_INDEX)
+
+if DEVICE_INDEX is not None:
+    print(f"Using LAV MIC on device index {DEVICE_INDEX}")
+else:
+    print("Warning: Sennheiser LAV not found. Using default input.")
+    DEVICE_INDEX = sd.default.device[0]
+
 sys.stdout.flush()
-SAMPLE_RATE = 16000        
-CHUNK_DURATION = 0.5         # seconds (small blocks gathered from callback)
-WINDOW_DURATION = 1.45       # seconds (what we send to ASR)
-ENERGY_THRESHOLD = 0.001    # RMS energy threshold (tune up/down if it still prints silence)
-PRINT_SILENCE = True         # whether to print (silence) lines
-full_audio_buffer = []
 
+# 3. Load Your Local Model
+if not os.path.exists(MODEL_FILE):
+    print(f"ERROR: Could not find {MODEL_FILE}")
+    print("Please ensure your .nemo file is in the same folder.")
+    exit(1)
 
-# Load model
-asr_model = nemo_asr.models.EncDecCTCModelBPE.from_pretrained("stt_en_fastconformer_ctc_large")
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-asr_model = asr_model.to(device).eval()
+print(f"Loading local model: {MODEL_FILE}...")
+asr_model = nemo_asr.models.EncDecCTCModelBPE.restore_from(restore_path=MODEL_FILE)
+asr_model.freeze()
+asr_model = asr_model.to(device)
+asr_model.eval()
+print("Model loaded successfully!")
 
+# ------------------------------------------------------------------
+# PART 3: AUDIO PROCESSING HELPERS
+# ------------------------------------------------------------------
 
-# Audio setup
-device_info = sd.query_devices(DEVICE_INDEX, 'input')
-TARGET_RATE = 16000
-BLOCK_SIZE = int(SAMPLE_RATE * CHUNK_DURATION)
-CHUNK_SIZE = BLOCK_SIZE
-WINDOW_SIZE = int(SAMPLE_RATE * WINDOW_DURATION)
+def rms(x):
+    return np.sqrt(np.mean(np.square(x.astype(np.float64))))
 
+def incremental_merge(prev, new):
+    """Merges overlapping text streams cleanly."""
+    prev = prev.strip()
+    new = new.strip()
+    if not prev: return new
+    prev_words = prev.split()
+    new_words = new.split()
+    max_overlap = 0
+    # Simple overlap check
+    for i in range(len(prev_words)):
+        suffix = prev_words[i:]
+        if new_words[:len(suffix)] == suffix:
+            max_overlap = len(suffix)
+    fresh = new_words[max_overlap:]
+    if not fresh: return prev
+    return prev + " " + " ".join(fresh)
+
+# Audio Queue Setup
 audio_q = queue.Queue()
+full_audio_buffer = [] # Stores all audio for the final cleanup
 
 def audio_callback(indata, frames, time_info, status):
+    if status:
+        print(status, file=sys.stderr)
     audio_q.put(indata.copy())
-    return None
+
+# Buffer Math
+chunk_size = int(SAMPLE_RATE * CHUNK_DURATION)
+window_size = int(SAMPLE_RATE * WINDOW_DURATION)
+rolling_buffer = np.zeros((1, 0), dtype=np.float32)
+
+# ------------------------------------------------------------------
+# PART 4: MAIN LOOP
+# ------------------------------------------------------------------
+print("\nRECORDING... (Ctrl+C to stop)\n")
 
 stream = sd.InputStream(
     samplerate=SAMPLE_RATE,
@@ -58,200 +186,113 @@ stream = sd.InputStream(
     callback=audio_callback,
 )
 
-# Normalizing Outputs to String
-def normalize_prediction(pred):
-    if pred is None:
-        return ""
-    if isinstance(pred, tuple):
-        pred = pred[0]
-    while isinstance(pred, list):
-        pred = pred[0] if pred else ""
-    if not isinstance(pred, str):
-        return ""
-    return pred.strip()
-
-# Merging new token with previous token if overlap
-def incremental_merge(prev, new):
-    prev = prev.strip()
-    new = new.strip()
-    if not prev:
-        return new
-    prev_words = prev.split()
-    new_words = new.split()
-    max_overlap = 0
-    for i in range(len(prev_words)):
-        suffix = prev_words[i:]
-        if new_words[:len(suffix)] == suffix:
-            max_overlap = len(suffix)
-    fresh = new_words[max_overlap:]
-    if not fresh:
-        return prev
-    return prev + " " + " ".join(fresh)
-
-# Root Square Mean Math
-def rms(x):
-    return np.sqrt(np.mean(np.square(x.astype(np.float64))))
-
-def extract_text(pred):
-    if pred is None:
-        return ""
-
-    # List output
-    if isinstance(pred, list) and len(pred) > 0:
-        item = pred[0]
-
-        # Case 1: Hypothesis object
-        if hasattr(item, "text"):
-            return item.text.strip()
-
-        # Case 2: list[str]
-        if isinstance(item, list) and len(item) > 0:
-            return item[0].strip()
-
-        # Case 3: str
-        if isinstance(item, str):
-            return item.strip()
-
-    return ""
-
-# print("Devices (selecting DEVICE_INDEX={}):".format(DEVICE_INDEX))
-# print(sd.query_devices())
-# print("Default device tuple:", sd.default.device)
-# print("\nRECORDING NOW... (Ctrl+C to stop)\n")
-
-rolling_buffer = np.zeros((1, 0), dtype=np.float32)
-final_transcript = ""
-segments = []
-segment_start = None
 last_printed_was_silence = False
+final_transcript = ""
 
-stream.start()
 try:
+    stream.start()
     while True:
+        # 1. Drain Queue
         while not audio_q.empty():
             block = audio_q.get()
             block_mono = block[:, 0].reshape(1, -1)
-            
-            # keep existing rolling buffer
+            # Live buffer
             rolling_buffer = np.concatenate((rolling_buffer, block_mono), axis=1)
-
-            # also append to full buffer for final transcript
+            # Final buffer (keep everything)
             full_audio_buffer.append(block_mono.flatten())
 
-
-        # Run ASR on the first window if we have enough size
-        if rolling_buffer.shape[1] >= WINDOW_SIZE:
-            window_audio = rolling_buffer[:, :WINDOW_SIZE]  
+        # 2. Process Window if ready
+        if rolling_buffer.shape[1] >= window_size:
+            window_audio = rolling_buffer[:, :window_size]
             energy = rms(window_audio.flatten())
             timestamp = datetime.now().strftime("%H:%M:%S")
 
-            # print(f"RMS={energy:.6f}, max={np.max(np.abs(window_audio)):.6f}")
+            # Silence Check
             if energy < ENERGY_THRESHOLD:
-                # Silence
                 if PRINT_SILENCE and not last_printed_was_silence:
                     print(f"[{timestamp}] (silence)")
                     sys.stdout.flush()
                     last_printed_was_silence = True
-                # Slide window forward by one chunk to keep overlap
-                rolling_buffer = rolling_buffer[:, CHUNK_SIZE:]
+                # Slide window
+                rolling_buffer = rolling_buffer[:, chunk_size:]
                 continue
 
-            # Non-silent
+            # 3. Decode Window (Forward Pass)
             max_val = np.max(np.abs(window_audio))
             if max_val > 0:
                 window_audio = window_audio / (max_val + 1e-9)
 
-            # Torch Tensor
-            signal = torch.tensor(window_audio, dtype=torch.float32, device=device)
-            length = torch.tensor([signal.shape[1]], dtype=torch.int64, device=device)
+            tensor_in = torch.from_numpy(window_audio).float().to(device)
+            len_in = torch.tensor([tensor_in.shape[1]], dtype=torch.int64, device=device)
 
-            
             with torch.no_grad():
-                out = asr_model.forward(input_signal=signal, input_signal_length=length)
+                logits = asr_model.forward(input_signal=tensor_in, input_signal_length=len_in)
+                if isinstance(logits, tuple): logits = logits[0]
+                pred_tokens = logits.argmax(dim=-1)
+                transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
+                raw_text = transcripts[0].text if hasattr(transcripts[0], 'text') else str(transcripts[0])
 
-            logits = out[0] if isinstance(out, tuple) else out
-
-            # Decoding
-            pred_tokens = logits.argmax(dim=-1)
-            pred = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
-            if isinstance(pred, list) and len(pred) > 0:
-                hyp = pred[0]
-                if hasattr(hyp, "text"):
-                    normalized = hyp.text.strip()
-                else:
-                    normalized = str(hyp).strip()
-            else:
-                normalized = ""
-
-            # Normalizing 
-            if normalized:
+            # 4. Apply Multimodal Correction (THE KEY MERGE STEP)
+            corrected_text = multimodal_correction(raw_text, CURRENT_VISUAL_CONTEXT)
+            
+            # 5. Print & Merge
+            if corrected_text:
                 last_printed_was_silence = False
-                print(f"[{timestamp}] {normalized}")
+                print(f"[{timestamp}] {corrected_text}")
                 sys.stdout.flush()
+                
+                # Update rolling transcript
+                final_transcript = incremental_merge(final_transcript, corrected_text)
+            
+            # Slide window
+            rolling_buffer = rolling_buffer[:, chunk_size:]
 
-                # Implementing Merge into Final Transcript
-                updated = incremental_merge(final_transcript, normalized)
-                if updated != final_transcript:
-                    now = datetime.now().strftime("%H:%M:%S")
-                    if segment_start is None:
-                        segment_start = now
-                        segments.append({"start": now, "end": now, "text": updated})
-                    else:
-                        segments[-1]["text"] = updated
-                        segments[-1]["end"] = now
-                    final_transcript = updated
-            else:
-                if PRINT_SILENCE and not last_printed_was_silence:
-                    print(f"[{timestamp}] (silence)")
-                    sys.stdout.flush()
-                    last_printed_was_silence = True
-
-            # Keeps overlap
-            rolling_buffer = rolling_buffer[:, CHUNK_SIZE:]
-
-        time.sleep(0.03)
+        time.sleep(0.01)
 
 except KeyboardInterrupt:
     stream.stop()
-    print("\nSTREAMING COMPLETE.\n")
-    sys.stdout.flush()
+    print("\n\nStopping stream... Preparing final transcript...")
 
-# Final transcript
+# ------------------------------------------------------------------
+# PART 5: FINAL CLEANUP
+# ------------------------------------------------------------------
 if full_audio_buffer:
-
+    print("Processing full audio buffer for maximum accuracy...")
+    
+    # Concatenate all recorded audio
     full_audio = np.concatenate(full_audio_buffer, axis=0).astype(np.float32)
-
-    # normalize full audio
+    
+    # Normalize
     max_val = np.max(np.abs(full_audio))
     if max_val > 0:
         full_audio = full_audio / (max_val + 1e-9)
 
-    
-    signal = torch.tensor(full_audio, dtype=torch.float32, device=device).unsqueeze(0)
-    length = torch.tensor([signal.shape[1]], dtype=torch.int64, device=device)
+    # Convert to Tensor for Final Pass
+    full_signal = torch.tensor(full_audio, dtype=torch.float32, device=device).unsqueeze(0)
+    full_len = torch.tensor([full_signal.shape[1]], dtype=torch.int64, device=device)
 
+    # Decode entire sequence at once
     with torch.no_grad():
-        out = asr_model.forward(input_signal=signal, input_signal_length=length)
+        # Try .transcribe first (easier), fall back to forward pass if model type differs
+        try:
+            # Note: .transcribe usually expects a list of paths or arrays
+            preds = asr_model.transcribe([full_audio])
+            final_raw = preds[0].text if hasattr(preds[0], 'text') else str(preds[0])
+        except:
+            # Fallback to manual forward pass
+            logits = asr_model.forward(input_signal=full_signal, input_signal_length=full_len)
+            if isinstance(logits, tuple): logits = logits[0]
+            pred_tokens = logits.argmax(dim=-1)
+            transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
+            final_raw = transcripts[0].text
 
-    logits = out[0] if isinstance(out, tuple) else out
+    # Apply Multimodal Correction one last time to the Clean Transcript
+    final_clean_text = multimodal_correction(final_raw, CURRENT_VISUAL_CONTEXT).replace("⁇", "")
 
-    pred = asr_model.transcribe([full_audio])
-
-    if isinstance(pred, list) and len(pred) > 0:
-        hyp = pred[0]
-        final_text = hyp.text if hasattr(hyp, "text") else str(hyp)
-        confidence_score = hyp.score if hasattr(hyp, "score") else None
-    else:
-        final_text = ""
-        confidence_score = None
-
-    print("FINAL TRANSCRIPT:\n")
-    sys.stdout.flush()
-    print(final_text)
-    sys.stdout.flush()
-    # if confidence_score is not None:
-    #     print(f"\nConfidence score: {confidence_score.item():.4f}")
-
+    print("\n" + "="*40)
+    print("FINAL TRANSCRIPT:")
+    print("="*40)
+    print(final_clean_text)
+    print("="*40)
 else:
-    print("No speech detected.")
-    sys.stdout.flush()
+    print("No audio recorded.")
