@@ -1,6 +1,11 @@
 '''
-- Last Updated: 02/02/2026
+- Last Updated: 02/03/2026
+- Tried adding punctuation for final transcript. Didn't work well (see # FORMAT)
+- Smart grammar ("nice Gneiss rock")
 - Merged cleanup & newest model
+
+- Tasks:
+- TEST ON ORIN
 '''
 import sounddevice as sd
 import nemo.collections.asr as nemo_asr
@@ -14,11 +19,13 @@ import difflib
 import jellyfish 
 from datetime import datetime
 from spellchecker import SpellChecker
+from textblob import TextBlob
+# from deepmultilingualpunctuation import PunctuationModel # FORMAT
 
 # ------------------------------------------------------------------
 # PART 1: CONFIGURATION & GEOLOGY CONTEXT
 # ------------------------------------------------------------------
-MODEL_FILE = "geology_model2-2-2.nemo"
+MODEL_FILE = "newest_model.nemo"
 CURRENT_VISUAL_CONTEXT = ["Gneiss"] 
 
 # Audio Tunables
@@ -54,8 +61,12 @@ def has_geology_context(words, index, window=3):
     return False
 
 def multimodal_correction(transcript, visual_keywords):
-    """Corrects transcript based on visual context and geology triggers."""
     if not transcript: return ""
+    
+    # 1. Get Grammar Tags for the whole sentence
+    # TextBlob will label each word: ('very', 'RB'), ('nice', 'JJ'), ('rock', 'NN')
+    blob = TextBlob(transcript)
+    blob_tags = [tag for word, tag in blob.tags]
     
     words = transcript.split()
     corrected_words = []
@@ -64,26 +75,35 @@ def multimodal_correction(transcript, visual_keywords):
         best_candidate = word
         clean_word = word.lower().strip(".,?!")
         
+        # --- SMART LOGIC: Part-of-Speech Check ---
+        # If the word is "nice" and it's being used as an ADJECTIVE (JJ), 
+        # trust the grammar and don't turn it into a rock.
+        # current_tag = blob_tags.get(clean_word, "")
+        current_tag = blob_tags[i]
+        prev_tag = blob_tags[i-1] if i > 0 and i-1 < len(blob_tags) else "XX"
+        
+        if current_tag.startswith("JJ"):
+             corrected_words.append(word)
+             continue
+        # -----------------------------------------
+
         for visual_context in visual_keywords:
             context_clean = visual_context.lower()
             
-            # 1. PHONETIC CHECK
+            # Phonetic & Spelling checks (Same as before)
             sounds_alike = (jellyfish.metaphone(clean_word) == jellyfish.metaphone(context_clean))
-            
-            # 2. SPELLING CHECK
             spelling_score = jellyfish.jaro_winkler_similarity(clean_word, context_clean)
-            
-            # Condition A: Word is gibberish/unknown -> Aggressive swap
-            if clean_word not in spell and (sounds_alike or spelling_score > 0.8):
-                best_candidate = visual_context
-                break
+            is_match = (sounds_alike or spelling_score > 0.9)
 
-            # Condition B: Word is valid English -> Context Gate
-            elif clean_word in spell:
-                if (sounds_alike or spelling_score > 0.9):
-                    if has_geology_context(words, i):
-                        best_candidate = visual_context
-                        break
+            if is_match:
+                if prev_tag.startswith("RB"):
+                    break
+                if prev_tag.startswith("JJ"):
+                    best_candidate = visual_context
+                    break
+                if has_geology_context(words, i):
+                    best_candidate = visual_context
+                    break
         
         corrected_words.append(best_candidate)
         
@@ -135,6 +155,11 @@ asr_model.freeze()
 asr_model = asr_model.to(device)
 asr_model.eval()
 print("Model loaded successfully!")
+
+# Load punctuation model - FORMAT
+print("Loading Punctuation Model...")
+# punct_model = PunctuationModel(model="unikei/distilbert-base-re-punctuate")
+# print("Punctuation Model loaded!")
 
 # ------------------------------------------------------------------
 # PART 3: AUDIO PROCESSING HELPERS
@@ -288,6 +313,28 @@ if full_audio_buffer:
 
     # Apply Multimodal Correction one last time to the Clean Transcript
     final_clean_text = multimodal_correction(final_raw, CURRENT_VISUAL_CONTEXT).replace("⁇", "")
+
+    # try: # FORMAT
+    #     # Restore punctuation
+    #     punctuated_text = punct_model.restore_punctuation(corrected_text)
+        
+    #     # --- SAFETY RAIL ---
+    #     # If input had spaces but output doesn't, the model corrupted the text.
+    #     if " " in corrected_text.strip() and " " not in punctuated_text.strip():
+    #         raise ValueError("Space deletion detected")
+            
+    # except Exception as e:
+    #     print(f"Warning: Punctuation model failed ({e}). Reverting to basic formatting.")
+        
+    #     # Fallback: Manual Capitalization & Period
+    #     clean = corrected_text.strip()
+    #     if clean:
+    #         punctuated_text = clean[0].upper() + clean[1:]
+    #         if punctuated_text[-1] not in ".?!":
+    #             punctuated_text += "."
+    #     else:
+    #         punctuated_text = ""
+
 
     print("\n" + "="*40)
     print("FINAL TRANSCRIPT:")
