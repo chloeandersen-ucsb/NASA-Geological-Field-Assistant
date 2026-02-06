@@ -87,6 +87,7 @@ class ClassifiedPage(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
 
+        # Top result (most confident)
         self.lbl_label = QLabel("LABEL")
         self.lbl_label.setAlignment(Qt.AlignCenter)
         self.lbl_label.setStyleSheet("font-size: 24px; font-weight: 700;")
@@ -94,6 +95,15 @@ class ClassifiedPage(QWidget):
         self.lbl_conf = QLabel("Confidence: --")
         self.lbl_conf.setAlignment(Qt.AlignCenter)
         self.lbl_conf.setStyleSheet("font-size: 18px;")
+
+        # Additional results (2nd and 3rd most confident)
+        self.lbl_top2 = QLabel("")
+        self.lbl_top2.setAlignment(Qt.AlignCenter)
+        self.lbl_top2.setStyleSheet("font-size: 16px; color: #666;")
+
+        self.lbl_top3 = QLabel("")
+        self.lbl_top3.setAlignment(Qt.AlignCenter)
+        self.lbl_top3.setStyleSheet("font-size: 16px; color: #666;")
 
         self.lbl_extra = QLabel("")
         self.lbl_extra.setAlignment(Qt.AlignCenter)
@@ -106,6 +116,8 @@ class ClassifiedPage(QWidget):
         layout.addStretch(1)
         layout.addWidget(self.lbl_label)
         layout.addWidget(self.lbl_conf)
+        layout.addWidget(self.lbl_top2)
+        layout.addWidget(self.lbl_top3)
         layout.addWidget(self.lbl_extra)
         layout.addSpacing(10)
         layout.addWidget(self.btn_reclassify)
@@ -309,8 +321,30 @@ class AppWindow(QMainWindow):
             self.stack.setCurrentWidget(self.trip)
 
     def _on_classification(self, result: ClassificationResult) -> None:
+        # Display top result
         self.classified.lbl_label.setText(result.label.upper())
         self.classified.lbl_conf.setText(f"Confidence: {int(result.confidence * 100)}%")
+
+        # Display 2nd and 3rd most confident results if available
+        top3 = None
+        if result.raw and isinstance(result.raw, dict):
+            top3 = result.raw.get("top3", [])
+        
+        if top3 and len(top3) >= 2:
+            # 2nd result
+            label2 = top3[1].get("label", "")
+            conf2 = top3[1].get("confidence", 0.0)
+            self.classified.lbl_top2.setText(f"2nd: {label2.upper()} ({int(conf2 * 100)}%)")
+        else:
+            self.classified.lbl_top2.setText("")
+        
+        if top3 and len(top3) >= 3:
+            # 3rd result
+            label3 = top3[2].get("label", "")
+            conf3 = top3[2].get("confidence", 0.0)
+            self.classified.lbl_top3.setText(f"3rd: {label3.upper()} ({int(conf3 * 100)}%)")
+        else:
+            self.classified.lbl_top3.setText("")
 
         extras = []
         if result.estimated_volume is not None:
