@@ -125,7 +125,7 @@ val_tfms = T.Compose([
 # Class names
 
 CLASS_NAMES = [
-    'Basalt', 'Clay', 'Conglomerate', 'Diatomite', 'Shale-(Mudstone)', 'Siliceous-sinter', 'chert', 'gypsum', 'olivine-basalt'
+    'basalt ilmenite', 'basalt olivine', 'basalt pigeonite', 'breccia impact'
 ]
 
 # Inference functions
@@ -162,18 +162,26 @@ def predict_one(model: RockNet, img_tensor: torch.Tensor, device: torch.device):
         logits = logits / T_val
 
     probs = F.softmax(logits, dim=1)    # (1, C)
-    conf, pred_idx = torch.max(probs, dim=1)
 
-    pred_idx = int(pred_idx.item())
-    confidence = float(conf.item())
-    label = CLASS_NAMES[pred_idx]
+    # Top-3 predictions
+    k = min(3, probs.size(1))
+    top_conf, top_idx = torch.topk(probs, k=k, dim=1)  # (1, k), (1, k)
+    top_conf = top_conf.squeeze(0).tolist()
+    top_idx = top_idx.squeeze(0).tolist()
+    topk = [
+        {
+            "label": CLASS_NAMES[int(i)],
+            "confidence": float(c),
+        }
+        for c, i in zip(top_conf, top_idx)
+    ]
 
+    # Keep top-1 fields for backward compatibility
     return {
-        "label": label,
-        "confidence": confidence,
-        "index": pred_idx,
+        "label": topk[0]["label"],
+        "confidence": topk[0]["confidence"],
+        "top3": topk,
     }
-
 
 def write_json(result_dict, json_path: str):
     with open(json_path, "w") as f:
@@ -197,8 +205,8 @@ def main():
     parser.add_argument(
         "--temperature",
         type=float,
-        default=1.0,
-        help="Temperature for calibration (fitted T* = 2.4)"
+        default=1.462,
+        help="Temperature for calibration (fitted T* = 1.462)"
     )
     parser.add_argument(
         "--output-json",
@@ -221,10 +229,7 @@ def main():
     result = predict_one(model, img_tensor, device)
 
     # Prepare output dict
-    output_dict = {
-        "label": result["label"],
-        "confidence": result["confidence"],
-    }
+    output_dict = result["top3"]
 
     # Print to console
     print(output_dict)

@@ -130,7 +130,7 @@ def get_camera_script_path() -> Path:
     if use_mocks or use_mock_ml:
         return led_display / "scripts" / "mock_camera_capture.py"
     else:
-        return get_ml_classifications_dir() / "camera-pipeline"
+        return get_ml_classifications_dir() / "camera-pipeline" / "capture.py"
 
 
 def get_mock_rocknet_script_path() -> Path:

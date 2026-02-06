@@ -20,21 +20,43 @@ def main():
     
     time.sleep(1.5)
     
-    label = random.choice(ROCK_TYPES)
-    confidence = round(random.uniform(0.75, 0.99), 2)
+    # Generate top 3 classifications (matching real rocknet_infer.py format)
+    top3 = []
+    used_labels = set()
+    for i in range(3):
+        # Ensure unique labels
+        available_labels = [l for l in ROCK_TYPES if l not in used_labels]
+        if not available_labels:
+            available_labels = ROCK_TYPES
+        
+        label = random.choice(available_labels)
+        used_labels.add(label)
+        
+        # First result has highest confidence, others are lower
+        if i == 0:
+            confidence = round(random.uniform(0.75, 0.99), 2)
+        else:
+            confidence = round(random.uniform(0.01, 0.20), 2)
+        
+        top3.append({
+            "label": label,
+            "confidence": confidence,
+        })
     
-    result = {
-        "label": label,
-        "confidence": confidence,
-    }
+    # Normalize confidences so they sum to ~1.0 (like real softmax output)
+    total_conf = sum(r["confidence"] for r in top3)
+    if total_conf > 0:
+        for r in top3:
+            r["confidence"] = round(r["confidence"] / total_conf, 4)
     
+    # Output as list format (matching real rocknet_infer.py)
     output_path = Path(args.output_json)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=2)
+        json.dump(top3, f, indent=2)
     
-    print(json.dumps(result))
+    print(json.dumps(top3))
     sys.exit(0)
 
 if __name__ == "__main__":

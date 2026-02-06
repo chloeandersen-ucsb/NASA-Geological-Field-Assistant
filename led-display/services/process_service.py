@@ -135,8 +135,30 @@ class ClassificationService(ProcessService):
             self.failed.emit(f"Failed to read RockNet output JSON: {e}")
             return
         
-        if "label" not in payload or "confidence" not in payload:
-            self.failed.emit("RockNet output JSON missing label/confidence")
+        # Handle both list format (top3) and dict format (backward compatibility)
+        if isinstance(payload, list):
+            # New format: list of 3 classifications [{"label": "...", "confidence": 0.xx}, ...]
+            if len(payload) == 0:
+                self.failed.emit("RockNet output JSON is empty list")
+                return
+            # Extract top result and include full top3 list
+            top_result = payload[0]
+            if "label" not in top_result or "confidence" not in top_result:
+                self.failed.emit("RockNet output JSON missing label/confidence in top result")
+                return
+            # Convert to dict format expected by display
+            payload = {
+                "label": top_result["label"],
+                "confidence": top_result["confidence"],
+                "top3": payload,
+            }
+        elif isinstance(payload, dict):
+            # Old format: dict with label/confidence (backward compatibility)
+            if "label" not in payload or "confidence" not in payload:
+                self.failed.emit("RockNet output JSON missing label/confidence")
+                return
+        else:
+            self.failed.emit(f"RockNet output JSON has unexpected type: {type(payload)}")
             return
         
         self.finished.emit(payload)
