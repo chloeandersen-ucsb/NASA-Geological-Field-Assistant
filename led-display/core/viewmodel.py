@@ -5,16 +5,20 @@ from enum import Enum, auto
 from typing import Optional, List
 import json
 import os
+import sys
 import time
+import traceback
 import uuid
 
 from PySide6.QtCore import QObject, Signal, QTimer
 
+import connector
 from services.process_service import CameraService, ClassificationService, TranscriptionService
 
 
 class AppStateType(Enum):
     HOME = auto()
+    CAMERA_PREVIEW = auto()
     CLASSIFYING = auto()
     CLASSIFIED = auto()
     VOICE_TO_TEXT_LOADING = auto()
@@ -120,45 +124,20 @@ class ViewModel(QObject):
     trip_changed = Signal(object)
     error = Signal(str)
 
+    def _init_component(self, name: str, factory):
+        try:
+            return factory()
+        except Exception as e:
+            print(f"ERROR: Failed to create {name}: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            raise
+
     def __init__(self, store_dir: str, parent=None):
         super().__init__(parent)
-        
-        try:
-            self.store = Store(store_dir)
-        except Exception as e:
-            import sys
-            print(f"ERROR: Failed to create Store: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            raise
-        
-        try:
-            self.camera = CameraService(self)
-        except Exception as e:
-            import sys
-            print(f"ERROR: Failed to create CameraService: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            raise
-        
-        try:
-            self.classifier = ClassificationService(self)
-        except Exception as e:
-            import sys
-            print(f"ERROR: Failed to create ClassificationService: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            raise
-        
-        try:
-            self.transcriber = TranscriptionService(self)
-        except Exception as e:
-            import sys
-            print(f"ERROR: Failed to create TranscriptionService: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            raise
-        
+        self.store = self._init_component("Store", lambda: Store(store_dir))
+        self.camera = self._init_component("CameraService", lambda: CameraService(self))
+        self.classifier = self._init_component("ClassificationService", lambda: ClassificationService(self))
+        self.transcriber = self._init_component("TranscriptionService", lambda: TranscriptionService(self))
         self.state = AppStateType.HOME
         self.current_classification: ClassificationResult | None = None
         self.transcription_text = ""
@@ -189,11 +168,31 @@ class ViewModel(QObject):
         self._publish_trip()
         self._set_state(AppStateType.TRIP_LOAD)
 
+    def _use_mock_camera(self) -> bool:
+        return connector.use_mocks() or connector.use_mock_ml()
+
     def start_classification(self) -> None:
         self.current_classification = None
+        if self._use_mock_camera():
+            self._set_state(AppStateType.CLASSIFYING)
+            self._classify_timeout.start(self.classification_timeout_ms)
+            self.camera.capture()
+        else:
+            self._set_state(AppStateType.CAMERA_PREVIEW)
+
+    def start_camera_preview(self) -> None:
+        """Called when entering camera preview (real camera). Preview is embedded in the same window."""
+        self._set_state(AppStateType.CAMERA_PREVIEW)
+
+    def capture_photo(self) -> None:
+        """Called when user clicks Capture on camera preview page."""
         self._set_state(AppStateType.CLASSIFYING)
         self._classify_timeout.start(self.classification_timeout_ms)
         self.camera.capture()
+
+    def cancel_camera_preview(self) -> None:
+        """Called when user clicks Cancel on camera preview page."""
+        self.go_home()
 
     def reclassify(self) -> None:
         self.start_classification()
@@ -229,16 +228,12 @@ class ViewModel(QObject):
         self._fail("Classification timeout (20s)")
 
     def start_voice_to_text(self) -> None:
-        import sys
-        print("[VIEWMODEL] start_voice_to_text() called", file=sys.stderr)
         self.transcription_text = ""
         self.transcription_changed.emit("")
         self._set_state(AppStateType.VOICE_TO_TEXT_LOADING)
         self.transcriber.start()
 
     def stop_voice_to_text(self) -> None:
-        import sys
-        print("[VIEWMODEL] stop_voice_to_text() called", file=sys.stderr)
         self.transcriber.stop()
 
     def redo_voice_to_text(self) -> None:
@@ -257,27 +252,17 @@ class ViewModel(QObject):
         self.go_home()
 
     def _on_transcription_token(self, chunk: str) -> None:
-        import sys
-        print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
         if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
             self._set_state(AppStateType.VOICE_TO_TEXT)
         self.transcription_text += chunk
-        print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
         self.transcription_changed.emit(self.transcription_text)
 
     def _on_transcription_completed(self, final_text: str) -> None:
-        import sys
-        print(f"[VIEWMODEL] Received transcription completed signal", file=sys.stderr)
-        print(f"[VIEWMODEL] Final text received: '{final_text}'", file=sys.stderr)
-        print(f"[VIEWMODEL] Final text length: {len(final_text)}", file=sys.stderr)
         if final_text.strip():
             self.transcription_text = final_text
-            print(f"[VIEWMODEL] Setting transcription_text and emitting signal", file=sys.stderr)
             self.transcription_changed.emit(self.transcription_text)
             if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
                 self._set_state(AppStateType.VOICE_TO_TEXT)
-        else:
-            print("[VIEWMODEL] Final text is empty, not updating", file=sys.stderr)
 
     def _publish_trip(self) -> None:
         rocks = self.store.list_rocks()

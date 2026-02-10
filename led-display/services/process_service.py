@@ -14,7 +14,6 @@ from PySide6.QtCore import QObject, Signal, QProcess
 
 import connector
 
-
 class ProcessService(QObject):
     failed = Signal(str)
     
@@ -45,7 +44,6 @@ class CameraService(ProcessService):
         
         script_path = connector.get_camera_script_path()
         python_exe = connector.get_python_executable()
-        
         self.cmd = [python_exe, str(script_path)]
     
     def capture(self) -> None:
@@ -75,23 +73,17 @@ class ClassificationService(ProcessService):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        
-        use_mocks = os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes")
-        use_mock_ml = os.environ.get("SAGE_USE_MOCK_ML", "").lower() in ("1", "true", "yes")
-        
-        if use_mocks or use_mock_ml:
-            self.python = connector.get_python_executable()
+        self.python = connector.get_python_executable()
+        if connector.use_mocks() or connector.use_mock_ml():
             self.rocknet_script = connector.get_mock_rocknet_script_path()
             self.default_weights = "mock_weights.pt"
         else:
-            self.python = connector.get_python_executable()
             self.rocknet_script = connector.get_rocknet_script_path()
             self.default_weights = connector.get_rocknet_weights_path()
-            
             connector.validate_ml_paths()
-        
         self.temperature = 1.0
         self._expected_json_path: str | None = None
+        self._current_image_path: str | None = None
     
     def classify(self, image_path: str, weights_path: str | None = None) -> None:
         if self.proc.state() != QProcess.NotRunning:
@@ -99,6 +91,7 @@ class ClassificationService(ProcessService):
             return
         
         weights = weights_path or self.default_weights
+        self._current_image_path = image_path
         
         base, _ = os.path.splitext(image_path)
         out_json = base + "_prediction.json"
@@ -161,6 +154,8 @@ class ClassificationService(ProcessService):
             self.failed.emit(f"RockNet output JSON has unexpected type: {type(payload)}")
             return
         
+        if self._current_image_path:
+            payload["image_path"] = self._current_image_path
         self.finished.emit(payload)
     
     def _on_error(self, _err) -> None:
@@ -179,16 +174,12 @@ class TranscriptionService(ProcessService):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.proc.readyReadStandardOutput.connect(self._on_stdout)
-        
-        if os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes"):
-            self.python = connector.get_python_executable()
+        self.python = connector.get_python_executable()
+        if connector.use_mocks():
             self.script = connector.get_mock_voice_to_text_script_path()
         else:
-            self.python = connector.get_python_executable()
             self.script = connector.get_voice_to_text_script_path()
-            
             connector.validate_voice_to_text_paths()
-        
         self._text_parts: list[str] = []
         self._final_phrases: list[str] = []
         self._active = False
@@ -207,60 +198,36 @@ class TranscriptionService(ProcessService):
         self._user_stopped = False
         
         cmd = [self.python, str(self.script)]
-        print(f"[VOICE-TO-TEXT] Starting transcription process: {' '.join(cmd)}", file=sys.stderr)
         self.proc.start(cmd[0], cmd[1:])
-        print(f"[VOICE-TO-TEXT] Process started, PID: {self.proc.processId()}", file=sys.stderr)
     
     def stop(self) -> None:
-        print(f"[VOICE-TO-TEXT] stop() called, process state: {self.proc.state()}", file=sys.stderr)
-        print(f"[VOICE-TO-TEXT] Current text parts count: {len(self._text_parts)}", file=sys.stderr)
-        print(f"[VOICE-TO-TEXT] Current accumulated text: '{self.full_text()}'", file=sys.stderr)
-        
         if self.proc.state() == QProcess.NotRunning:
-            print("[VOICE-TO-TEXT] Process already stopped, emitting completed signal", file=sys.stderr)
             self.completed.emit(self.full_text())
             return
-        
         self._user_stopped = True
-        
         pid = int(self.proc.processId())
         if pid > 0:
             try:
-                print(f"[VOICE-TO-TEXT] Sending SIGINT to process {pid}", file=sys.stderr)
                 os.kill(pid, signal.SIGINT)
-            except Exception as e:
-                print(f"[VOICE-TO-TEXT] Failed to send SIGINT: {e}, falling back to terminate", file=sys.stderr)
+            except Exception:
                 self.proc.terminate()
         else:
-            print("[VOICE-TO-TEXT] No valid PID, calling terminate()", file=sys.stderr)
             self.proc.terminate()
     
     def full_text(self) -> str:
         return "".join(self._text_parts).strip()
-    
-    def _on_stdout(self) -> None:
-        data = bytes(self.proc.readAllStandardOutput()).decode("utf-8", errors="ignore")
-        if not data:
-            return
-        
-        print(f"[VOICE-TO-TEXT] Received stdout data ({len(data)} bytes)", file=sys.stderr)
-        
+
+    def _process_stdout_lines(self, data: str) -> None:
         for raw_line in data.splitlines():
             line = raw_line.strip()
             if not line:
                 continue
-            
-            print(f"[VOICE-TO-TEXT] Processing line: {line[:100]}", file=sys.stderr)
-            
             if "FINAL TRANSCRIPT" in line or "STREAMING COMPLETE" in line:
-                print("[VOICE-TO-TEXT] Detected final transcript marker", file=sys.stderr)
                 self._in_final_dump = True
                 continue
-            
             if line.startswith("Using ") or line.startswith("Using device:") or "RECORDING NOW" in line:
-                print(f"[VOICE-TO-TEXT] Ignoring chatter line: {line}", file=sys.stderr)
                 continue
-            
+            phrase = None
             m = self._PHRASE_RE.search(line)
             if m:
                 phrase = m.group(1).strip()
@@ -273,92 +240,33 @@ class TranscriptionService(ProcessService):
                 else:
                     if self._in_final_dump and line:
                         self._final_phrases.append(line.strip())
-                        continue
-                    print(f"[VOICE-TO-TEXT] Line did not match phrase pattern: {line}", file=sys.stderr)
                     continue
-            
             if not phrase:
-                print("[VOICE-TO-TEXT] Extracted phrase is empty", file=sys.stderr)
                 continue
-            
             if self._in_final_dump:
-                print(f"[VOICE-TO-TEXT] Collecting phrase from final dump: '{phrase}'", file=sys.stderr)
                 self._final_phrases.append(phrase)
                 continue
-            
             chunk = phrase + " "
             self._text_parts.append(chunk)
-            print(f"[VOICE-TO-TEXT] Emitting token: '{chunk}'", file=sys.stderr)
-            print(f"[VOICE-TO-TEXT] LIVE TRANSCRIPTION: {phrase}", file=sys.stdout)
             self.token.emit(chunk)
     
+    def _on_stdout(self) -> None:
+        data = bytes(self.proc.readAllStandardOutput()).decode("utf-8", errors="ignore")
+        if data:
+            self._process_stdout_lines(data)
+    
     def _on_finished(self, exit_code: int, _status) -> None:
-        print(f"[VOICE-TO-TEXT] Process finished, exit_code: {exit_code}, status: {_status}", file=sys.stderr)
-        print(f"[VOICE-TO-TEXT] User stopped: {getattr(self, '_user_stopped', False)}", file=sys.stderr)
-        print(f"[VOICE-TO-TEXT] Active: {self._active}", file=sys.stderr)
-        print(f"[VOICE-TO-TEXT] Final text parts count: {len(self._text_parts)}", file=sys.stderr)
-        
         remaining_stdout = bytes(self.proc.readAllStandardOutput()).decode("utf-8", errors="ignore")
         remaining_stderr = bytes(self.proc.readAllStandardError()).decode("utf-8", errors="ignore")
-        
         if remaining_stdout:
-            print(f"[VOICE-TO-TEXT] Processing remaining stdout ({len(remaining_stdout)} bytes): {remaining_stdout[:500]}", file=sys.stderr)
-            for raw_line in remaining_stdout.splitlines():
-                line = raw_line.strip()
-                if not line:
-                    continue
-                
-                if "FINAL TRANSCRIPT" in line or "STREAMING COMPLETE" in line:
-                    self._in_final_dump = True
-                    continue
-                
-                if line.startswith("Using ") or line.startswith("Using device:") or "RECORDING NOW" in line:
-                    continue
-                
-                m = self._PHRASE_RE.search(line)
-                if m:
-                    phrase = m.group(1).strip()
-                else:
-                    m_alt = self._PHRASE_ALT_RE.search(line)
-                    if m_alt:
-                        phrase = m_alt.group(1).strip()
-                        if phrase == "(silence)":
-                            continue
-                    else:
-                        if self._in_final_dump and line:
-                            self._final_phrases.append(line.strip())
-                        continue
-                
-                if not phrase:
-                    continue
-                
-                if self._in_final_dump:
-                    self._final_phrases.append(phrase)
-                    continue
-                
-                chunk = phrase + " "
-                self._text_parts.append(chunk)
-                print(f"[VOICE-TO-TEXT] Emitting token from remaining stdout: '{chunk}'", file=sys.stderr)
-                print(f"[VOICE-TO-TEXT] LIVE TRANSCRIPTION: {phrase}", file=sys.stdout)
-                self.token.emit(chunk)
-        
-        if remaining_stderr:
-            print(f"[VOICE-TO-TEXT] Remaining stderr: {remaining_stderr[:500]}", file=sys.stderr)
-        
+            self._process_stdout_lines(remaining_stdout)
         if self._final_phrases:
             final_text = " ".join(self._final_phrases)
-            print(f"[VOICE-TO-TEXT] Using final transcript phrases ({len(self._final_phrases)} phrases): '{final_text}'", file=sys.stderr)
         else:
             final_text = self.full_text()
-            print(f"[VOICE-TO-TEXT] Using accumulated streaming text: '{final_text}'", file=sys.stderr)
-        
-        if exit_code != 0 and self._active and not getattr(self, '_user_stopped', False):
-            err = remaining_stderr or f"Transcription failed (exit {exit_code})"
-            print(f"[VOICE-TO-TEXT] Emitting failed signal: {err}", file=sys.stderr)
-            self.failed.emit(err)
+        if exit_code != 0 and self._active and not getattr(self, "_user_stopped", False):
+            self.failed.emit(remaining_stderr or f"Transcription failed (exit {exit_code})")
             return
-        
-        print(f"[VOICE-TO-TEXT] Emitting completed signal with text: '{final_text}'", file=sys.stderr)
         self.completed.emit(final_text)
     
     def _on_error(self, _err) -> None:

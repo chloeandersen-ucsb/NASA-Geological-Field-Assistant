@@ -1,4 +1,4 @@
-.PHONY: help setup run run-mock run-mock-ml clean check
+.PHONY: setup run run-mock run-mock-ml run-mock-cam clean
 
 # Project configuration
 PYTHON := python3
@@ -24,14 +24,15 @@ ifeq ($(IS_JETSON),1)
 	@echo "Installing dependencies for Jetson..."
 	@sudo apt-get update
 	@sudo apt-get install -y python3-pip python3-dev
-	@pip3 install PySide6
+	@pip3 install -r $(LED_DISPLAY_DIR)/requirements.txt
 	@echo "Creating data directory: $(SAGE_STORE_DIR)"
 	@sudo mkdir -p $(SAGE_STORE_DIR)
 	@sudo chown $$USER:$$USER $(SAGE_STORE_DIR)
+	@echo "Camera: nvgstcapture-1.0 is typically pre-installed with JetPack. Connect Arducam to CAM0 for capture."
 	@echo "Setup complete for Jetson"
 else
 	@echo "Installing dependencies for development platform..."
-	@pip3 install PySide6
+	@pip3 install -r $(LED_DISPLAY_DIR)/requirements.txt
 	@echo "Setup complete"
 endif
 
@@ -46,7 +47,7 @@ run:
 run-mock:
 	@echo "Platform: $(JETSON_DETECT)"
 	@echo "Data directory: $(SAGE_STORE_DIR)"
-	@echo "Mode: Mock services enabled"
+	@echo "Mode: Everything is mocked data"
 	@cd $(LED_DISPLAY_DIR) && \
 		export SAGE_STORE_DIR=$(SAGE_STORE_DIR) && \
 		export SAGE_USE_MOCKS=1 && \
@@ -56,42 +57,22 @@ run-mock:
 run-mock-ml:
 	@echo "Platform: $(JETSON_DETECT)"
 	@echo "Data directory: $(SAGE_STORE_DIR)"
-	@echo "Mode: Mock ML, Real voiceNotes"
+	@echo "Mode: Mock ML, mock camera, real voiceNotes"
 	@cd $(LED_DISPLAY_DIR) && \
 		export SAGE_STORE_DIR=$(SAGE_STORE_DIR) && \
 		export SAGE_USE_MOCK_ML=1 && \
 		export JETSON_PLATFORM=$(IS_JETSON) && \
 		$(PYTHON) main.py
 
-check:
-	@echo "Checking SAGE project configuration..."
+run-mock-cam:
 	@echo "Platform: $(JETSON_DETECT)"
-	@echo ""
-	@echo "Checking Python..."
-	@$(PYTHON) --version || (echo "ERROR: Python3 not found" && exit 1)
-	@echo "✓ Python found"
-	@echo ""
-	@echo "Checking project structure..."
-	@test -d $(LED_DISPLAY_DIR) || (echo "ERROR: led-display directory not found" && exit 1)
-	@test -d $(PROJECT_ROOT)/ML-classifications || (echo "WARNING: ML-classifications directory not found" && exit 1)
-	@test -d $(PROJECT_ROOT)/voiceNotes || (echo "WARNING: voiceNotes directory not found" && exit 1)
-	@test -f $(PROJECT_ROOT)/connector.py || (echo "ERROR: connector.py not found" && exit 1)
-	@echo "✓ Project structure OK"
-	@echo ""
-	@echo "Checking Python dependencies..."
-	@$(PYTHON) -c "import PySide6" 2>/dev/null || (echo "WARNING: PySide6 not installed (run 'make setup')" && exit 1)
-	@echo "✓ PySide6 found"
-	@echo ""
-	@echo "Checking paths with connector..."
-	@$(PYTHON) -c "import sys; sys.path.insert(0, '$(PROJECT_ROOT)'); import connector; \
-		print('Project root:', connector.get_project_root()); \
-		print('ML dir:', connector.get_ml_classifications_dir()); \
-		print('voiceNotes dir:', connector.get_voice_to_text_dir()); \
-		print('Data dir:', connector.get_data_store_dir()); \
-		print('Is Jetson:', connector.is_jetson())" || (echo "ERROR: Path check failed" && exit 1)
-	@echo "✓ Path resolution OK"
-	@echo ""
-	@echo "All checks passed!"
+	@echo "Data directory: $(SAGE_STORE_DIR)"
+	@echo "Mode: Real voice, real ML, sample image (no camera)"
+	@cd $(LED_DISPLAY_DIR) && \
+		export SAGE_STORE_DIR=$(SAGE_STORE_DIR) && \
+		export SAGE_USE_SAMPLE_IMAGE=1 && \
+		export JETSON_PLATFORM=$(IS_JETSON) && \
+		$(PYTHON) main.py
 
 clean:
 	@echo "Cleaning build artifacts..."
@@ -105,4 +86,5 @@ clean:
 	@find $(PROJECT_ROOT) -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 	@find $(PROJECT_ROOT) -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
 	@find $(PROJECT_ROOT) -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
-	@echo "Clean complete"
+	@rm -rf $(PROJECT_ROOT)/ML-classifications/camera-pipeline/captures 2>/dev/null || true
+	@echo "Done!"

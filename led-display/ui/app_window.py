@@ -7,17 +7,24 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QTextCursor, QShortcut, QKeySequence, QImage, QPixmap
 from PySide6.QtWidgets import (
     QMainWindow, QStackedWidget, QMessageBox,
     QWidget, QVBoxLayout, QLabel, QPushButton,
     QTextEdit, QListWidget, QHBoxLayout, QDialog,
-    QDialogButtonBox
+    QDialogButtonBox, QFrame,
 )
 
 import connector
 from core.viewmodel import AppStateType, ClassificationResult, TripSummary
+
+# Optional: OpenCV for embedded camera preview (Jetson: GStreamer CSI; other: default device)
+try:
+    import cv2
+    _CV2_AVAILABLE = True
+except ImportError:
+    _CV2_AVAILABLE = False
 
 
 def big_button(text: str) -> QPushButton:
@@ -25,6 +32,94 @@ def big_button(text: str) -> QPushButton:
     b.setMinimumHeight(70)
     b.setStyleSheet("font-size: 20px;")
     return b
+
+
+def _make_camera_capture():
+    """Build OpenCV VideoCapture for this platform (Jetson CSI or default device). Returns None if unavailable."""
+    if not _CV2_AVAILABLE:
+        return None
+    if connector.is_jetson():
+        # CSI camera (Arducam IMX477) via GStreamer; sensor-id=0 is CAM0
+        gst = (
+            "nvarguscamerasrc sensor-id=0 ! "
+            "video/x-raw(memory:NVMM), width=1280, height=720, format=(string)NV12, framerate=30/1 ! "
+            "nvvidconv flip-method=0 ! "
+            "video/x-raw, format=(string)BGRx ! "
+            "videoconvert ! video/x-raw, format=(string)BGR ! appsink"
+        )
+        cap = cv2.VideoCapture(gst, cv2.CAP_GSTREAMER)
+    else:
+        cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        cap.release()
+        return None
+    return cap
+
+
+class EmbeddedCameraWidget(QFrame):
+    """Shows live camera preview in the same window. Start/stop via start_stream() and stop_stream()."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumSize(640, 360)
+        self.setStyleSheet("EmbeddedCameraWidget { background: #222; border: 1px solid #444; }")
+        self._label = QLabel(self)
+        self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._label.setStyleSheet("color: #888; font-size: 14px;")
+        self._label.setText("Starting camera…")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._label)
+        self._cap = None
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._on_timer)
+
+    def start_stream(self) -> None:
+        self.stop_stream()
+        self._cap = _make_camera_capture()
+        if self._cap is None:
+            self._label.setText(
+                "Preview unavailable\n"
+                "(run `make setup` and connect camera to CAM0 on Jetson)\n\n"
+                "Capture still works w/o preview"
+            )
+            return
+        self._label.clear()
+        self._label.setStyleSheet("")
+        self._timer.start(33)  # ~30 fps
+
+    def stop_stream(self) -> None:
+        self._timer.stop()
+        if self._cap is not None:
+            self._cap.release()
+            self._cap = None
+        self._label.setStyleSheet("color: #888; font-size: 14px;")
+        self._label.setText("Camera stopped.")
+
+    def _on_timer(self) -> None:
+        if self._cap is None:
+            return
+        ret, frame = self._cap.read()
+        if not ret or frame is None:
+            return
+        h, w = frame.shape[:2]
+        bytes_per_line = 3 * w
+        img = QImage(frame.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
+        pix = QPixmap.fromImage(img)
+        scaled = pix.scaled(
+            self._label.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self._label.setPixmap(scaled)
+        self._label.setMinimumSize(1, 1)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.start_stream()
+
+    def hideEvent(self, event) -> None:
+        self.stop_stream()
+        super().hideEvent(event)
 
 
 class HomePage(QWidget):
@@ -61,13 +156,6 @@ class LoadingPage(QWidget):
         layout.addStretch(1)
         layout.addWidget(label)
         layout.addStretch(1)
-    
-    def set_message(self, message: str) -> None:
-        for i in range(self.layout().count()):
-            item = self.layout().itemAt(i)
-            if item and item.widget() and isinstance(item.widget(), QLabel):
-                item.widget().setText(message)
-                break
 
 
 class VoiceLoadingPage(QWidget):
@@ -154,6 +242,25 @@ class VoicePage(QWidget):
         layout.addLayout(row)
 
 
+class CameraPreviewPage(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+
+        title = QLabel("Position rock in frame, then capture")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 20px; font-weight: 600;")
+        layout.addWidget(title)
+
+        self.camera_widget = EmbeddedCameraWidget(self)
+        self.camera_widget.setMinimumSize(640, 360)
+        layout.addWidget(self.camera_widget, stretch=1)
+
+        self.btn_capture = big_button("Capture")
+        self.btn_cancel = big_button("Cancel")
+        layout.addWidget(self.btn_capture)
+        layout.addWidget(self.btn_cancel)
+
 class TripLoadPage(QWidget):
     def __init__(self):
         super().__init__()
@@ -202,6 +309,7 @@ class AppWindow(QMainWindow):
         self.setCentralWidget(self.stack)
 
         self.home = HomePage()
+        self.camera_preview = CameraPreviewPage()
         self.loading = LoadingPage()
         self.classified = ClassifiedPage()
         self.voice_loading = VoiceLoadingPage()
@@ -209,6 +317,7 @@ class AppWindow(QMainWindow):
         self.trip = TripLoadPage()
 
         self.stack.addWidget(self.home)
+        self.stack.addWidget(self.camera_preview)
         self.stack.addWidget(self.loading)
         self.stack.addWidget(self.classified)
         self.stack.addWidget(self.voice_loading)
@@ -249,25 +358,6 @@ class AppWindow(QMainWindow):
         shortcut_quit = QShortcut(QKeySequence("Ctrl+C"), self)
         shortcut_quit.activated.connect(self._quit_application)
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:
-        if event.key() == Qt.Key_F11:
-            self._toggle_fullscreen()
-            event.accept()
-            return
-        
-        if event.key() == Qt.Key_Escape:
-            if self.isFullScreen():
-                self._exit_fullscreen()
-                event.accept()
-                return
-        
-        if event.key() == Qt.Key_C and event.modifiers() == Qt.ControlModifier:
-            self._quit_application()
-            event.accept()
-            return
-        
-        super().keyPressEvent(event)
-
     def _toggle_fullscreen(self) -> None:
         if self.isFullScreen():
             self.showNormal()
@@ -296,6 +386,9 @@ class AppWindow(QMainWindow):
         self.voice.btn_save.clicked.connect(self.vm.save_transcription)
         self.voice.btn_delete.clicked.connect(self.vm.delete_transcription)
 
+        self.camera_preview.btn_capture.clicked.connect(self.vm.capture_photo)
+        self.camera_preview.btn_cancel.clicked.connect(self.vm.cancel_camera_preview)
+
         self.trip.btn_back.clicked.connect(self.vm.go_home)
         self.trip.notes_list.itemClicked.connect(self._on_voice_note_clicked)
 
@@ -309,6 +402,8 @@ class AppWindow(QMainWindow):
     def _show_state(self, state: AppStateType) -> None:
         if state == AppStateType.HOME:
             self.stack.setCurrentWidget(self.home)
+        elif state == AppStateType.CAMERA_PREVIEW:
+            self.stack.setCurrentWidget(self.camera_preview)
         elif state == AppStateType.CLASSIFYING:
             self.stack.setCurrentWidget(self.loading)
         elif state == AppStateType.CLASSIFIED:

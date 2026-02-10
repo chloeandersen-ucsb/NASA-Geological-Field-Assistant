@@ -3,20 +3,22 @@
 ## Setup
 
 ```bash
-make setup      # Install dependencies
-make check      # Verify setup
+make setup      # Install dependencies (everything)
 make clean      # Clean build artifacts
 ```
 
 ## Run
 
 ```bash
-make run            # Production mode
-make run-mock       # Test with mock data
-make run-mock-ml    # Test with real voice-transcriptions, mock ML data
+make run            # Production: real camera, real ML, real voice
+make run-mock-ml    # Real voice; mock ML and mock camera
+make run-mock-cam   # Real voice, real ML; sample image (no camera)
+make run-mock       # Mock everything
 ```
 
-## Display:
-- ESC: escape out of full screen
-- CTRL + C: quit application 
-- Can also press "Quit" to quit application  
+## Display
+
+- ESC: exit full screen
+- F11: control full/not full screen
+- Ctrl+C: quit application
+- Or press "Quit" to quit

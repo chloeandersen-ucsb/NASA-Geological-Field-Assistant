@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
 
 
-# ============================================================================
 # Platform Detection
-# ============================================================================
 
 def is_jetson() -> bool:
     """
@@ -24,15 +21,22 @@ def is_jetson() -> bool:
     return False
 
 
-def is_mac() -> bool:
-    """Detect if running on macOS."""
-    import platform
-    return platform.system() == "Darwin"
+def use_mocks() -> bool:
+    """True if SAGE_USE_MOCKS is set (mock everything)."""
+    return os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes")
 
 
-# ============================================================================
+def use_mock_ml() -> bool:
+    """True if SAGE_USE_MOCK_ML is set (mock ML and camera, real voice)."""
+    return os.environ.get("SAGE_USE_MOCK_ML", "").lower() in ("1", "true", "yes")
+
+
+def use_sample_image() -> bool:
+    """True if SAGE_USE_SAMPLE_IMAGE is set (real ML, sample image instead of camera)."""
+    return os.environ.get("SAGE_USE_SAMPLE_IMAGE", "").lower() in ("1", "true", "yes")
+
+
 # Path Resolution
-# ============================================================================
 
 def get_project_root() -> Path:
     """
@@ -118,19 +122,13 @@ def get_voice_to_text_script_path() -> Path:
 def get_camera_script_path() -> Path:
     """
     Get the path to camera capture script.
-    
-    Returns mock script if SAGE_USE_MOCKS or SAGE_USE_MOCK_ML is set,
-    otherwise returns the real camera script path from ML-classifications
-    (which may not exist yet).
+    Order: use_sample_image -> print_sample_image.py; use_mocks or use_mock_ml -> mock script; else -> real capture.py.
     """
-    led_display = get_led_display_dir()
-    use_mocks = os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes")
-    use_mock_ml = os.environ.get("SAGE_USE_MOCK_ML", "").lower() in ("1", "true", "yes")
-    
-    if use_mocks or use_mock_ml:
-        return led_display / "scripts" / "mock_camera_capture.py"
-    else:
-        return get_ml_classifications_dir() / "camera-pipeline" / "capture.py"
+    if use_sample_image():
+        return get_ml_classifications_dir() / "camera-pipeline" / "print_sample_image.py"
+    if use_mocks() or use_mock_ml():
+        return get_led_display_dir() / "scripts" / "mock_camera_capture.py"
+    return get_ml_classifications_dir() / "camera-pipeline" / "capture.py"
 
 
 def get_mock_rocknet_script_path() -> Path:
@@ -178,11 +176,8 @@ def validate_path(path: Path, description: str) -> None:
 
 def validate_ml_paths() -> None:
     """Validate that ML-classifications paths exist (when not using mocks)."""
-    # Skip validation when using mocks (either all mocks or just ML mocks)
-    use_mocks = os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes")
-    use_mock_ml = os.environ.get("SAGE_USE_MOCK_ML", "").lower() in ("1", "true", "yes")
-    if use_mocks or use_mock_ml:
-        return  # Skip validation when using mocks
+    if use_mocks() or use_mock_ml():
+        return
     
     # Check ML-classifications directory first
     ml_dir = get_ml_classifications_dir()
@@ -203,9 +198,8 @@ def validate_ml_paths() -> None:
 
 
 def validate_voice_to_text_paths() -> None:
-    if os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes"):
-        return  # Skip validation when using mocks
-    
+    if use_mocks():
+        return
     validate_path(get_voice_to_text_script_path(), "voiceNotes script")
 
 

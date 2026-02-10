@@ -25,6 +25,7 @@ Thumbs.db
 # Project specific
 sage_data/
 *.log
+ML-classifications/camera-pipeline/captures/
 
 # Distribution / packaging
 dist/
