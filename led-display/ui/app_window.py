@@ -422,28 +422,24 @@ class AppWindow(QMainWindow):
         self.classified.lbl_label.setText(result.label.upper())
         self.classified.lbl_conf.setText(f"Confidence: {int(result.confidence * 100)}%")
 
-        # Display 2nd and 3rd most confident results only if confidence > 0%
+        # Display 2nd and 3rd most confident results if available
         top3 = None
         if result.raw and isinstance(result.raw, dict):
             top3 = result.raw.get("top3", [])
         
         if top3 and len(top3) >= 2:
+            # 2nd result
             label2 = top3[1].get("label", "")
-            conf2 = float(top3[1].get("confidence", 0.0))
-            if conf2 > 0:
-                self.classified.lbl_top2.setText(f"2nd: {label2.upper()} ({int(conf2 * 100)}%)")
-            else:
-                self.classified.lbl_top2.setText("")
+            conf2 = top3[1].get("confidence", 0.0)
+            self.classified.lbl_top2.setText(f"2nd: {label2.upper()} ({int(conf2 * 100)}%)")
         else:
             self.classified.lbl_top2.setText("")
         
         if top3 and len(top3) >= 3:
+            # 3rd result
             label3 = top3[2].get("label", "")
-            conf3 = float(top3[2].get("confidence", 0.0))
-            if conf3 > 0:
-                self.classified.lbl_top3.setText(f"3rd: {label3.upper()} ({int(conf3 * 100)}%)")
-            else:
-                self.classified.lbl_top3.setText("")
+            conf3 = top3[2].get("confidence", 0.0)
+            self.classified.lbl_top3.setText(f"3rd: {label3.upper()} ({int(conf3 * 100)}%)")
         else:
             self.classified.lbl_top3.setText("")
 
