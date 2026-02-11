@@ -88,3 +88,83 @@ clean:
 	@find $(PROJECT_ROOT) -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
 	@rm -rf $(PROJECT_ROOT)/ML-classifications/camera-pipeline/captures 2>/dev/null || true
 	@echo "Done!"
+
+check:
+	@echo "Checking SAGE project installation..."
+	@echo "Platform: $(JETSON_DETECT)"
+	@echo ""
+	@ERRORS=0; \
+	printf "Checking Python3... "; \
+	if command -v $(PYTHON) >/dev/null 2>&1; then \
+		PYTHON_VERSION=$$($(PYTHON) --version 2>&1); \
+		echo "✓ $$PYTHON_VERSION"; \
+	else \
+		echo "✗ Python3 not found"; \
+		ERRORS=$$((ERRORS + 1)); \
+	fi; \
+	printf "Checking pip3... "; \
+	if command -v pip3 >/dev/null 2>&1; then \
+		PIP_VERSION=$$(pip3 --version 2>&1); \
+		echo "✓ $$PIP_VERSION"; \
+	else \
+		echo "✗ pip3 not found"; \
+		ERRORS=$$((ERRORS + 1)); \
+	fi; \
+	if [ -f $(LED_DISPLAY_DIR)/requirements.txt ]; then \
+		echo "Checking Python packages:"; \
+		MISSING=0; \
+		printf "  - PySide6... "; \
+		if $(PYTHON) -c "import PySide6" >/dev/null 2>&1; then \
+			echo "✓"; \
+		else \
+			echo "✗"; \
+			MISSING=$$((MISSING + 1)); \
+			ERRORS=$$((ERRORS + 1)); \
+		fi; \
+		printf "  - opencv-python-headless... "; \
+		if $(PYTHON) -c "import cv2" >/dev/null 2>&1; then \
+			echo "✓"; \
+		else \
+			echo "✗"; \
+			MISSING=$$((MISSING + 1)); \
+			ERRORS=$$((ERRORS + 1)); \
+		fi; \
+		printf "  - numpy... "; \
+		if $(PYTHON) -c "import numpy" >/dev/null 2>&1; then \
+			echo "✓"; \
+		else \
+			echo "✗"; \
+			MISSING=$$((MISSING + 1)); \
+			ERRORS=$$((ERRORS + 1)); \
+		fi; \
+		if [ $$MISSING -eq 0 ]; then \
+			echo "  ✓ All required packages installed"; \
+		fi; \
+	else \
+		echo "Checking Python packages... ✗ requirements.txt not found"; \
+		ERRORS=$$((ERRORS + 1)); \
+	fi; \
+	printf "Checking data directory... "; \
+	if [ -d "$(SAGE_STORE_DIR)" ]; then \
+		echo "✓ $(SAGE_STORE_DIR) exists"; \
+	else \
+		echo "✗ $(SAGE_STORE_DIR) does not exist"; \
+		echo "  Run 'make setup' to create it"; \
+		ERRORS=$$((ERRORS + 1)); \
+	fi; \
+	if [ "$(IS_JETSON)" = "1" ]; then \
+		printf "Checking nvgstcapture-1.0... "; \
+		if command -v nvgstcapture-1.0 >/dev/null 2>&1; then \
+			echo "✓ nvgstcapture-1.0 found"; \
+		else \
+			echo "⚠ nvgstcapture-1.0 not found (may need JetPack installation)"; \
+		fi; \
+	fi; \
+	echo ""; \
+	if [ $$ERRORS -eq 0 ]; then \
+		echo "✓ All checks passed! Installation looks good."; \
+		exit 0; \
+	else \
+		echo "✗ Found $$ERRORS issue(s). Run 'make setup' to install missing dependencies."; \
+		exit 1; \
+	fi
