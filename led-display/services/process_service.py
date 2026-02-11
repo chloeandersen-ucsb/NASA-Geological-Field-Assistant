@@ -191,14 +191,22 @@ class TranscriptionService(ProcessService):
             self.failed.emit("Transcription already running")
             return
         
+        # Verify script exists before starting
+        if not self.script.exists():
+            self.failed.emit(f"Voice transcription script not found: {self.script}")
+            return
+        
         self._text_parts = []
         self._final_phrases = []
         self._active = True
         self._in_final_dump = False
         self._user_stopped = False
         
-        cmd = [self.python, str(self.script)]
-        self.proc.start(cmd[0], cmd[1:])
+        try:
+            cmd = [self.python, str(self.script)]
+            self.proc.start(cmd[0], cmd[1:])
+        except Exception as e:
+            self.failed.emit(f"Failed to start transcription process: {e}")
     
     def stop(self) -> None:
         if self.proc.state() == QProcess.NotRunning:

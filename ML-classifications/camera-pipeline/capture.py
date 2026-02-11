@@ -7,6 +7,7 @@ Used by the LED display app; no arguments (CameraService runs this script as-is)
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import uuid
@@ -45,6 +46,8 @@ def main() -> int:
     ]
 
     try:
+        # Note: nvgstcapture may open a GUI window, but camera should still capture
+        # The main fix is ensuring the preview stream is stopped before capture
         result = subprocess.run(
             cmd,
             cwd=str(out_dir),

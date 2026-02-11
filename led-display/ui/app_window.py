@@ -405,6 +405,8 @@ class AppWindow(QMainWindow):
         elif state == AppStateType.CAMERA_PREVIEW:
             self.stack.setCurrentWidget(self.camera_preview)
         elif state == AppStateType.CLASSIFYING:
+            # Stop camera preview before switching to loading state
+            self.camera_preview.camera_widget.stop_stream()
             self.stack.setCurrentWidget(self.loading)
         elif state == AppStateType.CLASSIFIED:
             self.stack.setCurrentWidget(self.classified)
@@ -494,11 +496,22 @@ class AppWindow(QMainWindow):
         QMessageBox.warning(self, "Error", message)
     
     def _on_voice_note_clicked(self, item) -> None:
-        index = self.trip.notes_list.row(item)
-        if 0 <= index < len(self.trip._voice_notes_data):
+        try:
+            if item is None:
+                return
+            index = self.trip.notes_list.row(item)
+            if index < 0 or index >= len(self.trip._voice_notes_data):
+                QMessageBox.warning(self, "Error", "Invalid voice note selection.")
+                return
+            
             note = self.trip._voice_notes_data[index]
+            if not isinstance(note, dict):
+                QMessageBox.warning(self, "Error", "Voice note data is corrupted.")
+                return
+            
             cleaned = note.get("cleaned", note.get("transcript", ""))
             transcript = note.get("transcript", "")
+            display_text = cleaned if cleaned else transcript
             
             dialog = QDialog(self)
             dialog.setWindowTitle("Voice Note")
@@ -508,18 +521,23 @@ class AppWindow(QMainWindow):
             layout = QVBoxLayout(dialog)
             
             ts = note.get("ts", 0)
-            if ts:
-                dt = datetime.datetime.fromtimestamp(ts)
-                time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-            else:
+            try:
+                if ts:
+                    dt = datetime.datetime.fromtimestamp(float(ts))
+                    time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+                else:
+                    time_str = "Unknown"
+            except (ValueError, TypeError, OSError) as e:
+                print(f"WARNING: Invalid timestamp in voice note: {e}", file=sys.stderr)
                 time_str = "Unknown"
+            
             time_label = QLabel(f"Date/Time: {time_str}")
             time_label.setStyleSheet("font-size: 14px; font-weight: 600;")
             layout.addWidget(time_label)
             
             text_edit = QTextEdit()
             text_edit.setReadOnly(True)
-            text_edit.setPlainText(cleaned if cleaned else transcript)
+            text_edit.setPlainText(str(display_text) if display_text else "(Empty)")
             text_edit.setStyleSheet("font-size: 14px;")
             layout.addWidget(text_edit, stretch=1)
             
@@ -528,3 +546,8 @@ class AppWindow(QMainWindow):
             layout.addWidget(button_box)
             
             dialog.exec()
+        except Exception as e:
+            import traceback
+            print(f"ERROR: Failed to display voice note: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            QMessageBox.warning(self, "Error", f"Failed to display voice note: {e}")

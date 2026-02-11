@@ -104,15 +104,24 @@ class Store:
         if not os.path.exists(self.voice_path):
             return []
         notes: List[dict] = []
-        with open(self.voice_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                rec = json.loads(line)
-                if rec.get("type") != "voice":
-                    continue
-                notes.append(rec)
+        try:
+            with open(self.voice_path, "r", encoding="utf-8") as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                        if rec.get("type") != "voice":
+                            continue
+                        notes.append(rec)
+                    except json.JSONDecodeError as e:
+                        print(f"WARNING: Skipping corrupted voice note at line {line_num}: {e}", file=sys.stderr)
+                        continue
+        except Exception as e:
+            print(f"ERROR: Failed to read voice notes file: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            return []
         notes.sort(key=lambda x: x.get("ts", 0), reverse=True)
         return notes
 
@@ -147,6 +156,11 @@ class ViewModel(QObject):
         self._classify_timeout.setSingleShot(True)
         self._classify_timeout.timeout.connect(self._on_classify_timeout)
 
+        self.transcription_timeout_ms = 30_000  # 30 seconds timeout for voice transcription
+        self._transcription_timeout = QTimer(self)
+        self._transcription_timeout.setSingleShot(True)
+        self._transcription_timeout.timeout.connect(self._on_transcription_timeout)
+
         self.camera.capture_finished.connect(self._on_photo_captured)
         self.camera.capture_failed.connect(self._fail)
         self.classifier.finished.connect(self._on_classified)
@@ -160,8 +174,9 @@ class ViewModel(QObject):
         self.state_changed.emit(new_state)
 
     def go_home(self) -> None:
-        if self.state == AppStateType.VOICE_TO_TEXT:
+        if self.state == AppStateType.VOICE_TO_TEXT or self.state == AppStateType.VOICE_TO_TEXT_LOADING:
             self.stop_voice_to_text()
+        self._transcription_timeout.stop()
         self._set_state(AppStateType.HOME)
 
     def open_trip_load(self) -> None:
@@ -186,7 +201,14 @@ class ViewModel(QObject):
 
     def capture_photo(self) -> None:
         """Called when user clicks Capture on camera preview page."""
+        # Stop camera preview before capturing to release the camera
+        # The state change will trigger hideEvent which stops the stream
         self._set_state(AppStateType.CLASSIFYING)
+        # Small delay to ensure camera is fully released before capture
+        QTimer.singleShot(200, self._do_capture)
+    
+    def _do_capture(self) -> None:
+        """Actually perform the capture after camera is released."""
         self._classify_timeout.start(self.classification_timeout_ms)
         self.camera.capture()
 
@@ -227,14 +249,40 @@ class ViewModel(QObject):
         self.classifier.kill()
         self._fail("Classification timeout (20s)")
 
+    def _on_transcription_timeout(self) -> None:
+        """Handle timeout when voice transcription takes too long or hangs."""
+        print("WARNING: Voice transcription timeout", file=sys.stderr)
+        try:
+            self.transcriber.kill()
+        except Exception as e:
+            print(f"WARNING: Error killing transcription process: {e}", file=sys.stderr)
+        self._fail("Voice transcription timeout (30s). Returning to home screen.")
+
     def start_voice_to_text(self) -> None:
-        self.transcription_text = ""
-        self.transcription_changed.emit("")
-        self._set_state(AppStateType.VOICE_TO_TEXT_LOADING)
-        self.transcriber.start()
+        try:
+            self.transcription_text = ""
+            self.transcription_changed.emit("")
+            self._set_state(AppStateType.VOICE_TO_TEXT_LOADING)
+            # Start timeout timer
+            self._transcription_timeout.start(self.transcription_timeout_ms)
+            self.transcriber.start()
+        except Exception as e:
+            print(f"ERROR: Failed to start voice transcription: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            self._transcription_timeout.stop()
+            self._fail(f"Failed to start voice transcription: {e}")
 
     def stop_voice_to_text(self) -> None:
-        self.transcriber.stop()
+        self._transcription_timeout.stop()
+        try:
+            self.transcriber.stop()
+        except Exception as e:
+            print(f"WARNING: Error stopping transcription: {e}", file=sys.stderr)
+            # Force kill if stop fails
+            try:
+                self.transcriber.kill()
+            except Exception:
+                pass
 
     def redo_voice_to_text(self) -> None:
         self.transcriber.kill()
@@ -252,12 +300,17 @@ class ViewModel(QObject):
         self.go_home()
 
     def _on_transcription_token(self, chunk: str) -> None:
+        # Once we receive tokens, transcription is working - disable timeout
+        # This allows users to pause as long as they want without timing out
         if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
+            # First token received - transcription is confirmed working
+            self._transcription_timeout.stop()  # Disable timeout permanently
             self._set_state(AppStateType.VOICE_TO_TEXT)
         self.transcription_text += chunk
         self.transcription_changed.emit(self.transcription_text)
 
     def _on_transcription_completed(self, final_text: str) -> None:
+        self._transcription_timeout.stop()
         if final_text.strip():
             self.transcription_text = final_text
             self.transcription_changed.emit(self.transcription_text)
@@ -279,5 +332,6 @@ class ViewModel(QObject):
 
     def _fail(self, message: str) -> None:
         self._classify_timeout.stop()
+        self._transcription_timeout.stop()
         self.error.emit(message)
         self.go_home()
