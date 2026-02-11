@@ -36,7 +36,6 @@ def main() -> int:
                     os.environ.setdefault("QT_QPA_PLATFORM", cfg["display_backend"])
             except Exception:
                 # If Jetson config fails, continue with defaults
-                # This allows the app to run even if PyTorch/GPU detection fails
                 pass
         return True
 

@@ -62,7 +62,7 @@ run-mock-ml:
 		export SAGE_STORE_DIR=$(SAGE_STORE_DIR) && \
 		export SAGE_USE_MOCK_ML=1 && \
 		export JETSON_PLATFORM=$(IS_JETSON) && \
-		$(PYTHON) -u main.py 2>&1
+		$(PYTHON) main.py
 
 run-mock-cam:
 	@echo "Platform: $(JETSON_DETECT)"

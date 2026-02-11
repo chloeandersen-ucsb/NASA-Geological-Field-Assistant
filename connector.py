@@ -230,9 +230,6 @@ def get_jetson_config() -> dict:
             if config["gpu_available"]:
                 config["cuda_device"] = f"cuda:{os.environ.get('CUDA_VISIBLE_DEVICES', '0')}"
         except (ImportError, RuntimeError, AttributeError, Exception) as e:
-            # PyTorch not available or failed to initialize (e.g., NumPy compatibility issues)
-            # This is non-fatal - we can still run without GPU
-            # Silently continue - GPU features will be disabled
             pass
     
     return config
