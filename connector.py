@@ -229,8 +229,8 @@ def get_jetson_config() -> dict:
             config["gpu_available"] = torch.cuda.is_available()
             if config["gpu_available"]:
                 config["cuda_device"] = f"cuda:{os.environ.get('CUDA_VISIBLE_DEVICES', '0')}"
-        except ImportError:
-            pass  # PyTorch not available
+        except (ImportError, RuntimeError, AttributeError, Exception) as e:
+            pass
     
     return config
 

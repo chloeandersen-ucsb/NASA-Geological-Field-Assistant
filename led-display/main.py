@@ -30,9 +30,14 @@ def main() -> int:
 
     def jetson_init():
         if connector.is_jetson():
-            cfg = connector.get_jetson_config()
-            if cfg.get("display_backend"):
-                os.environ.setdefault("QT_QPA_PLATFORM", cfg["display_backend"])
+            try:
+                cfg = connector.get_jetson_config()
+                if cfg.get("display_backend"):
+                    os.environ.setdefault("QT_QPA_PLATFORM", cfg["display_backend"])
+            except Exception:
+                # If Jetson config fails, continue with defaults
+                pass
+        return True
 
     if _run_step("Jetson initialization", jetson_init) is None:
         return 1
