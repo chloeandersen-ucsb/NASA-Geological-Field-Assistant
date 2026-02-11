@@ -36,9 +36,15 @@ def main() -> int:
 
     def jetson_init():
         if connector.is_jetson():
-            cfg = connector.get_jetson_config()
-            if cfg.get("display_backend"):
-                os.environ.setdefault("QT_QPA_PLATFORM", cfg["display_backend"])
+            try:
+                cfg = connector.get_jetson_config()
+                if cfg.get("display_backend"):
+                    os.environ.setdefault("QT_QPA_PLATFORM", cfg["display_backend"])
+            except Exception as e:
+                # If Jetson config fails, continue with defaults
+                # This allows the app to run even if PyTorch/GPU detection fails
+                print(f"WARNING: Jetson config failed (non-fatal): {e}", file=sys.stderr)
+                sys.stderr.flush()
 
     if _run_step("Jetson initialization", jetson_init) is None:
         print("ERROR: Jetson initialization failed", file=sys.stderr)
