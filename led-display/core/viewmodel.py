@@ -130,6 +130,7 @@ class ViewModel(QObject):
         except Exception as e:
             print(f"ERROR: Failed to create {name}: {e}", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
+            sys.stderr.flush()
             raise
 
     def __init__(self, store_dir: str, parent=None):
