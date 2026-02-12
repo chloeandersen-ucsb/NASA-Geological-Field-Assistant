@@ -218,7 +218,7 @@ class AppWindow(QMainWindow):
         self.setStyleSheet("""
             background-color: #cbd2c5;
             color: white;
-            font-family: "Ubuntu";
+            font-family: "Arial";
             font-size: 18px;
         """)
 
