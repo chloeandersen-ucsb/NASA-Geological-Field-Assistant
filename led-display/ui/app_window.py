@@ -51,17 +51,17 @@ class HomePage(QWidget):
         layout.addWidget(logo)
         layout.addSpacing(20)
 
-        font = QFont("Arial", 18)
-        font.setBold(True)
-        # self.btn_classify = big_button("Classify Rock")
-        # self.btn_voice = big_button("Voice to Text")
-        # self.btn_trip = big_button(" View Trip Notes")
-        # self.btn_quit = QPushButton("Quit")
+        # font = QFont("Arial", 18)
+        # font.setBold(True)
+        self.btn_classify = big_button("Classify Rock")
+        self.btn_voice = big_button("Voice to Text")
+        self.btn_trip = big_button(" View Trip Notes")
+        self.btn_quit = QPushButton("Quit")
 
-        self.btn_classify = big_button("CLASSIFY ROCK")
-        self.btn_voice = big_button("VOICE to TEXT")
-        self.btn_trip = big_button(" VIEW TRIP NOTES")
-        self.btn_quit = QPushButton("QUIT")
+        # self.btn_classify = big_button("CLASSIFY ROCK")
+        # self.btn_voice = big_button("VOICE to TEXT")
+        # self.btn_trip = big_button(" VIEW TRIP NOTES")
+        # self.btn_quit = QPushButton("QUIT")
         self.btn_quit.setMinimumHeight(50)
         self.btn_quit.setStyleSheet("font-size: 18px;")
 
@@ -225,6 +225,7 @@ class AppWindow(QMainWindow):
             color: white;
             font-family: "Garamond";
             font-size: 18px;
+            font-weight: bold;
         """)
 
 
