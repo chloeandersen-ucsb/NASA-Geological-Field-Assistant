@@ -3,6 +3,8 @@ import os
 import sys
 import datetime
 from pathlib import Path
+from PySide6.QtGui import QPixmap
+
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -32,10 +34,24 @@ class HomePage(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
 
-        title = QLabel("SAGE")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 26px; font-weight: 600;")
-        layout.addWidget(title)
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #2596be;
+                color: white;
+            }
+        """)
+
+        logo = QLabel()
+        pixmap = QPixmap("./sage-logo-wbg.png")
+        logo.setPixmap(pixmap.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setAlignment(Qt.AlignCenter)
+        layout.addWidget(logo)
+
+
+        # title = QLabel("SAGE")
+        # title.setAlignment(Qt.AlignCenter)
+        # title.setStyleSheet("font-size: 26px; font-weight: 600;")
+        # layout.addWidget(title)
 
         self.btn_classify = big_button("Classify Rock")
         self.btn_voice = big_button("Voice to Text")
