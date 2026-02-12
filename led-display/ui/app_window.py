@@ -41,17 +41,17 @@ class HomePage(QWidget):
             }
         """)
 
-        logo = QLabel()
-        pixmap = QPixmap("sage-logo-wbg.png")
-        logo.setPixmap(pixmap.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        logo.setAlignment(Qt.AlignCenter)
-        layout.addWidget(logo)
+        #logo = QLabel()
+        #pixmap = QPixmap("sage-logo-wbg.png")
+        #logo.setPixmap(pixmap.scaled(600, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        #logo.setAlignment(Qt.AlignCenter)
+        #layout.addWidget(logo)
 
 
-        # title = QLabel("SAGE")
-        # title.setAlignment(Qt.AlignCenter)
-        # title.setStyleSheet("font-size: 26px; font-weight: 600;")
-        # layout.addWidget(title)
+        title = QLabel("SAGE")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 26px; font-weight: 600;")
+        layout.addWidget(title)
 
         self.btn_classify = big_button("Classify Rock")
         self.btn_voice = big_button("Voice to Text")
