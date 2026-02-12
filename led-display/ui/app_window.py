@@ -165,6 +165,7 @@ class VoicePage(QWidget):
         # title.setStyleSheet("font-size: 22px; font-weight: 600;")
         title.setStyleSheet("""
             font-size: 20px;
+            font-weight: bold;
             border: 2px solid #697d6a;
             border-radius: 8px;
             padding: 8px;
