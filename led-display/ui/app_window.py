@@ -62,7 +62,6 @@ class HomePage(QWidget):
         # layout.addStretch(1)
         layout.addSpacing(60)
         layout.addWidget(self.btn_quit)
-        layout.addSpacing(10)
 
 
 class LoadingPage(QWidget):
@@ -211,7 +210,17 @@ class AppWindow(QMainWindow):
         
         self.vm = vm
         self.setWindowTitle("SAGE Jetson UI")
-        self.setStyleSheet("background-color: #cbd2c5;")
+        # self.setStyleSheet("background-color: #cbd2c5;")
+        self.setStyleSheet("""
+            background-color: #cbd2c5;
+            color: white;
+            
+            QPushButton {
+                font-family: "Ubuntu";
+                font-size: 18px;
+                font-weight: bold;
+            }
+        """)
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
