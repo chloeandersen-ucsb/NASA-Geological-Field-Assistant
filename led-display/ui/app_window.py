@@ -223,7 +223,7 @@ class AppWindow(QMainWindow):
         self.setStyleSheet("""
             background-color: #cbd2c5;
             color: white;
-            font-family: "Lucida Console";
+            font-family: "Garamond";
             font-size: 18px;
         """)
 
