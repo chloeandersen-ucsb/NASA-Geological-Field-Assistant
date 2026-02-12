@@ -42,7 +42,7 @@ class HomePage(QWidget):
         """)
 
         logo = QLabel()
-        pixmap = QPixmap("./sage-logo-wbg.png")
+        pixmap = QPixmap("sage-logo-wbg.png")
         logo.setPixmap(pixmap.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
