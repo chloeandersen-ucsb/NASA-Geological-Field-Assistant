@@ -11,11 +11,6 @@ sys.path.insert(0, str(project_root))
 img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
 
 
-print("Current file:", Path(__file__).resolve())
-print("Project root:", project_root.resolve())
-print("Exists?", project_root.exists())
-
-
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
@@ -46,42 +41,26 @@ class HomePage(QWidget):
             color: white;
         """)
 
-        # layout = QVBoxLayout(self)
-        # layout.setContentsMargins(0, 0, 0, 0)
-        # layout.setSpacing(0)
-
-        # logo = QLabel()
-        # logo.setStyleSheet("background: transparent; border: none;")
-        # logo.setFocusPolicy(Qt.NoFocus)
-
-
         logo = QLabel()
         pixmap = QPixmap(img_path)
         logo.setStyleSheet("background: transparent; border: none;")
         logo.setPixmap(pixmap.scaled(300, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
-        # print("Looking for image at:", img_path)
-        # print("Exists?", img_path.exists())
-
-
-
-        # title = QLabel("SAGE")
-        # title.setAlignment(Qt.AlignCenter)
-        # title.setStyleSheet("font-size: 26px; font-weight: 600;")
-        # layout.addWidget(title)
+        layout.addSpacing(40)
 
         self.btn_classify = big_button("Classify Rock")
         self.btn_voice = big_button("Voice to Text")
         self.btn_trip = big_button("Trip & Notes")
         self.btn_quit = QPushButton("Quit")
-        self.btn_quit.setMinimumHeight(25)
+        self.btn_quit.setMinimumHeight(50)
         self.btn_quit.setStyleSheet("font-size: 16px;")
 
         layout.addWidget(self.btn_classify)
         layout.addWidget(self.btn_voice)
         layout.addWidget(self.btn_trip)
-        layout.addStretch(1)
+        # layout.addStretch(1)
+        layout.addSpacing(60)
         layout.addWidget(self.btn_quit)
 
 
