@@ -55,7 +55,7 @@ class HomePage(QWidget):
         font.setBold(True)
         self.btn_classify = big_button("Classify Rock")
         self.btn_voice = big_button("Voice to Text")
-        self.btn_trip = big_button("Trip & Notes")
+        self.btn_trip = big_button(" View Trip Notes")
         self.btn_quit = QPushButton("Quit")
         self.btn_quit.setMinimumHeight(50)
         self.btn_quit.setStyleSheet("font-size: 18px;")
@@ -218,7 +218,7 @@ class AppWindow(QMainWindow):
         self.setStyleSheet("""
             background-color: #cbd2c5;
             color: white;
-            font-family: "Helvetica Neue";
+            font-family: "Ubuntu";
             font-size: 18px;
         """)
 
