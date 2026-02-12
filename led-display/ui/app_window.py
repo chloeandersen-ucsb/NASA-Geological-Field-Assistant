@@ -154,7 +154,7 @@ class VoicePage(QWidget):
         layout = QVBoxLayout(self)
 
         self.setStyleSheet("""
-            background-color: #cad2c5;
+            background-color: #f5f6f4;
             color: #344f41;
             font-family: "Courier New";
             font-size: 18px;
