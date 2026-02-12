@@ -58,7 +58,7 @@ class HomePage(QWidget):
         self.btn_trip = big_button("Trip & Notes")
         self.btn_quit = QPushButton("Quit")
         self.btn_quit.setMinimumHeight(50)
-        # self.btn_quit.setStyleSheet("font-size: 16px;")
+        self.btn_quit.setStyleSheet("font-size: 18px;")
 
         layout.addWidget(self.btn_classify)
         layout.addWidget(self.btn_voice)
@@ -214,7 +214,14 @@ class AppWindow(QMainWindow):
         
         self.vm = vm
         self.setWindowTitle("SAGE Jetson UI")
-        self.setStyleSheet("background-color: #cbd2c5;")
+        # self.setStyleSheet("background-color: #cbd2c5;")
+        self.setStyleSheet("""
+            background-color: #cbd2c5;
+            color: white;
+            font-family: "Helvetica Neue";
+            font-size: 18px;
+        """)
+
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
