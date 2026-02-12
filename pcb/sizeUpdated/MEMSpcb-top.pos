@@ -1,0 +1,10 @@
+### Footprint positions - created on 2026 February 12, Thursday 14:01:11 ###
+### Printed by KiCad version 7.0.8
+## Unit = mm, Angle = deg.
+## Side : top
+# Ref     Val                  Package                                                PosX       PosY       Rot  Side
+C1        100_nF               CP_EIA-3528-12_Kemet-T_Pad1.50x2.35mm_HandSolder   115.3160   -88.3920  -90.0000  top
+J2        Conn_02x04_Odd_Even  PinHeader_2x04_P2.54mm_Vertical                    126.7410   -82.0520    0.0000  top
+MK1       MMICT5848-00-012     MIC_MMICT5848-00-012                               119.6340   -85.3960    0.0000  top
+R1        100k                 R_0402_1005Metric_Pad0.72x0.64mm_HandSolder        132.3340   -86.1060  180.0000  top
+## End
