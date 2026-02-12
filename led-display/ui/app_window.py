@@ -56,15 +56,12 @@ class HomePage(QWidget):
         self.btn_classify = big_button("Classify Rock")
         self.btn_voice = big_button("Voice to Text")
         self.btn_trip = big_button(" View Trip Notes")
-        self.btn_quit = QPushButton("Quit")
+        self.btn_quit = QPushButton("QUIT")
 
         # self.btn_classify = big_button("CLASSIFY ROCK")
         # self.btn_voice = big_button("VOICE to TEXT")
         # self.btn_trip = big_button(" VIEW TRIP NOTES")
         # self.btn_quit = QPushButton("QUIT")
-        self.btn_quit.setStyleSheet("""
-            font-weight: bold;
-        """)
         self.btn_quit.setMinimumHeight(50)
         self.btn_quit.setStyleSheet("font-size: 18px;")
 
@@ -156,6 +153,13 @@ class VoicePage(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
 
+        self.setStyleSheet("""
+            background-color: #cad2c5;
+            color: #344f41;
+            font-family: "Courier New";
+            font-size: 18px;
+        """)
+
         title = QLabel("Voice to Text")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
@@ -225,7 +229,7 @@ class AppWindow(QMainWindow):
         # self.setStyleSheet("background-color: #cbd2c5;")
         self.setStyleSheet("""
             background-color: #cbd2c5;
-            color: white;
+            color: #344f41;
             font-family: "Courier New";
             font-size: 18px;
         """)
