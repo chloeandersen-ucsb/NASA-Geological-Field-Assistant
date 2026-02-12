@@ -172,8 +172,14 @@ class VoicePage(QWidget):
         layout.addWidget(title)
 
         self.text = QTextEdit()
+        self.text.setStyleSheet("""
+            font-size: 18px;
+            border: 2px solid #697d6a;
+            border-radius: 8px;
+            padding: 8px;
+        """)
         self.text.setReadOnly(True)
-        self.text.setStyleSheet("font-size: 16px;")
+        # self.text.setStyleSheet("font-size: 16px;")
         layout.addWidget(self.text, stretch=1)
 
         row = QHBoxLayout()
@@ -183,7 +189,7 @@ class VoicePage(QWidget):
         self.btn_delete = QPushButton("Delete")
         for b in [self.btn_stop, self.btn_redo, self.btn_save, self.btn_delete]:
             b.setMinimumHeight(55)
-            b.setStyleSheet("font-size: 16px;")
+            b.setStyleSheet("font-size: 20px;")
             row.addWidget(b)
 
         layout.addLayout(row)
