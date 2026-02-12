@@ -54,10 +54,10 @@ class HomePage(QWidget):
         # logo.setStyleSheet("background: transparent; border: none;")
         # logo.setFocusPolicy(Qt.NoFocus)
 
-        logo.setStyleSheet("background: transparent; border: none;")
 
         logo = QLabel()
         pixmap = QPixmap(img_path)
+        logo.setStyleSheet("background: transparent; border: none;")
         logo.setPixmap(pixmap.scaled(400, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
