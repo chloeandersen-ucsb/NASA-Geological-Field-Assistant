@@ -214,17 +214,7 @@ class AppWindow(QMainWindow):
         
         self.vm = vm
         self.setWindowTitle("SAGE Jetson UI")
-        # self.setStyleSheet("background-color: #cbd2c5;")
-        self.setStyleSheet("""
-            background-color: #cbd2c5;
-            color: white;
-            
-            # QPushButton {
-            #     font-family: "Arial";
-            #     font-size: 18px;
-            #     font-weight: bold;
-            # }
-        """)
+        self.setStyleSheet("background-color: #cbd2c5;")
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
