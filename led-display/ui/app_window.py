@@ -49,6 +49,8 @@ class HomePage(QWidget):
         layout.addWidget(logo)
         layout.addSpacing(20)
 
+        font = QFont("Ubuntu", 18)
+        font.setBold(True)
         self.btn_classify = big_button("Classify Rock")
         self.btn_voice = big_button("Voice to Text")
         self.btn_trip = big_button("Trip & Notes")
@@ -215,11 +217,11 @@ class AppWindow(QMainWindow):
             background-color: #cbd2c5;
             color: white;
             
-            QPushButton {
-                font-family: "Arial";
-                font-size: 18px;
-                font-weight: bold;
-            }
+            # QPushButton {
+            #     font-family: "Arial";
+            #     font-size: 18px;
+            #     font-weight: bold;
+            # }
         """)
 
         self.stack = QStackedWidget()
