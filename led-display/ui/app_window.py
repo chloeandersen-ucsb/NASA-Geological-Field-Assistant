@@ -42,19 +42,17 @@ class HomePage(QWidget):
         layout = QVBoxLayout(self)
 
         self.setStyleSheet("""
-            QWidget {
-                background-color: #2596be;
-                color: white;
-            }
+            background-color: #879689;
+            color: white;
         """)
 
         logo = QLabel()
         pixmap = QPixmap(img_path)
-        logo.setPixmap(pixmap.scaled(600, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setPixmap(pixmap.scaled(400, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
-        print("Looking for image at:", img_path)
-        print("Exists?", img_path.exists())
+        # print("Looking for image at:", img_path)
+        # print("Exists?", img_path.exists())
 
 
 
