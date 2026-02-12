@@ -8,6 +8,7 @@ from PySide6.QtGui import QPixmap
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
+img_path = project_root/ "led_display" / "ui" / "sage-logo-wbg.png"
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence
@@ -42,8 +43,7 @@ class HomePage(QWidget):
         """)
 
         logo = QLabel()
-        pixmap = QPixmap("capstone/led-display/ui/sage-logo-wbg.png")
-        imgpath = "ui/sage-logo-wbg.png"
+        pixmap = QPixmap(img_path)
         logo.setPixmap(pixmap.scaled(600, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
