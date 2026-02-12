@@ -42,7 +42,7 @@ class HomePage(QWidget):
         layout = QVBoxLayout(self)
 
         self.setStyleSheet("""
-            background-color: #879689;
+            background-color: #a3b18a;
             color: white;
         """)
 
@@ -221,6 +221,7 @@ class AppWindow(QMainWindow):
         
         self.vm = vm
         self.setWindowTitle("SAGE Jetson UI")
+        self.setStyleSheet("background-color: #879689;")
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
