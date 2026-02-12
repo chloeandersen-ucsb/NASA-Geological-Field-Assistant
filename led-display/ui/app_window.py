@@ -49,7 +49,7 @@ class HomePage(QWidget):
         layout.addWidget(logo)
         layout.addSpacing(20)
 
-        font = QFont("Ubuntu", 18)
+        font = QFont("DejaVu", 18)
         font.setBold(True)
         self.btn_classify = big_button("Classify Rock")
         self.btn_voice = big_button("Voice to Text")
