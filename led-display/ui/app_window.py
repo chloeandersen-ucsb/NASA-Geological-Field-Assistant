@@ -62,6 +62,9 @@ class HomePage(QWidget):
         # self.btn_voice = big_button("VOICE to TEXT")
         # self.btn_trip = big_button(" VIEW TRIP NOTES")
         # self.btn_quit = QPushButton("QUIT")
+        self.btn_quit.setStyleSheet("""
+            font-weight: bold;
+        """)
         self.btn_quit.setMinimumHeight(50)
         self.btn_quit.setStyleSheet("font-size: 18px;")
 
@@ -223,9 +226,8 @@ class AppWindow(QMainWindow):
         self.setStyleSheet("""
             background-color: #cbd2c5;
             color: white;
-            font-family: "Garamond";
+            font-family: "Courier New";
             font-size: 18px;
-            font-weight: bold;
         """)
 
 
