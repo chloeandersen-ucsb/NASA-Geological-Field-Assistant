@@ -54,7 +54,7 @@ class HomePage(QWidget):
         self.btn_trip = big_button("Trip & Notes")
         self.btn_quit = QPushButton("Quit")
         self.btn_quit.setMinimumHeight(50)
-        self.btn_quit.setStyleSheet("font-size: 16px;")
+        # self.btn_quit.setStyleSheet("font-size: 16px;")
 
         layout.addWidget(self.btn_classify)
         layout.addWidget(self.btn_voice)
@@ -216,7 +216,7 @@ class AppWindow(QMainWindow):
             color: white;
             
             QPushButton {
-                font-family: "Ubuntu";
+                font-family: "Arial";
                 font-size: 18px;
                 font-weight: bold;
             }
