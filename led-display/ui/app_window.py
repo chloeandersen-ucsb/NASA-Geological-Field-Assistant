@@ -8,7 +8,7 @@ from PySide6.QtGui import QPixmap
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
-img_path = project_root/ "led-display" / "ui" / "sage-logo-wbg.png"
+img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
 
 
 print("Current file:", Path(__file__).resolve())
@@ -58,7 +58,7 @@ class HomePage(QWidget):
         logo = QLabel()
         pixmap = QPixmap(img_path)
         logo.setStyleSheet("background: transparent; border: none;")
-        logo.setPixmap(pixmap.scaled(400, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setPixmap(pixmap.scaled(300, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
         # print("Looking for image at:", img_path)
