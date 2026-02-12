@@ -8,7 +8,8 @@ from PySide6.QtGui import QPixmap
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
-img_path = project_root/ "led_display" / "ui" / "sage-logo-wbg.png"
+img_path = project_root/ "led-display" / "ui" / "sage-logo-wbg.png"
+
 
 print("Current file:", Path(__file__).resolve())
 print("Project root:", project_root.resolve())
