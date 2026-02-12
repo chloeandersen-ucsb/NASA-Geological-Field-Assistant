@@ -159,16 +159,16 @@ class VoicePage(QWidget):
             font-family: "Courier New";
             font-size: 18px;
         """)
-        self.text.setStyleSheet("""
+        
+        title = QLabel("Voice to Text")
+        title.setAlignment(Qt.AlignCenter)
+        # title.setStyleSheet("font-size: 22px; font-weight: 600;")
+        title.setStyleSheet("""
             font-size: 20px;
             border: 2px solid #697d6a;
             border-radius: 8px;
             padding: 8px;
         """)
-        
-        title = QLabel("Voice to Text")
-        title.setAlignment(Qt.AlignCenter)
-        # title.setStyleSheet("font-size: 22px; font-weight: 600;")
         layout.addWidget(title)
 
         self.text = QTextEdit()
