@@ -42,9 +42,17 @@ class HomePage(QWidget):
         layout = QVBoxLayout(self)
 
         self.setStyleSheet("""
-            background-color: #a3b18a;
+            background-color: #8a9b7a;
             color: white;
         """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        logo = QLabel()
+        logo.setStyleSheet("background: transparent; border: none;")
+        logo.setFocusPolicy(Qt.NoFocus)
 
         logo = QLabel()
         pixmap = QPixmap(img_path)
@@ -221,7 +229,7 @@ class AppWindow(QMainWindow):
         
         self.vm = vm
         self.setWindowTitle("SAGE Jetson UI")
-        self.setStyleSheet("background-color: #879689;")
+        self.setStyleSheet("background-color: #cbd2c5;")
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
