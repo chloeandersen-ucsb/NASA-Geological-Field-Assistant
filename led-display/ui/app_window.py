@@ -54,6 +54,8 @@ class HomePage(QWidget):
         # logo.setStyleSheet("background: transparent; border: none;")
         # logo.setFocusPolicy(Qt.NoFocus)
 
+        logo.setStyleSheet("background: transparent; border: none;")
+
         logo = QLabel()
         pixmap = QPixmap(img_path)
         logo.setPixmap(pixmap.scaled(400, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -73,7 +75,7 @@ class HomePage(QWidget):
         self.btn_voice = big_button("Voice to Text")
         self.btn_trip = big_button("Trip & Notes")
         self.btn_quit = QPushButton("Quit")
-        self.btn_quit.setMinimumHeight(50)
+        self.btn_quit.setMinimumHeight(25)
         self.btn_quit.setStyleSheet("font-size: 16px;")
 
         layout.addWidget(self.btn_classify)
