@@ -47,7 +47,7 @@ class HomePage(QWidget):
         logo.setPixmap(pixmap.scaled(300, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
-        layout.addSpacing(40)
+        layout.addSpacing(30)
 
         self.btn_classify = big_button("Classify Rock")
         self.btn_voice = big_button("Voice to Text")
