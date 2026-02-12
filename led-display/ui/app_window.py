@@ -46,13 +46,13 @@ class HomePage(QWidget):
             color: white;
         """)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        # layout = QVBoxLayout(self)
+        # layout.setContentsMargins(0, 0, 0, 0)
+        # layout.setSpacing(0)
 
-        logo = QLabel()
-        logo.setStyleSheet("background: transparent; border: none;")
-        logo.setFocusPolicy(Qt.NoFocus)
+        # logo = QLabel()
+        # logo.setStyleSheet("background: transparent; border: none;")
+        # logo.setFocusPolicy(Qt.NoFocus)
 
         logo = QLabel()
         pixmap = QPixmap(img_path)
