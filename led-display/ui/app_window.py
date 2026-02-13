@@ -39,14 +39,14 @@ class HomePage(QWidget):
         layout = QVBoxLayout(self)
 
         self.setStyleSheet("""
-            background-color: #8a9b7a;
-            color: white;
+            background-color: #586e5d;
+            color: #cad2c5;
         """)
 
         logo = QLabel()
         pixmap = QPixmap(img_path)
         logo.setStyleSheet("background: transparent; border: none;")
-        logo.setPixmap(pixmap.scaled(300, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setPixmap(pixmap.scaled(400, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
         layout.addSpacing(20)
@@ -57,13 +57,17 @@ class HomePage(QWidget):
         self.btn_voice = big_button("Voice to Text")
         self.btn_trip = big_button(" View Trip Notes")
         self.btn_quit = QPushButton("QUIT")
+        self.btn_quit.setStyleSheet("""
+            background-color: #344f41;
+            color: #cad2c5;
+        """)
 
         # self.btn_classify = big_button("CLASSIFY ROCK")
         # self.btn_voice = big_button("VOICE to TEXT")
         # self.btn_trip = big_button(" VIEW TRIP NOTES")
         # self.btn_quit = QPushButton("QUIT")
         self.btn_quit.setMinimumHeight(50)
-        self.btn_quit.setStyleSheet("font-size: 18px;")
+        # self.btn_quit.setStyleSheet("font-size: 18px;")
 
         layout.addWidget(self.btn_classify)
         layout.addWidget(self.btn_voice)
@@ -164,7 +168,7 @@ class VoicePage(QWidget):
         title.setAlignment(Qt.AlignCenter)
         # title.setStyleSheet("font-size: 22px; font-weight: 600;")
         title.setStyleSheet("""
-            font-size: 20px;
+            font-size: 22px;
             font-weight: bold;
             border: 2px solid #697d6a;
             border-radius: 8px;
@@ -174,7 +178,7 @@ class VoicePage(QWidget):
 
         self.text = QTextEdit()
         self.text.setStyleSheet("""
-            font-size: 18px;
+            font-size: 20px;
             border: 2px solid #697d6a;
             border-radius: 8px;
             padding: 8px;
@@ -185,12 +189,52 @@ class VoicePage(QWidget):
 
         row = QHBoxLayout()
         self.btn_stop = QPushButton("Stop")
+        self.btn_stop.setStyleSheet("""
+            QPushButton {
+                background-color: #7e1f23;
+                font-size: 22px;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #f5f6f4;
+            }
+        """)
         self.btn_redo = QPushButton("Redo")
+        self.btn_redo.setStyleSheet("""
+            QPushButton {
+                background-color: #95b7dc;
+                font-size: 22px;
+                color: #385573;
+            }
+            QPushButton:hover {
+                background-color: #f5f6f4;
+            }
+        """)
         self.btn_save = QPushButton("Save")
+        self.btn_save.setStyleSheet("""
+            QPushButton {
+                background-color: #617c32;
+                font-size: 22px;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #f5f6f4;
+            }
+        """)
         self.btn_delete = QPushButton("Delete")
+        self.btn_delete.setStyleSheet("""
+            QPushButton {
+                background-color: #313940;
+                font-size: 22px;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #f5f6f4;
+            }
+        """)
         for b in [self.btn_stop, self.btn_redo, self.btn_save, self.btn_delete]:
             b.setMinimumHeight(55)
-            b.setStyleSheet("font-size: 20px;")
+            # b.setStyleSheet("font-size: 20px;")
             row.addWidget(b)
 
         layout.addLayout(row)
@@ -239,13 +283,16 @@ class AppWindow(QMainWindow):
         
         self.vm = vm
         self.setWindowTitle("SAGE Jetson UI")
-        # self.setStyleSheet("background-color: #cbd2c5;")
+        self.setStyleSheet("background-color: #cbd2c5;")
         self.setStyleSheet("""
             background-color: #cbd2c5;
             color: #344f41;
             font-family: "Courier New";
-            font-size: 18px;
+            font-size: 22px;
+            font-weight: bold;
         """)
+
+
 
 
         self.stack = QStackedWidget()
