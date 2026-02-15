@@ -171,10 +171,31 @@ class TranscriptionService(ProcessService):
     token = Signal(str)
     completed = Signal(str)
     
+    # transcriber_fine_tuned.py output — [HH:MM:SS] phrase
+    _PHRASE_ALT_RE = re.compile(r"\[\d{2}:\d{2}:\d{2}\]\s+(.+)$")
     # Mock format: [HH:MM:SS] ['phrase']
     _PHRASE_RE = re.compile(r"\[\d{2}:\d{2}:\d{2}\]\s*\[\s*'(.+?)'\s*\]")
-    # rtt_lav format: [HH:MM:SS] phrase (no brackets/quotes)
-    _PHRASE_ALT_RE = re.compile(r"\[\d{2}:\d{2}:\d{2}\]\s+(.+)$")
+    # skip these when in final-dump
+    _FINAL_DUMP_SKIP_RE = re.compile(r"^[\s=\-]*$|^FINAL TRANSCRIPT:\s*$", re.IGNORECASE)
+    
+    @staticmethod
+    def _is_chatter_line(line: str) -> bool:
+        """Ignore transcriber_fine_tuned.py startup/shutdown and mock chatter (not phrase lines)."""
+        if not line:
+            return True
+        if line.startswith("Using ") or line.startswith("Using device:"):
+            return True
+        if "RECORDING" in line or "RECORDING NOW" in line:
+            return True
+        if line.startswith("Searching for ") or line.startswith("Warning: "):
+            return True
+        if line.startswith("Loading ") or "Model loaded" in line:
+            return True
+        if "Stopping stream" in line or "Processing full audio" in line:
+            return True
+        if line == "No audio recorded." or line.startswith("ERROR: "):
+            return True
+        return False
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -257,8 +278,8 @@ class TranscriptionService(ProcessService):
                 self._in_final_dump = True
                 continue
             
-            if line.startswith("Using ") or line.startswith("Using device:") or "RECORDING NOW" in line:
-                print(f"[VOICE-TO-TEXT] Ignoring chatter line: {line}", file=sys.stderr)
+            # transcriber_fine_tuned.py startup/shutdown chatter (and mock "Using device:", "RECORDING NOW")
+            if self._is_chatter_line(line):
                 continue
             
             m = self._PHRASE_RE.search(line)
@@ -272,7 +293,8 @@ class TranscriptionService(ProcessService):
                         continue
                 else:
                     if self._in_final_dump and line:
-                        self._final_phrases.append(line.strip())
+                        if not self._FINAL_DUMP_SKIP_RE.match(line):
+                            self._final_phrases.append(line.strip())
                         continue
                     print(f"[VOICE-TO-TEXT] Line did not match phrase pattern: {line}", file=sys.stderr)
                     continue
@@ -312,7 +334,7 @@ class TranscriptionService(ProcessService):
                     self._in_final_dump = True
                     continue
                 
-                if line.startswith("Using ") or line.startswith("Using device:") or "RECORDING NOW" in line:
+                if self._is_chatter_line(line):
                     continue
                 
                 m = self._PHRASE_RE.search(line)
@@ -325,7 +347,7 @@ class TranscriptionService(ProcessService):
                         if phrase == "(silence)":
                             continue
                     else:
-                        if self._in_final_dump and line:
+                        if self._in_final_dump and line and not self._FINAL_DUMP_SKIP_RE.match(line):
                             self._final_phrases.append(line.strip())
                         continue
                 

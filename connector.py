@@ -111,8 +111,7 @@ def get_rocknet_weights_path() -> Path:
 
 
 def get_voice_to_text_script_path() -> Path:
-    """Get the path to shruthi's rtt_lav.py script."""
-    return get_voice_to_text_dir() / "shruthi-files" / "rtt_lav.py"
+    return get_voice_to_text_dir() / "ilai-files" / "transcriber_fine_tuned.py"
 
 
 def get_camera_script_path() -> Path:
