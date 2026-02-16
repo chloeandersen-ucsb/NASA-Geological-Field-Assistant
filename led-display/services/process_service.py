@@ -36,36 +36,98 @@ class ProcessService(QObject):
 
 
 class CameraService(ProcessService):
+    preview_started = Signal(str)
     capture_finished = Signal(str)
     capture_failed = Signal(str)
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.capture_failed.connect(self.failed.emit)
-        
-        script_path = connector.get_camera_script_path()
-        python_exe = connector.get_python_executable()
-        
-        self.cmd = [python_exe, str(script_path)]
-    
+
+        use_mocks = os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes")
+        use_mock_camera = os.environ.get("SAGE_USE_MOCK_CAMERA", "").lower() in ("1", "true", "yes")
+
+        self._use_mock = use_mocks or use_mock_camera
+        if self._use_mock:
+            self.python = connector.get_python_executable()
+            self.camera_script = connector.get_mock_camera_script_path()
+            self._preview_cmd = [self.python, str(self.camera_script)]
+        else:
+            self.python = connector.get_python_executable()
+            self.camera_script = connector.get_camera_script_path()
+            self._preview_cmd = [self.python, str(self.camera_script), "--preview"]
+            self._stdout_buffer = ""
+            self._waiting_for_capture_response = False
+            self._preview_path_emitted = False
+
+    def start_preview(self) -> None:
+        """Real: start preview stream (stays alive). Mock: run script once, emit capture_finished(path) when done."""
+        if self.proc.state() != QProcess.NotRunning:
+            self.capture_failed.emit("Camera already running")
+            return
+        if self._use_mock:
+            self.proc.start(self._preview_cmd[0], self._preview_cmd[1:])
+            return
+        self._stdout_buffer = ""
+        self._waiting_for_capture_response = False
+        self._preview_path_emitted = False
+        self.proc.readyReadStandardOutput.connect(self._on_preview_stdout)
+        self.proc.start(self._preview_cmd[0], self._preview_cmd[1:])
+
     def capture(self) -> None:
-        self.proc.start(self.cmd[0], self.cmd[1:])
-    
+        """Real: send CAPTURE to preview process, then emit capture_finished(path). Mock: not used (path already emitted)."""
+        if self._use_mock:
+            self.capture_failed.emit("Mock camera has no preview; path is emitted when script finishes.")
+            return
+        if self.proc.state() != QProcess.NotRunning and self._preview_path_emitted:
+            self._waiting_for_capture_response = True
+            self.proc.write("CAPTURE\n".encode("utf-8"))
+        else:
+            self.capture_failed.emit("Camera preview not running")
+
+    def _on_preview_stdout(self) -> None:
+        data = bytes(self.proc.readAllStandardOutput()).decode("utf-8", errors="ignore")
+        self._stdout_buffer += data
+        while "\n" in self._stdout_buffer:
+            line, self._stdout_buffer = self._stdout_buffer.split("\n", 1)
+            line = line.strip()
+            if not line:
+                continue
+            if not self._preview_path_emitted:
+                self._preview_path_emitted = True
+                self.preview_started.emit(line)
+            elif self._waiting_for_capture_response:
+                self._waiting_for_capture_response = False
+                self.capture_finished.emit(line)
+            # else ignore (e.g. extra lines)
+
     def _on_finished(self, exit_code: int, _status) -> None:
+        try:
+            self.proc.readyReadStandardOutput.disconnect(self._on_preview_stdout)
+        except Exception:
+            pass
         out = bytes(self.proc.readAllStandardOutput()).decode("utf-8", errors="ignore").strip()
         err = bytes(self.proc.readAllStandardError()).decode("utf-8", errors="ignore").strip()
-        
-        if exit_code != 0:
+
+        if self._use_mock:
+            image_path = out.splitlines()[-1].strip() if out else ""
+            if exit_code != 0:
+                self.capture_failed.emit(err or f"Camera script failed (exit {exit_code})")
+                return
+            if not image_path:
+                self.capture_failed.emit("Camera script did not output image path")
+                return
+            self.capture_finished.emit(image_path)
+            return
+
+        if exit_code != 0 and not self._preview_path_emitted:
             self.capture_failed.emit(err or f"Camera script failed (exit {exit_code})")
-            return
-        
-        image_path = out.splitlines()[-1].strip() if out else ""
-        if not image_path:
-            self.capture_failed.emit("Camera script did not output image path")
-            return
-        
-        self.capture_finished.emit(image_path)
-    
+        if self._waiting_for_capture_response:
+            self._waiting_for_capture_response = False
+            self.capture_failed.emit("Camera process ended before capture")
+        self._stdout_buffer = ""
+        self._preview_path_emitted = False
+
     def _on_error(self, _err) -> None:
         self.capture_failed.emit("Camera process error")
 

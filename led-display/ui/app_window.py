@@ -108,6 +108,26 @@ class VoiceLoadingPage(QWidget):
         layout.addStretch(1)
 
 
+class CameraPreviewPage(QWidget):
+    """Shown when camera preview is active; user clicks Capture to take the photo."""
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        label = QLabel("Camera ready. Click Capture to take photo.")
+        label.setAlignment(Qt.AlignCenter)
+        label.setStyleSheet("font-size: 22px;")
+        self.btn_capture = big_button("Capture")
+        self.btn_cancel = QPushButton("Cancel")
+        self.btn_cancel.setMinimumHeight(50)
+        self.btn_cancel.setStyleSheet("font-size: 18px;")
+        layout.addStretch(1)
+        layout.addWidget(label)
+        layout.addSpacing(30)
+        layout.addWidget(self.btn_capture)
+        layout.addWidget(self.btn_cancel)
+        layout.addStretch(1)
+
+
 class ClassifiedPage(QWidget):
     def __init__(self):
         super().__init__()
@@ -300,6 +320,7 @@ class AppWindow(QMainWindow):
 
         self.home = HomePage()
         self.loading = LoadingPage()
+        self.camera_preview = CameraPreviewPage()
         self.classified = ClassifiedPage()
         self.voice_loading = VoiceLoadingPage()
         self.voice = VoicePage()
@@ -307,6 +328,7 @@ class AppWindow(QMainWindow):
 
         self.stack.addWidget(self.home)
         self.stack.addWidget(self.loading)
+        self.stack.addWidget(self.camera_preview)
         self.stack.addWidget(self.classified)
         self.stack.addWidget(self.voice_loading)
         self.stack.addWidget(self.voice)
@@ -384,6 +406,9 @@ class AppWindow(QMainWindow):
         self.home.btn_trip.clicked.connect(self.vm.open_trip_load)
         self.home.btn_quit.clicked.connect(self._quit_application)
 
+        self.camera_preview.btn_capture.clicked.connect(self.vm.capture_photo)
+        self.camera_preview.btn_cancel.clicked.connect(self.vm.go_home)
+
         self.classified.btn_reclassify.clicked.connect(self.vm.reclassify)
         self.classified.btn_save.clicked.connect(self.vm.save_classification)
         self.classified.btn_delete.clicked.connect(self.vm.delete_classification)
@@ -406,6 +431,8 @@ class AppWindow(QMainWindow):
     def _show_state(self, state: AppStateType) -> None:
         if state == AppStateType.HOME:
             self.stack.setCurrentWidget(self.home)
+        elif state == AppStateType.CAMERA_PREVIEW:
+            self.stack.setCurrentWidget(self.camera_preview)
         elif state == AppStateType.CLASSIFYING:
             self.stack.setCurrentWidget(self.loading)
         elif state == AppStateType.CLASSIFIED:

@@ -15,6 +15,7 @@ from services.process_service import CameraService, ClassificationService, Trans
 
 class AppStateType(Enum):
     HOME = auto()
+    CAMERA_PREVIEW = auto()
     CLASSIFYING = auto()
     CLASSIFIED = auto()
     VOICE_TO_TEXT_LOADING = auto()
@@ -168,6 +169,7 @@ class ViewModel(QObject):
         self._classify_timeout.setSingleShot(True)
         self._classify_timeout.timeout.connect(self._on_classify_timeout)
 
+        self.camera.preview_started.connect(self._on_preview_started)
         self.camera.capture_finished.connect(self._on_photo_captured)
         self.camera.capture_failed.connect(self._fail)
         self.classifier.finished.connect(self._on_classified)
@@ -183,6 +185,8 @@ class ViewModel(QObject):
     def go_home(self) -> None:
         if self.state == AppStateType.VOICE_TO_TEXT:
             self.stop_voice_to_text()
+        if self.state == AppStateType.CAMERA_PREVIEW:
+            self.camera.kill()
         self._set_state(AppStateType.HOME)
 
     def open_trip_load(self) -> None:
@@ -192,13 +196,21 @@ class ViewModel(QObject):
     def start_classification(self) -> None:
         self.current_classification = None
         self._set_state(AppStateType.CLASSIFYING)
-        self._classify_timeout.start(self.classification_timeout_ms)
+        self.camera.start_preview()
+
+    def _on_preview_started(self, _path: str) -> None:
+        self._set_state(AppStateType.CAMERA_PREVIEW)
+
+    def capture_photo(self) -> None:
+        """Call when user clicks Capture on the camera preview screen."""
         self.camera.capture()
 
     def reclassify(self) -> None:
         self.start_classification()
 
     def _on_photo_captured(self, image_path: str) -> None:
+        self._set_state(AppStateType.CLASSIFYING)
+        self._classify_timeout.start(self.classification_timeout_ms)
         self.classifier.classify(image_path)
 
     def _on_classified(self, payload: dict) -> None:
