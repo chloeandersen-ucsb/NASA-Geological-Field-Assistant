@@ -243,6 +243,7 @@ class TranscriptionService(ProcessService):
             return
         
         self._user_stopped = True
+        self._stopping = True  # NEW FLAG
         
         pid = int(self.proc.processId())
         if pid > 0:
@@ -383,5 +384,12 @@ class TranscriptionService(ProcessService):
         print(f"[VOICE-TO-TEXT] Emitting completed signal with text: '{final_text}'", file=sys.stderr)
         self.completed.emit(final_text)
     
+    # def _on_error(self, _err) -> None:
+    #     self.failed.emit("Transcription process error")
     def _on_error(self, _err) -> None:
+        if getattr(self, "_user_stopped", False):
+            # User stopped process intentionally; ignore the error
+            print("[VOICE-TO-TEXT] Ignored process error after user stop", file=sys.stderr)
+            return
         self.failed.emit("Transcription process error")
+

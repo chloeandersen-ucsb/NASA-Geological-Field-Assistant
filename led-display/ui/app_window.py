@@ -116,28 +116,58 @@ class ClassifiedPage(QWidget):
         # Top result (most confident)
         self.lbl_label = QLabel("LABEL")
         self.lbl_label.setAlignment(Qt.AlignCenter)
-        self.lbl_label.setStyleSheet("font-size: 24px; font-weight: 700;")
+        self.lbl_label.setStyleSheet("font-size: 28px; font-weight: 700;")
 
         self.lbl_conf = QLabel("Confidence: --")
         self.lbl_conf.setAlignment(Qt.AlignCenter)
-        self.lbl_conf.setStyleSheet("font-size: 18px;")
+        self.lbl_conf.setStyleSheet("font-size: 25px; color: #666;") #color = white
 
         # Additional results (2nd and 3rd most confident)
         self.lbl_top2 = QLabel("")
         self.lbl_top2.setAlignment(Qt.AlignCenter)
-        self.lbl_top2.setStyleSheet("font-size: 16px; color: #666;")
+        self.lbl_top2.setStyleSheet("font-size: 20px;")
 
         self.lbl_top3 = QLabel("")
         self.lbl_top3.setAlignment(Qt.AlignCenter)
-        self.lbl_top3.setStyleSheet("font-size: 16px; color: #666;")
+        self.lbl_top3.setStyleSheet("font-size: 20px;")
 
         self.lbl_extra = QLabel("")
         self.lbl_extra.setAlignment(Qt.AlignCenter)
-        self.lbl_extra.setStyleSheet("font-size: 16px;")
+        self.lbl_extra.setStyleSheet("font-size: 20px;")
 
         self.btn_reclassify = big_button("Reclassify")
-        self.btn_save = big_button("Save Rock to Trip")
-        self.btn_delete = big_button("Delete / Back Home")
+        self.btn_reclassify.setStyleSheet("""
+            QPushButton {
+                background-color: #95b7dc;
+                font-size: 22px;
+                color: #385573;
+            }
+            QPushButton:hover {
+                background-color: #f5f6f4;
+            }
+        """)
+        self.btn_save = big_button("Save Classification")
+        self.btn_save.setStyleSheet("""
+            QPushButton {
+                background-color: #617c32;
+                font-size: 22px;
+                color: #f5f6f4;
+            }
+            QPushButton:hover {
+                background-color: #f5f6f4;
+            }
+        """)
+        self.btn_delete = big_button("Delete")
+        self.btn_delete.setStyleSheet("""
+            QPushButton {
+                background-color: #313940;
+                font-size: 22px;
+                color: #f5f6f4;
+            }
+            QPushButton:hover {
+                background-color: #f5f6f4;
+            }
+        """)
 
         layout.addStretch(1)
         layout.addWidget(self.lbl_label)
@@ -293,8 +323,6 @@ class AppWindow(QMainWindow):
         """)
 
 
-
-
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
 
@@ -414,6 +442,7 @@ class AppWindow(QMainWindow):
             self.stack.setCurrentWidget(self.voice_loading)
         elif state == AppStateType.VOICE_TO_TEXT:
             self.stack.setCurrentWidget(self.voice)
+            self.voice.btn_save.setEnabled(False)  # disable until transcription finishes
         elif state == AppStateType.TRIP_LOAD:
             self.stack.setCurrentWidget(self.trip)
 
@@ -455,10 +484,16 @@ class AppWindow(QMainWindow):
         self.classified.lbl_extra.setText("   ".join(extras))
 
     def _on_transcription(self, text: str) -> None:
+        # Switch from loading to live screen
+        if self.stack.currentWidget() == self.voice_loading:
+            self._show_state(AppStateType.VOICE_TO_TEXT)
+
         self.voice.text.setPlainText(text)
         cursor = self.voice.text.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         self.voice.text.setTextCursor(cursor)
+
+        self.voice.btn_save.setEnabled(bool(text.strip()))
 
     def _on_trip(self, summary: TripSummary) -> None:
         self.trip.list.clear()
