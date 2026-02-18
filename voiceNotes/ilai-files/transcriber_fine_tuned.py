@@ -1,22 +1,19 @@
-import sounddevice as sd
-import nemo.collections.asr as nemo_asr
-import numpy as np
-import queue
 import time
-import sys
-import torch
+app_start_time = time.time()
+
 import os
-import difflib
-import jellyfish 
-from datetime import datetime
-from spellchecker import SpellChecker
-from textblob import TextBlob
+os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
+
+import torch
+from nemo.collections.asr.models import EncDecCTCModelBPE
+
 
 # ------------------------------------------------------------------
 # PART 1: CONFIGURATION
 # ------------------------------------------------------------------
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_FILE = os.path.join(SCRIPT_DIR, "newest_model.nemo")
+#MODEL_FILE = os.path.join(SCRIPT_DIR, "newest_model.nemo")
+MODEL_FILE = os.path.join(SCRIPT_DIR, "newest_model_extracted")
 CURRENT_VISUAL_CONTEXT = ["Gneiss"] 
 
 # Audio Tunables
@@ -27,7 +24,6 @@ ENERGY_THRESHOLD = 0.001
 PRINT_SILENCE = True
 
 # Context Helpers
-spell = SpellChecker()
 
 GEOLOGY_TRIGGERS = { 
     "rock", "stone", "sample", "specimen", "mineral", "crystal",
@@ -51,6 +47,11 @@ def has_geology_context(words, index, window=3):
 
 def multimodal_correction(transcript, visual_keywords):
     if not transcript: return ""
+
+    from spellchecker import SpellChecker
+    from textblob import TextBlob
+
+    spell = SpellChecker()
     
     blob = TextBlob(transcript)
     # Get tags: [('nice', 'JJ'), ('Gneiss', 'NN'), ('rock', 'NN')]
@@ -105,37 +106,67 @@ def multimodal_correction(transcript, visual_keywords):
 # ------------------------------------------------------------------
 # PART 2: DEVICE & MODEL SETUP
 # ------------------------------------------------------------------
+from omegaconf import OmegaConf
+from nemo.utils import logging
+import sounddevice as sd
+logging.setLevel(logging.ERROR) 
+
 if torch.backends.mps.is_available(): device = torch.device("mps")
 elif torch.cuda.is_available(): device = torch.device("cuda")
 else: device = torch.device("cpu")
 
+# Patch for distributed logic
 if not hasattr(torch, "distributed"):
     import types
     torch.distributed = types.SimpleNamespace()
+torch.distributed.is_initialized = lambda: False
 
-if not hasattr(torch.distributed, "is_initialized"):
-    torch.distributed.is_initialized = lambda: False
-
+# Mic Search
 DEVICE_INDEX = None
-print("Searching for Sennheiser XS LAV...")
 for i, dev in enumerate(sd.query_devices()):
     if 'Sennheiser XS LAV USB-C' in dev['name']:
         DEVICE_INDEX = i
         break
 if DEVICE_INDEX is None:
-    print("Warning: Sennheiser LAV not found. Using default input.")
     DEVICE_INDEX = sd.default.device[0]
 
-if not os.path.exists(MODEL_FILE):
-    print(f"ERROR: Could not find {MODEL_FILE}")
-    exit(1)
+# --- MANUAL FAST LOAD (No more IsADirectoryError) ---
+print(f"Direct loading weights from: {MODEL_FILE}")
 
-print(f"Loading local model: {MODEL_FILE}...")
-asr_model = nemo_asr.models.EncDecCTCModelBPE.restore_from(restore_path=MODEL_FILE)
+# 1. Map the files we found in your 'ls' earlier
+config_path = os.path.join(MODEL_FILE, "model_config.yaml")
+weights_path = os.path.join(MODEL_FILE, "model_weights.ckpt") 
+t_model = os.path.join(MODEL_FILE, "0124d42f914e45e98c214bd5afd17f55_tokenizer.model") 
+t_vocab = os.path.join(MODEL_FILE, "7561592dab144ebaaade5d1244a9ffb0_tokenizer.vocab")
+
+# 2. Update config and neutralize training data paths
+cfg = OmegaConf.load(config_path)
+cfg.tokenizer.model_path = t_model
+cfg.tokenizer.vocab_path = t_vocab
+cfg.tokenizer.spe_tokenizer_vocab = t_vocab
+
+OmegaConf.set_struct(cfg, False)
+cfg.train_ds = None
+cfg.validation_ds = None
+cfg.test_ds = None
+
+# 3. Initialize model and load weights directly
+# asr_model = nemo_asr.models.EncDecCTCModelBPE.from_config_dict(cfg)
+asr_model = EncDecCTCModelBPE.from_config_dict(cfg)
+asr_model.load_state_dict(torch.load(weights_path, map_location=device))
+
 asr_model.freeze()
 asr_model = asr_model.to(device)
 asr_model.eval()
+
+# Dummy inference to 'warm up' the MPS engine
+dummy_signal = torch.zeros((1, 16000)).to(device)
+dummy_len = torch.tensor([16000]).to(device)
+with torch.no_grad():
+    _ = asr_model.forward(input_signal=dummy_signal, input_signal_length=dummy_len)
+
 print("Model loaded successfully!")
+# ---------------------------------
 
 # ------------------------------------------------------------------
 # PART 3: SMART MERGE HELPER
@@ -197,93 +228,125 @@ def smart_merge(final_text, new_chunk):
 # ------------------------------------------------------------------
 # PART 4: MAIN LOOP
 # ------------------------------------------------------------------
-audio_q = queue.Queue()
-full_audio_buffer = []
 
-def audio_callback(indata, frames, time_info, status):
-    if status: print(status, file=sys.stderr)
-    audio_q.put(indata.copy())
+from nemo.core.connectors.save_restore_connector import SaveRestoreConnector
 
-chunk_size = int(SAMPLE_RATE * CHUNK_DURATION)
-window_size = int(SAMPLE_RATE * WINDOW_DURATION)
-rolling_buffer = np.zeros((1, 0), dtype=np.float32)
+import numpy as np
+import queue
+import sys
 
-print("\nRECORDING... (Ctrl+C to stop)\n")
-stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, device=DEVICE_INDEX, callback=audio_callback)
+import difflib
+import jellyfish 
+from datetime import datetime
 
-last_printed_was_silence = False
-final_transcript = ""
+first_recording = True
 
 try:
-    stream.start()
     while True:
-        while not audio_q.empty():
-            block = audio_q.get()
-            block_mono = block[:, 0].reshape(1, -1)
-            rolling_buffer = np.concatenate((rolling_buffer, block_mono), axis=1)
-            full_audio_buffer.append(block_mono.flatten())
+        if not first_recording:
+            print("\n" + "="*50)
+            cmd = input("SYSTEM READY. Press ENTER to start recording (or 'q' to quit): ")
+            if cmd.lower() == 'q': break
+        
+        audio_q = queue.Queue()
+        full_audio_buffer = []
 
-        if rolling_buffer.shape[1] >= window_size:
-            window_audio = rolling_buffer[:, :window_size]
-            energy = rms(window_audio.flatten())
-            timestamp = datetime.now().strftime("%H:%M:%S")
+        def audio_callback(indata, frames, time_info, status):
+            if status: print(status, file=sys.stderr)
+            audio_q.put(indata.copy())
 
-            if energy < ENERGY_THRESHOLD:
-                if PRINT_SILENCE and not last_printed_was_silence:
-                    print(f"[{timestamp}] (silence)")
-                    sys.stdout.flush()
-                    last_printed_was_silence = True
-                rolling_buffer = rolling_buffer[:, chunk_size:]
-                continue
+        chunk_size = int(SAMPLE_RATE * CHUNK_DURATION)
+        window_size = int(SAMPLE_RATE * WINDOW_DURATION)
+        rolling_buffer = np.zeros((1, 0), dtype=np.float32)
 
-            # Decode
-            max_val = np.max(np.abs(window_audio))
-            if max_val > 0: window_audio = window_audio / (max_val + 1e-9)
-            tensor_in = torch.from_numpy(window_audio).float().to(device)
-            len_in = torch.tensor([tensor_in.shape[1]], dtype=torch.int64, device=device)
+        # END TIMER
+        startup_duration = time.time() - app_start_time
+        print(f"\n{'='*40}")
+        print(f"STARTUP TIME: {startup_duration:.2f} seconds")
+        print(f"{'='*40}\n")
 
-            with torch.no_grad():
-                logits = asr_model.forward(input_signal=tensor_in, input_signal_length=len_in)
-                if isinstance(logits, tuple): logits = logits[0]
-                pred_tokens = logits.argmax(dim=-1)
-                transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
-                raw_text = transcripts[0].text if hasattr(transcripts[0], 'text') else str(transcripts[0])
+        print("\nRECORDING... (Ctrl+C to stop)\n")
+        stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, device=DEVICE_INDEX, callback=audio_callback)
+        first_recording = False
 
-            # Correct
-            corrected_text = multimodal_correction(raw_text, CURRENT_VISUAL_CONTEXT)
-            corrected_text = corrected_text.replace("⁇", "")
+        last_printed_was_silence = False
+        final_transcript = ""
 
-            # Merge & Print
-            if corrected_text:
-                last_printed_was_silence = False
-                
-                # A. Smart Merge (Handles 'night' -> 'nice' replacement)
-                new_full_transcript = smart_merge(final_transcript, corrected_text)
-                
-                # B. Determine what is NEW
-                # If the text got shorter (rewrite), print the whole new chunk? 
-                # Or just print the difference.
-                if len(new_full_transcript) > len(final_transcript):
-                    # Simple append case
-                    new_part = new_full_transcript[len(final_transcript):].strip()
-                    if new_part:
-                        print(f"[{timestamp}] {new_part}")
-                        sys.stdout.flush()
-                elif new_full_transcript != final_transcript:
-                    # Replacement case (Text changed but didn't necessarily grow)
-                    # We can't "unprint" in the console easily, so we just print the fix
-                    # For the GUI, this might result in "night nice", but it's better than duplication.
-                    pass 
-                
-                final_transcript = new_full_transcript
+        try:
+            stream.start()
+            while True:
+                while not audio_q.empty():
+                    block = audio_q.get()
+                    block_mono = block[:, 0].reshape(1, -1)
+                    rolling_buffer = np.concatenate((rolling_buffer, block_mono), axis=1)
+                    full_audio_buffer.append(block_mono.flatten())
 
-            rolling_buffer = rolling_buffer[:, chunk_size:]
+                if rolling_buffer.shape[1] >= window_size:
+                    window_audio = rolling_buffer[:, :window_size]
+                    energy = rms(window_audio.flatten())
+                    timestamp = datetime.now().strftime("%H:%M:%S")
 
-        time.sleep(0.01)
+                    if energy < ENERGY_THRESHOLD:
+                        if PRINT_SILENCE and not last_printed_was_silence:
+                            print(f"[{timestamp}] (silence)")
+                            sys.stdout.flush()
+                            last_printed_was_silence = True
+                        rolling_buffer = rolling_buffer[:, chunk_size:]
+                        continue
+
+                    # Decode
+                    max_val = np.max(np.abs(window_audio))
+                    if max_val > 0: window_audio = window_audio / (max_val + 1e-9)
+                    tensor_in = torch.from_numpy(window_audio).float().to(device)
+                    len_in = torch.tensor([tensor_in.shape[1]], dtype=torch.int64, device=device)
+
+                    with torch.no_grad():
+                        logits = asr_model.forward(input_signal=tensor_in, input_signal_length=len_in)
+                        if isinstance(logits, tuple): logits = logits[0]
+                        pred_tokens = logits.argmax(dim=-1)
+                        transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
+                        raw_text = transcripts[0].text if hasattr(transcripts[0], 'text') else str(transcripts[0])
+
+                    # Correct
+                    corrected_text = multimodal_correction(raw_text, CURRENT_VISUAL_CONTEXT)
+                    corrected_text = corrected_text.replace("⁇", "")
+
+                    # Merge & Print
+                    if corrected_text:
+                        last_printed_was_silence = False
+                        
+                        # A. Smart Merge (Handles 'night' -> 'nice' replacement)
+                        new_full_transcript = smart_merge(final_transcript, corrected_text)
+                        
+                        # B. Determine what is NEW
+                        # If the text got shorter (rewrite), print the whole new chunk? 
+                        # Or just print the difference.
+                        if len(new_full_transcript) > len(final_transcript):
+                            # Simple append case
+                            new_part = new_full_transcript[len(final_transcript):].strip()
+                            if new_part:
+                                print(f"[{timestamp}] {new_part}")
+                                sys.stdout.flush()
+                        elif new_full_transcript != final_transcript:
+                            # Replacement case (Text changed but didn't necessarily grow)
+                            # We can't "unprint" in the console easily, so we just print the fix
+                            # For the GUI, this might result in "night nice", but it's better than duplication.
+                            pass 
+                        
+                        final_transcript = new_full_transcript
+
+                    rolling_buffer = rolling_buffer[:, chunk_size:]
+
+                time.sleep(0.01)
+
+                pass
+
+        except KeyboardInterrupt:
+            stream.stop()
+            print("\n\nStopping stream... Preparing final transcript...")
 
 except KeyboardInterrupt:
-    stream.stop()
-    print("\n\nStopping stream... Preparing final transcript...")
+    print("\nShutting down VTT")
 
 # ------------------------------------------------------------------
 # PART 5: FINAL CLEANUP
