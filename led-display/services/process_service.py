@@ -170,6 +170,7 @@ class ClassificationService(ProcessService):
 class TranscriptionService(ProcessService):
     token = Signal(str)
     completed = Signal(str)
+    ready = Signal()
     
     # transcriber_fine_tuned.py output — [HH:MM:SS] phrase
     _PHRASE_ALT_RE = re.compile(r"\[\d{2}:\d{2}:\d{2}\]\s+(.+)$")
@@ -215,6 +216,14 @@ class TranscriptionService(ProcessService):
         self._active = False
         self._in_final_dump = False
         self._user_stopped = False
+        # self.process.stateChanged.connect(self._on_state_changed)
+        # self.proc.stateChanged.connect(self._on_state_changed)
+
+
+    def _on_state_changed(self, state):
+        if state == QProcess.Running:
+            print("[VOICE-TO-TEXT] Process running → emitting ready", file=sys.stderr)
+            self.ready.emit()
     
     def start(self) -> None:
         if self.proc.state() != QProcess.NotRunning:
@@ -269,6 +278,11 @@ class TranscriptionService(ProcessService):
         
         for raw_line in data.splitlines():
             line = raw_line.strip()
+            if "Model loaded successfully!" in line:
+                print("[VOICE-TO-TEXT] Model ready detected", file=sys.stderr)
+                self.ready.emit()
+                continue
+
             if not line:
                 continue
             

@@ -485,8 +485,8 @@ class AppWindow(QMainWindow):
 
     def _on_transcription(self, text: str) -> None:
         # Switch from loading to live screen
-        if self.stack.currentWidget() == self.voice_loading:
-            self._show_state(AppStateType.VOICE_TO_TEXT)
+        # if self.stack.currentWidget() == self.voice_loading:
+        #     self._show_state(AppStateType.VOICE_TO_TEXT)
 
         self.voice.text.setPlainText(text)
         cursor = self.voice.text.textCursor()
@@ -494,6 +494,10 @@ class AppWindow(QMainWindow):
         self.voice.text.setTextCursor(cursor)
 
         self.voice.btn_save.setEnabled(bool(text.strip()))
+
+    # def _on_transcription_ready(self):
+    #     self.state_changed.emit(AppStateType.VOICE_TO_TEXT)
+
 
     def _on_trip(self, summary: TripSummary) -> None:
         self.trip.list.clear()

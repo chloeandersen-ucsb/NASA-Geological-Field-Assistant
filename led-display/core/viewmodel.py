@@ -176,6 +176,9 @@ class ViewModel(QObject):
         self.transcriber.completed.connect(self._on_transcription_completed)
         self.transcriber.failed.connect(self._fail)
 
+        self.transcriber.ready.connect(self._on_transcriber_ready)
+
+
     def _set_state(self, new_state: AppStateType) -> None:
         self.state = new_state
         self.state_changed.emit(new_state)
@@ -184,6 +187,13 @@ class ViewModel(QObject):
         if self.state == AppStateType.VOICE_TO_TEXT:
             self.stop_voice_to_text()
         self._set_state(AppStateType.HOME)
+
+    def _on_transcriber_ready(self) -> None:
+        import sys
+        print("[VIEWMODEL] Transcriber ready signal received", file=sys.stderr)
+        if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
+            self._set_state(AppStateType.VOICE_TO_TEXT)
+
 
     def open_trip_load(self) -> None:
         self._publish_trip()
@@ -259,8 +269,8 @@ class ViewModel(QObject):
     def _on_transcription_token(self, chunk: str) -> None:
         import sys
         print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
-        if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
-            self._set_state(AppStateType.VOICE_TO_TEXT)
+        # if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
+        #     self._set_state(AppStateType.VOICE_TO_TEXT)
         self.transcription_text += chunk
         print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
         self.transcription_changed.emit(self.transcription_text)
