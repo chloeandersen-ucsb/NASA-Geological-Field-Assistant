@@ -138,6 +138,7 @@ asr_model.freeze()
 asr_model = asr_model.to(device)
 asr_model.eval()
 print("Model loaded successfully!")
+sys.stdout.flush()
 
 # ------------------------------------------------------------------
 # PART 3: SMART MERGE HELPER
@@ -222,70 +223,85 @@ stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, device=DEVICE_INDEX,
 last_printed_was_silence = False
 final_transcript = ""
 
+recording_active = False
+
 try:
     stream.start()
     while True:
-        while not audio_q.empty():
-            block = audio_q.get()
-            block_mono = block[:, 0].reshape(1, -1)
-            rolling_buffer = np.concatenate((rolling_buffer, block_mono), axis=1)
-            full_audio_buffer.append(block_mono.flatten())
-
-        if rolling_buffer.shape[1] >= window_size:
-            window_audio = rolling_buffer[:, :window_size]
-            energy = rms(window_audio.flatten())
-            timestamp = datetime.now().strftime("%H:%M:%S")
-
-            if energy < ENERGY_THRESHOLD:
-                if PRINT_SILENCE and not last_printed_was_silence:
-                    print(f"[{timestamp}] (silence)")
-                    sys.stdout.flush()
-                    last_printed_was_silence = True
-                rolling_buffer = rolling_buffer[:, chunk_size:]
-                continue
-
-            # Decode
-            max_val = np.max(np.abs(window_audio))
-            if max_val > 0: window_audio = window_audio / (max_val + 1e-9)
-            tensor_in = torch.from_numpy(window_audio).float().to(device)
-            len_in = torch.tensor([tensor_in.shape[1]], dtype=torch.int64, device=device)
-
-            with torch.no_grad():
-                logits = asr_model.forward(input_signal=tensor_in, input_signal_length=len_in)
-                if isinstance(logits, tuple): logits = logits[0]
-                pred_tokens = logits.argmax(dim=-1)
-                transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
-                raw_text = transcripts[0].text if hasattr(transcripts[0], 'text') else str(transcripts[0])
-
-            # Correct
-            corrected_text = multimodal_correction(raw_text, CURRENT_VISUAL_CONTEXT)
-            corrected_text = corrected_text.replace("⁇", "")
-
-            # Merge & Print
-            if corrected_text:
-                last_printed_was_silence = False
+    
+        import select
+        if select.select([sys.stdin], [], [], 0)[0]:
+            line = sys.stdin.readline().strip().lower()
+            if line == "start":
+                recording_active = True
+                print("RECORDING NOW")
+                sys.stdout.flush()
+            elif line == "stop":
+                recording_active = False
+                break
                 
-                # A. Smart Merge (Handles 'night' -> 'nice' replacement)
-                new_full_transcript = smart_merge(final_transcript, corrected_text)
-                
-                # B. Determine what is NEW
-                # If the text got shorter (rewrite), print the whole new chunk? 
-                # Or just print the difference.
-                if len(new_full_transcript) > len(final_transcript):
-                    # Simple append case
-                    new_part = new_full_transcript[len(final_transcript):].strip()
-                    if new_part:
-                        print(f"[{timestamp}] {new_part}")
+        if recording_active:
+            while not audio_q.empty():
+                block = audio_q.get()
+                block_mono = block[:, 0].reshape(1, -1)
+                rolling_buffer = np.concatenate((rolling_buffer, block_mono), axis=1)
+                full_audio_buffer.append(block_mono.flatten())
+
+            if rolling_buffer.shape[1] >= window_size:
+                window_audio = rolling_buffer[:, :window_size]
+                energy = rms(window_audio.flatten())
+                timestamp = datetime.now().strftime("%H:%M:%S")
+
+                if energy < ENERGY_THRESHOLD:
+                    if PRINT_SILENCE and not last_printed_was_silence:
+                        print(f"[{timestamp}] (silence)")
                         sys.stdout.flush()
-                elif new_full_transcript != final_transcript:
-                    # Replacement case (Text changed but didn't necessarily grow)
-                    # We can't "unprint" in the console easily, so we just print the fix
-                    # For the GUI, this might result in "night nice", but it's better than duplication.
-                    pass 
-                
-                final_transcript = new_full_transcript
+                        last_printed_was_silence = True
+                    rolling_buffer = rolling_buffer[:, chunk_size:]
+                    continue
 
-            rolling_buffer = rolling_buffer[:, chunk_size:]
+                # Decode
+                max_val = np.max(np.abs(window_audio))
+                if max_val > 0: window_audio = window_audio / (max_val + 1e-9)
+                tensor_in = torch.from_numpy(window_audio).float().to(device)
+                len_in = torch.tensor([tensor_in.shape[1]], dtype=torch.int64, device=device)
+
+                with torch.no_grad():
+                    logits = asr_model.forward(input_signal=tensor_in, input_signal_length=len_in)
+                    if isinstance(logits, tuple): logits = logits[0]
+                    pred_tokens = logits.argmax(dim=-1)
+                    transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
+                    raw_text = transcripts[0].text if hasattr(transcripts[0], 'text') else str(transcripts[0])
+
+                # Correct
+                corrected_text = multimodal_correction(raw_text, CURRENT_VISUAL_CONTEXT)
+                corrected_text = corrected_text.replace("⁇", "")
+
+                # Merge & Print
+                if corrected_text:
+                    last_printed_was_silence = False
+                
+                    # A. Smart Merge (Handles 'night' -> 'nice' replacement)
+                    new_full_transcript = smart_merge(final_transcript, corrected_text)
+                
+                    # B. Determine what is NEW
+                    # If the text got shorter (rewrite), print the whole new chunk? 
+                    # Or just print the difference.
+                    if len(new_full_transcript) > len(final_transcript):
+                        # Simple append case
+                        new_part = new_full_transcript[len(final_transcript):].strip()
+                        if new_part:
+                            print(f"[{timestamp}] {new_part}")
+                            sys.stdout.flush()
+                    elif new_full_transcript != final_transcript:
+                        # Replacement case (Text changed but didn't necessarily grow)
+                        # We can't "unprint" in the console easily, so we just print the fix
+                        # For the GUI, this might result in "night nice", but it's better than duplication.
+                        pass 
+                
+                    final_transcript = new_full_transcript
+
+                rolling_buffer = rolling_buffer[:, chunk_size:]
 
         time.sleep(0.01)
 

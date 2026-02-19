@@ -158,6 +158,10 @@ class ViewModel(QObject):
             import traceback
             traceback.print_exc(file=sys.stderr)
             raise
+            
+        self.transcriber.boot_model()
+        
+        self.state = AppStateType.HOME
         
         self.state = AppStateType.HOME
         self.current_classification: ClassificationResult | None = None
@@ -243,13 +247,19 @@ class ViewModel(QObject):
         print("[VIEWMODEL] start_voice_to_text() called", file=sys.stderr)
         self.transcription_text = ""
         self.transcription_changed.emit("")
-        self._set_state(AppStateType.VOICE_TO_TEXT_LOADING)
-        self.transcriber.start()
+        
+        self.transcriber.start_recording()
+        
+        self._set_state(AppStateType.VOICE_TO_TEXT)
+        
+       # self._set_state(AppStateType.VOICE_TO_TEXT_LOADING)
+       # self.transcriber.start()
 
     def stop_voice_to_text(self) -> None:
         import sys
         print("[VIEWMODEL] stop_voice_to_text() called", file=sys.stderr)
-        self.transcriber.stop()
+        #self.transcriber.stop()
+        self.transcriber.stop_recording()
 
     def redo_voice_to_text(self) -> None:
         self.transcriber.kill()

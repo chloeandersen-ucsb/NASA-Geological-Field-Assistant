@@ -218,53 +218,90 @@ class TranscriptionService(ProcessService):
         self._user_stopped = False
         # self.process.stateChanged.connect(self._on_state_changed)
         # self.proc.stateChanged.connect(self._on_state_changed)
-
+        
+    def boot_model(self) -> None:
+        """Starts the Python script and blocks until 'Model loaded' is detected"""
+        if self.proc.state() != QProcess.NotRunning:
+            return
+        
+        from PySide6.QtCore import QEventLoop
+        loop = QEventLoop()
+        self.ready.connect(loop.quit)
+        
+        cmd = [self.python, str(self.script)]
+        print(f"[VOICE-TO-TEXT] Booting model: {' '.join(cmd)}", file=sys.stderr)
+        
+        self.proc.start(cmd[0], cmd[1:])
+        
+        loop.exec()
+        print("VOICE-TO-TEXT] Boot complete. Model is in memory.", file=sys.stderr)
 
     def _on_state_changed(self, state):
         if state == QProcess.Running:
             print("[VOICE-TO-TEXT] Process running → emitting ready", file=sys.stderr)
             self.ready.emit()
     
-    def start(self) -> None:
-        if self.proc.state() != QProcess.NotRunning:
-            self.failed.emit("Transcription already running")
-            return
+   # def start(self) -> None:
+    #    if self.proc.state() != QProcess.NotRunning:
+     #       self.failed.emit("Transcription already running")
+      #      return
         
+#        self._text_parts = []
+ #       self._final_phrases = []
+  #      self._active = True
+   #     self._in_final_dump = False
+    #    self._user_stopped = False
+        
+     #   cmd = [self.python, str(self.script)]
+      #  print(f"[VOICE-TO-TEXT] Starting transcription process: {' '.join(cmd)}", file=sys.stderr)
+       # self.proc.start(cmd[0], cmd[1:])
+        #print(f"[VOICE-TO-TEXT] Process started, PID: {self.proc.processId()}", file=sys.stderr)
+        
+    def start_recording(self) -> None:
+        """Sends the 'start' command to the already-running engine."""
         self._text_parts = []
         self._final_phrases = []
-        self._active = True
         self._in_final_dump = False
         self._user_stopped = False
         
-        cmd = [self.python, str(self.script)]
-        print(f"[VOICE-TO-TEXT] Starting transcription process: {' '.join(cmd)}", file=sys.stderr)
-        self.proc.start(cmd[0], cmd[1:])
-        print(f"[VOICE-TO-TEXT] Process started, PID: {self.proc.processId()}", file=sys.stderr)
-    
-    def stop(self) -> None:
-        print(f"[VOICE-TO-TEXT] stop() called, process state: {self.proc.state()}", file=sys.stderr)
-        print(f"[VOICE-TO-TEXT] Current text parts count: {len(self._text_parts)}", file=sys.stderr)
-        print(f"[VOICE-TO-TEXT] Current accumulated text: '{self.full_text()}'", file=sys.stderr)
-        
-        if self.proc.state() == QProcess.NotRunning:
-            print("[VOICE-TO-TEXT] Process already stopped, emitting completed signal", file=sys.stderr)
-            self.completed.emit(self.full_text())
-            return
-        
-        self._user_stopped = True
-        self._stopping = True  # NEW FLAG
-        
-        pid = int(self.proc.processId())
-        if pid > 0:
-            try:
-                print(f"[VOICE-TO-TEXT] Sending SIGINT to process {pid}", file=sys.stderr)
-                os.kill(pid, signal.SIGINT)
-            except Exception as e:
-                print(f"[VOICE-TO-TEXT] Failed to send SIGINT: {e}, falling back to terminate", file=sys.stderr)
-                self.proc.terminate()
+        if self.proc.state() == QProcess.Running:
+            print("[VOICE-TO-TEXT] Sending START command...", file=sys.stderr)
+            self.proc.write(b"start\n")
         else:
-            print("[VOICE-TO-TEXT] No valid PID, calling terminate()", file=sys.stderr)
-            self.proc.terminate()
+            self.boot_model()
+            self.proc.write(b"start\n")
+    
+#    def stop(self) -> None:
+ #       print(f"[VOICE-TO-TEXT] stop() called, process state: {self.proc.state()}", file=sys.stderr)
+  #      print(f"[VOICE-TO-TEXT] Current text parts count: {len(self._text_parts)}", file=sys.stderr)
+   #     print(f"[VOICE-TO-TEXT] Current accumulated text: '{self.full_text()}'", file=sys.stderr)
+        
+    #    if self.proc.state() == QProcess.NotRunning:
+     #       print("[VOICE-TO-TEXT] Process already stopped, emitting completed signal", file=sys.stderr)
+      #      self.completed.emit(self.full_text())
+       #     return
+        
+        #self._user_stopped = True
+#        self._stopping = True  # NEW FLAG
+        
+ #       pid = int(self.proc.processId())
+  #      if pid > 0:
+   #         try:
+    #            print(f"[VOICE-TO-TEXT] Sending SIGINT to process {pid}", file=sys.stderr)
+     #           os.kill(pid, signal.SIGINT)
+      #      except Exception as e:
+       #         print(f"[VOICE-TO-TEXT] Failed to send SIGINT: {e}, falling back to terminate", file=sys.stderr)
+        #        self.proc.terminate()
+#        else:
+ #           print("[VOICE-TO-TEXT] No valid PID, calling terminate()", file=sys.stderr)
+  #          self.proc.terminate()
+  
+    def stop_recording(self) -> None:
+        """Sends the 'stop' command to the engine."""
+        if self.proc.state() == QProcess.Running:
+            print("[VOICE-TO-TEXT] Sending STOP command...", file=sys.stderr)
+            self._user_stopped = True
+            self.proc.write(b"stop\n")
     
     def full_text(self) -> str:
         return "".join(self._text_parts).strip()
