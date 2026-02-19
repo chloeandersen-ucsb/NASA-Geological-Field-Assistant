@@ -1,8 +1,10 @@
+import time
+app_start_time = time.time() # Capture the exact moment the script starts
+
 import sounddevice as sd
 import nemo.collections.asr as nemo_asr
 import numpy as np
 import queue
-import time
 import sys
 import torch
 import os
@@ -207,6 +209,12 @@ def audio_callback(indata, frames, time_info, status):
 chunk_size = int(SAMPLE_RATE * CHUNK_DURATION)
 window_size = int(SAMPLE_RATE * WINDOW_DURATION)
 rolling_buffer = np.zeros((1, 0), dtype=np.float32)
+
+startup_duration = time.time() - app_start_time
+
+print(f"\n{'='*40}")
+print(f"STARTUP TIME: {startup_duration:.2f} seconds")
+print(f"{'='*40}\n")
 
 print("\nRECORDING... (Ctrl+C to stop)\n")
 stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, device=DEVICE_INDEX, callback=audio_callback)
