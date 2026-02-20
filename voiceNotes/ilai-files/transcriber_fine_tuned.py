@@ -231,14 +231,69 @@ try:
     
         import select
         if select.select([sys.stdin], [], [], 0)[0]:
-            line = sys.stdin.readline().strip().lower()
+            #line = sys.stdin.readline().strip().lower()
+            raw_line = sys.stdin.readline()
+            
+            if not raw_line:
+                break
+                
+            line = raw_line.strip().lower()
+            
             if line == "start":
                 recording_active = True
-                print("RECORDING NOW")
+                print("\nRECORDING NOW... (Ctrl+C to stop)\n")
+                
+                while not audio_q.empty():
+                    audio_q.get()
+                full_audio_buffer = []
+                rolling_buffer = np.zeros((1,0), dtype=np.float32)
+                final_transcript = ""
+                last_printed_was_silence = False
+                
+                stream.start()
+                
                 sys.stdout.flush()
             elif line == "stop":
+                stream.stop()
                 recording_active = False
-                break
+                print("\n\nStopping stream... Preparing final transcript...")
+               # break
+               # ------------------------------------------------------------------
+               # PART 5: FINAL CLEANUP
+               # ------------------------------------------------------------------
+                if full_audio_buffer:
+                    print("Processing full audio buffer for maximum accuracy...")
+                    full_audio = np.concatenate(full_audio_buffer, axis=0).astype(np.float32)
+                    max_val = np.max(np.abs(full_audio))
+                    if max_val > 0: full_audio = full_audio / (max_val + 1e-9)
+                    full_signal = torch.tensor(full_audio, dtype=torch.float32, device=device).unsqueeze(0)
+                    full_len = torch.tensor([full_signal.shape[1]], dtype=torch.int64, device=device)
+
+                    with torch.no_grad():
+                        try:
+                            preds = asr_model.transcribe([full_audio])
+                            final_raw = preds[0].text if hasattr(preds[0], 'text') else str(preds[0])
+                        except:
+                            logits = asr_model.forward(input_signal=full_signal, input_signal_length=full_len)
+                            if isinstance(logits, tuple): logits = logits[0]
+                            pred_tokens = logits.argmax(dim=-1)
+                            transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
+                            final_raw = transcripts[0].text
+
+                    final_clean_text = multimodal_correction(final_raw, CURRENT_VISUAL_CONTEXT).replace("⁇", "")
+    
+                    print("\n" + "="*40)
+                    print("FINAL TRANSCRIPT:")
+                    print("="*40)
+                    print(final_clean_text)
+                    print("="*40)
+                else:
+                    print("No audio recorded.")
+                    
+                print("STREAMING COMPLETE")
+                sys.stdout.flush()
+               
+               
                 
         if recording_active:
             while not audio_q.empty():
@@ -308,35 +363,3 @@ try:
 except KeyboardInterrupt:
     stream.stop()
     print("\n\nStopping stream... Preparing final transcript...")
-
-# ------------------------------------------------------------------
-# PART 5: FINAL CLEANUP
-# ------------------------------------------------------------------
-if full_audio_buffer:
-    print("Processing full audio buffer for maximum accuracy...")
-    full_audio = np.concatenate(full_audio_buffer, axis=0).astype(np.float32)
-    max_val = np.max(np.abs(full_audio))
-    if max_val > 0: full_audio = full_audio / (max_val + 1e-9)
-    full_signal = torch.tensor(full_audio, dtype=torch.float32, device=device).unsqueeze(0)
-    full_len = torch.tensor([full_signal.shape[1]], dtype=torch.int64, device=device)
-
-    with torch.no_grad():
-        try:
-            preds = asr_model.transcribe([full_audio])
-            final_raw = preds[0].text if hasattr(preds[0], 'text') else str(preds[0])
-        except:
-            logits = asr_model.forward(input_signal=full_signal, input_signal_length=full_len)
-            if isinstance(logits, tuple): logits = logits[0]
-            pred_tokens = logits.argmax(dim=-1)
-            transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
-            final_raw = transcripts[0].text
-
-    final_clean_text = multimodal_correction(final_raw, CURRENT_VISUAL_CONTEXT).replace("⁇", "")
-    
-    print("\n" + "="*40)
-    print("FINAL TRANSCRIPT:")
-    print("="*40)
-    print(final_clean_text)
-    print("="*40)
-else:
-    print("No audio recorded.")

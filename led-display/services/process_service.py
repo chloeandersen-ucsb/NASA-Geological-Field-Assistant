@@ -325,9 +325,20 @@ class TranscriptionService(ProcessService):
             
             print(f"[VOICE-TO-TEXT] Processing line: {line[:100]}", file=sys.stderr)
             
-            if "FINAL TRANSCRIPT" in line or "STREAMING COMPLETE" in line:
+            if "FINAL TRANSCRIPT" in line:
                 print("[VOICE-TO-TEXT] Detected final transcript marker", file=sys.stderr)
                 self._in_final_dump = True
+                continue
+                
+            if "STREAMING COMPLETE" in line:
+                print("[VOICE-TO-TEXT] Engine finished processing. Emitting completed.", file=sys.stderr)
+                self._in_final_dump = False
+                
+                final_text = " ".join(self._final_phrases) if self._final_phrases else self.full_text()
+                self.completed.emit(final_text)
+                
+                self._text_parts = []
+                self._final_phrases = []
                 continue
             
             # transcriber_fine_tuned.py startup/shutdown chatter (and mock "Using device:", "RECORDING NOW")
