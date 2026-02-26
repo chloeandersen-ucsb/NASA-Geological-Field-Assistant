@@ -15,6 +15,7 @@ from services.process_service import CameraService, ClassificationService, Trans
 
 class AppStateType(Enum):
     HOME = auto()
+    CAMERA_PREVIEW = auto()
     CLASSIFYING = auto()
     CLASSIFIED = auto()
     VOICE_TO_TEXT_LOADING = auto()
@@ -123,6 +124,8 @@ class ViewModel(QObject):
     def __init__(self, store_dir: str, parent=None):
         super().__init__(parent)
         
+        self._last_captured_path: str | None = None
+        
         try:
             self.store = Store(store_dir)
         except Exception as e:
@@ -172,6 +175,7 @@ class ViewModel(QObject):
         self._classify_timeout.setSingleShot(True)
         self._classify_timeout.timeout.connect(self._on_classify_timeout)
 
+        #self.camera.preview_started.connect(self._on_preview_started)
         self.camera.capture_finished.connect(self._on_photo_captured)
         self.camera.capture_failed.connect(self._fail)
         self.classifier.finished.connect(self._on_classified)
@@ -190,6 +194,8 @@ class ViewModel(QObject):
     def go_home(self) -> None:
         if self.state == AppStateType.VOICE_TO_TEXT:
             self.stop_voice_to_text()
+        if self.state == AppStateType.CAMERA_PREVIEW:
+            self.camera.kill()
         self._set_state(AppStateType.HOME)
 
     def _on_transcriber_ready(self) -> None:
@@ -202,17 +208,40 @@ class ViewModel(QObject):
     def open_trip_load(self) -> None:
         self._publish_trip()
         self._set_state(AppStateType.TRIP_LOAD)
+        
+    def open_camera_preview(self) -> None:
+        self._set_state(AppStateType.CAMERA_PREVIEW)
+        
+    def start_camera_stream(self, x: int, y: int, w: int, h: int) -> None:
+        self.camera.start_preview(x, y, w, h)
+       
+    def trigger_capture(self) -> None:
+        self._set_state(AppStateType.CLASSIFYING)
+        self.camera.trigger_capture()
+        
+    def cancel_camera(self) -> None:
+        self.camera.stop_preview()
+        self.go_home()
 
     def start_classification(self) -> None:
         self.current_classification = None
         self._set_state(AppStateType.CLASSIFYING)
-        self._classify_timeout.start(self.classification_timeout_ms)
+        self.camera.start_preview()
+
+ #   def _on_preview_started(self, _path: str) -> None:
+  #      self._set_state(AppStateType.CAMERA_PREVIEW)
+
+    def capture_photo(self) -> None:
+        """Call when user clicks Capture on the camera preview screen."""
         self.camera.capture()
 
     def reclassify(self) -> None:
         self.start_classification()
 
     def _on_photo_captured(self, image_path: str) -> None:
+        self._last_captured_path = image_path
+        self._set_state(AppStateType.CLASSIFYING)
+        self._classify_timeout.start(self.classification_timeout_ms)
         self.classifier.classify(image_path)
 
     def _on_classified(self, payload: dict) -> None:
@@ -220,7 +249,7 @@ class ViewModel(QObject):
         result = ClassificationResult(
             label=str(payload.get("label", "UNKNOWN")),
             confidence=float(payload.get("confidence", 0.0)),
-            image_path=payload.get("image_path"),
+            image_path=self._last_captured_path, # <--- Use the stored path
             estimated_volume=payload.get("estimated_volume"),
             estimated_weight=payload.get("estimated_weight"),
             raw=payload,
