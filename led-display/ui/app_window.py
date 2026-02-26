@@ -338,6 +338,45 @@ class TripLoadPage(QWidget):
         layout.addWidget(self.btn_back)
         
         self._voice_notes_data = []
+        
+class RockDetailDialog(QDialog):
+    def __init__(self, entry, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Rock Sample Detail")
+        self.setMinimumWidth(500)
+        self.setMinimumHeight(600)
+        
+        layout = QVBoxLayout(self)
+        
+        # 1. Image View
+        lbl_img = QLabel()
+        lbl_img.setAlignment(Qt.AlignCenter)
+        if entry.result.image_path and os.path.exists(entry.result.image_path):
+            pixmap = QPixmap(entry.result.image_path)
+            lbl_img.setPixmap(pixmap.scaled(480, 360, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            lbl_img.setText("Image File Not Found")
+        layout.addWidget(lbl_img)
+
+        # 2. Metadata (Date/Time)
+        dt = datetime.datetime.fromtimestamp(entry.ts)
+        lbl_time = QLabel(f"Captured: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
+        lbl_time.setStyleSheet("font-weight: bold; font-size: 16px; margin-top: 10px;")
+        layout.addWidget(lbl_time)
+
+        # 3. Classification Results
+        res = entry.result
+        lbl_info = QLabel(
+            f"Primary: {res.label.upper()} ({int(res.confidence * 100)}%)\n"
+            f"Volume: {res.estimated_volume or 'N/A'} | Weight: {res.estimated_weight or 'N/A'}"
+        )
+        lbl_info.setStyleSheet("font-size: 15px; color: #344f41; padding: 5px; border: 1px solid #cbd2c5;")
+        layout.addWidget(lbl_info)
+
+        # 4. Close Button
+        btns = QDialogButtonBox(QDialogButtonBox.Ok)
+        btns.accepted.connect(self.accept)
+        layout.addWidget(btns)
 
 
 class AppWindow(QMainWindow):
@@ -410,6 +449,14 @@ class AppWindow(QMainWindow):
         
         shortcut_quit = QShortcut(QKeySequence("Ctrl+C"), self)
         shortcut_quit.activated.connect(self._quit_application)
+        
+    def _on_rock_clicked(self, item) -> None:
+        index = self.trip.list.row(item)
+        summary = self.vm.store.list_rocks() # Get the full data list
+        if 0 <= index < len(summary):
+            entry = summary[index]
+            dialog = RockDetailDialog(entry, self)
+            dialog.exec()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key_F11:
@@ -464,6 +511,7 @@ class AppWindow(QMainWindow):
 
         self.trip.btn_back.clicked.connect(self.vm.go_home)
         self.trip.notes_list.itemClicked.connect(self._on_voice_note_clicked)
+        self.trip.list.itemClicked.connect(self._on_rock_clicked)
 
     def _wire_vm(self) -> None:
         self.vm.state_changed.connect(self._show_state)
