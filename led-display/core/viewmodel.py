@@ -11,10 +11,12 @@ import uuid
 from PySide6.QtCore import QObject, Signal, QTimer
 
 from services.process_service import CameraService, ClassificationService, TranscriptionService
+#from voiceNotes.ilai_files import transcriber_fine_tuned
 
 
 class AppStateType(Enum):
     HOME = auto()
+    CAMERA_PREVIEW = auto()
     CLASSIFYING = auto()
     CLASSIFIED = auto()
     VOICE_TO_TEXT_LOADING = auto()
@@ -117,11 +119,14 @@ class ViewModel(QObject):
     state_changed = Signal(object)
     classification_changed = Signal(object)
     transcription_changed = Signal(str)
+    recording_status_changed = Signal(bool)
     trip_changed = Signal(object)
     error = Signal(str)
 
     def __init__(self, store_dir: str, parent=None):
         super().__init__(parent)
+        
+        self._last_captured_path: str | None = None
         
         try:
             self.store = Store(store_dir)
@@ -158,6 +163,10 @@ class ViewModel(QObject):
             import traceback
             traceback.print_exc(file=sys.stderr)
             raise
+            
+        self.transcriber.boot_model()
+        
+        self.state = AppStateType.HOME
         
         self.state = AppStateType.HOME
         self.current_classification: ClassificationResult | None = None
@@ -168,6 +177,7 @@ class ViewModel(QObject):
         self._classify_timeout.setSingleShot(True)
         self._classify_timeout.timeout.connect(self._on_classify_timeout)
 
+        #self.camera.preview_started.connect(self._on_preview_started)
         self.camera.capture_finished.connect(self._on_photo_captured)
         self.camera.capture_failed.connect(self._fail)
         self.classifier.finished.connect(self._on_classified)
@@ -184,8 +194,10 @@ class ViewModel(QObject):
         self.state_changed.emit(new_state)
 
     def go_home(self) -> None:
-        if self.state == AppStateType.VOICE_TO_TEXT:
-            self.stop_voice_to_text()
+        # if self.state == AppStateType.VOICE_TO_TEXT:
+        #     self.stop_voice_to_text()
+        if self.state == AppStateType.CAMERA_PREVIEW:
+            self.camera.kill()
         self._set_state(AppStateType.HOME)
 
     def _on_transcriber_ready(self) -> None:
@@ -194,21 +206,43 @@ class ViewModel(QObject):
         if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
             self._set_state(AppStateType.VOICE_TO_TEXT)
 
-
     def open_trip_load(self) -> None:
         self._publish_trip()
         self._set_state(AppStateType.TRIP_LOAD)
+        
+    def open_camera_preview(self) -> None:
+        self._set_state(AppStateType.CAMERA_PREVIEW)
+        
+    def start_camera_stream(self, x: int, y: int, w: int, h: int) -> None:
+        self.camera.start_preview(x, y, w, h)
+       
+    def trigger_capture(self) -> None:
+        self._set_state(AppStateType.CLASSIFYING)
+        self.camera.trigger_capture()
+        
+    def cancel_camera(self) -> None:
+        self.camera.stop_preview()
+        self.go_home()
 
     def start_classification(self) -> None:
         self.current_classification = None
         self._set_state(AppStateType.CLASSIFYING)
-        self._classify_timeout.start(self.classification_timeout_ms)
+        self.camera.start_preview()
+
+ #   def _on_preview_started(self, _path: str) -> None:
+  #      self._set_state(AppStateType.CAMERA_PREVIEW)
+
+    def capture_photo(self) -> None:
+        """Call when user clicks Capture on the camera preview screen."""
         self.camera.capture()
 
     def reclassify(self) -> None:
         self.start_classification()
 
     def _on_photo_captured(self, image_path: str) -> None:
+        self._last_captured_path = image_path
+        self._set_state(AppStateType.CLASSIFYING)
+        self._classify_timeout.start(self.classification_timeout_ms)
         self.classifier.classify(image_path)
 
     def _on_classified(self, payload: dict) -> None:
@@ -216,7 +250,7 @@ class ViewModel(QObject):
         result = ClassificationResult(
             label=str(payload.get("label", "UNKNOWN")),
             confidence=float(payload.get("confidence", 0.0)),
-            image_path=payload.get("image_path"),
+            image_path=self._last_captured_path, # <--- Use the stored path
             estimated_volume=payload.get("estimated_volume"),
             estimated_weight=payload.get("estimated_weight"),
             raw=payload,
@@ -228,6 +262,16 @@ class ViewModel(QObject):
     def save_classification(self) -> None:
         if self.current_classification:
             self.store.save_rock(self.current_classification)
+            
+            label = self.current_classification.label
+            #Yestranscriber_fine_tuned.update_visual_context(label)
+            
+            context_file = "/data/sage/visual_context.txt"
+            try:
+                with open(context_file, "w") as f:
+                    f.write(label)
+            except Exception as e:
+                print(f"Warning: Could not save context bridge: {e}")
         self.go_home()
 
     def delete_classification(self) -> None:
@@ -239,17 +283,48 @@ class ViewModel(QObject):
         self._fail("Classification timeout (20s)")
 
     def start_voice_to_text(self) -> None:
+        # import sys
+        # print("[VIEWMODEL] start_voice_to_text() called", file=sys.stderr)
+        # self.transcription_text = ""
+        # self.transcription_changed.emit("")
+        
+        # self.transcriber.start_recording()
+        
+        # self._set_state(AppStateType.VOICE_TO_TEXT)
         import sys
-        print("[VIEWMODEL] start_voice_to_text() called", file=sys.stderr)
-        self.transcription_text = ""
+        
+        # Check if we are already in a recording session.
+        # We can check the internal state of the transcriber or simply check
+        # if transcription_text has content while a session is 'active'
+        is_already_active = False
+        try:
+            # Attempt to check the actual service state
+            is_already_active = self.transcriber.is_recording 
+        except AttributeError:
+            # Fallback: if text exists and we haven't hit 'Save', treat as active
+            is_already_active = len(self.transcription_text) > 0
+
+        if is_already_active:
+            print("[VIEWMODEL] Resuming active recording session", file=sys.stderr)
+            self._set_state(AppStateType.VOICE_TO_TEXT)
+            # Re-emit the current text so the UI updates immediately
+            self.transcription_changed.emit(self.transcription_text)
+            return
+
+        print("[VIEWMODEL] Starting BRAND NEW recording session", file=sys.stderr)
+        self.transcription_text = "" 
         self.transcription_changed.emit("")
-        self._set_state(AppStateType.VOICE_TO_TEXT_LOADING)
-        self.transcriber.start()
+        
+        self.transcriber.start_recording()
+        self.recording_status_changed.emit(True) 
+        self._set_state(AppStateType.VOICE_TO_TEXT)
+        
 
     def stop_voice_to_text(self) -> None:
         import sys
         print("[VIEWMODEL] stop_voice_to_text() called", file=sys.stderr)
-        self.transcriber.stop()
+        self.transcriber.stop_recording()
+        self.recording_status_changed.emit(False)
 
     def redo_voice_to_text(self) -> None:
         self.transcriber.kill()
@@ -259,11 +334,18 @@ class ViewModel(QObject):
         text = self.transcription_text.strip()
         if text:
             self.store.save_voice_note(text, cleaned=text)
-        self.transcription_text = ""
+
+        self.stop_voice_to_text()
+
+        self.transcription_changed.emit("")
+        self.recording_status_changed.emit(False)
         self.go_home()
 
     def delete_transcription(self) -> None:
+        self.stop_voice_to_text()
         self.transcription_text = ""
+        self.transcription_changed.emit("")
+        self.recording_status_changed.emit(False)
         self.go_home()
 
     def _on_transcription_token(self, chunk: str) -> None:
@@ -306,3 +388,4 @@ class ViewModel(QObject):
         self._classify_timeout.stop()
         self.error.emit(message)
         self.go_home()
+
