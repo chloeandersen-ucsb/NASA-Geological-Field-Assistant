@@ -1,0 +1,67 @@
+{
+  "inputs": {
+    "top_image": "test_images/rock_centered_1.jpg",
+    "side_image": "test_images/rock_centered_2.jpg",
+    "reference_real_size_cm": 10.0,
+    "density_min_g_cm3": 2.5,
+    "density_max_g_cm3": 3.0
+  },
+  "scale": {
+    "mode": "auto_stereo",
+    "tag_px_top": 1280.9126382142304,
+    "tag_px_side": 1228.1112039354898,
+    "tag_id_top": 0,
+    "tag_id_side": 0,
+    "tag_corners_top_px": [
+      [
+        1930.9486083984375,
+        236.2913055419922
+      ],
+      [
+        1938.5137939453125,
+        1503.377197265625
+      ],
+      [
+        667.5537109375,
+        1504.9556884765625
+      ],
+      [
+        649.6700439453125,
+        201.25491333007812
+      ]
+    ],
+    "tag_corners_side_px": [
+      [
+        1906.946044921875,
+        393.1410217285156
+      ],
+      [
+        1900.1458740234375,
+        1610.58154296875
+      ],
+      [
+        677.5880126953125,
+        1602.6197509765625
+      ],
+      [
+        676.482177734375,
+        361.0997314453125
+      ]
+    ],
+    "rectification_applied": "top_view_homography",
+    "segmentation_method": "GrabCut"
+  },
+  "dimensions_cm": {
+    "L": 3.5161246055636255,
+    "W": 1.6891184810704036,
+    "H": 2.1252147131597194
+  },
+  "volume_cm3": 6.6088486667538735,
+  "mass_range": {
+    "min_g": 16.522121666884683,
+    "max_g": 19.826546000261622,
+    "min_kg": 0.016522121666884684,
+    "max_kg": 0.01982654600026162
+  },
+  "model": "ellipsoid"
+}
