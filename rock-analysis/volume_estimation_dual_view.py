@@ -8,12 +8,22 @@ A fully isolated module for estimating object volume using two orthogonal views
 from dataclasses import dataclass
 import json
 from typing import Optional, Tuple
+import math
 
 import cv2
 import numpy as np
 
-# Import only the existing functions (no modification)
-from measure_rock import detect_apriltag_side_px, segment_object
+# SAM-related imports for segmentation
+try:
+    from segment_anything import SamPredictor, SamAutomaticMaskGenerator, sam_model_registry
+    SAM_AVAILABLE = True
+except ImportError:
+    SAM_AVAILABLE = False
+
+# Global SAM model and predictors (lazy-loaded)
+_sam_model = None
+_sam_predictor = None
+_sam_mask_generator = None
 
 
 @dataclass
@@ -34,6 +44,359 @@ class DualViewVolumeResult:
     volume_method: str = "adaptive"  # Method used for volume calculation
     length_cm: Optional[float] = None  # Extracted from top view
     width_cm: Optional[float] = None   # Extracted from top view
+
+
+# ============================================================================
+# APRIL TAG DETECTION (Moved from measure_rock.py)
+# ============================================================================
+
+def detect_apriltag_side_px(image, tag_dict_name="DICT_APRILTAG_36h11"):
+    """Detect an AprilTag and return the average side length in pixels.
+
+    We try a few preprocessing variants to make detection more robust to
+    lighting/contrast. If no tag is found, a RuntimeError is raised.
+    """
+    if not hasattr(cv2, "aruco"):
+        raise RuntimeError("OpenCV aruco module not available; install opencv-contrib-python")
+
+    aruco = cv2.aruco
+    dictionary = getattr(aruco, "getPredefinedDictionary")(getattr(aruco, tag_dict_name))
+
+    # Build a list of grayscale candidates (raw, CLAHE, slightly blurred)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    candidates = [gray]
+    try:
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        candidates.append(clahe.apply(gray))
+    except Exception:
+        pass
+    candidates.append(cv2.GaussianBlur(gray, (5, 5), 0))
+
+    # If the image is very large, also test a downscaled copy to reduce noise
+    h, w = gray.shape[:2]
+    if max(h, w) > 2000:
+        scale = 1600.0 / float(max(h, w))
+        small = cv2.resize(gray, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        candidates.append(small)
+
+    def _make_params_new():
+        p = aruco.DetectorParameters()
+        if hasattr(aruco, "CORNER_REFINE_SUBPIX"):
+            p.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
+        p.adaptiveThreshWinSizeMin = 3
+        p.adaptiveThreshWinSizeMax = 23
+        p.adaptiveThreshWinSizeStep = 10
+        return p
+
+    def _make_params_legacy():
+        p = aruco.DetectorParameters_create()
+        if hasattr(aruco, "CORNER_REFINE_SUBPIX"):
+            try:
+                p.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
+            except Exception:
+                pass
+        try:
+            p.adaptiveThreshWinSizeMin = 3
+            p.adaptiveThreshWinSizeMax = 23
+            p.adaptiveThreshWinSizeStep = 10
+        except Exception:
+            pass
+        return p
+
+    corners = ids = None
+
+    for idx, cand in enumerate(candidates):
+        try:
+            parameters = _make_params_new()
+            detector = aruco.ArucoDetector(dictionary, parameters)
+            corners, ids, _ = detector.detectMarkers(cand)
+        except AttributeError:
+            parameters = _make_params_legacy()
+            corners, ids, _ = aruco.detectMarkers(cand, dictionary, parameters=parameters)
+
+        if corners is not None and len(corners) > 0:
+            break
+
+    if corners is None or len(corners) == 0:
+        raise RuntimeError("No AprilTag (tag36h11) detected; ensure the tag is fully in frame, sharp, and high contrast")
+
+    # Use the largest detected tag to stay stable when multiple are visible
+    if len(corners) > 1:
+        areas = [cv2.contourArea(c.astype(float)) for c in corners]
+        best_idx = int(max(range(len(areas)), key=lambda i: areas[i]))
+    else:
+        best_idx = 0
+
+    pts = corners[best_idx].reshape(-1, 2)
+
+    def _distance(p1, p2):
+        dx = float(p1[0] - p2[0])
+        dy = float(p1[1] - p2[1])
+        return math.sqrt(dx * dx + dy * dy)
+
+    side_lengths = [_distance(pts[i], pts[(i + 1) % 4]) for i in range(4)]
+    avg_side = sum(side_lengths) / 4.0
+
+    detected_id = int(ids[best_idx][0]) if ids is not None and len(ids) > best_idx else None
+
+    return avg_side, pts.tolist(), detected_id
+
+
+def _get_sam_model():
+    """Lazy-load SAM model on first use."""
+    global _sam_model
+    if _sam_model is None:
+        if not SAM_AVAILABLE:
+            raise RuntimeError("SAM not available. Install: pip install segment-anything torch torchvision")
+
+        import os
+        model_path = os.path.expanduser("~/.sam_models/sam_vit_b.pth")
+        if not os.path.exists(model_path):
+            raise RuntimeError(f"SAM model not found at {model_path}. Run: python download_sam.py")
+
+        print("Loading SAM model...")
+        _sam_model = sam_model_registry["vit_b"](checkpoint=model_path)
+        _sam_model.to("cpu")  # Use CPU
+    return _sam_model
+
+
+def _get_sam_predictor():
+    """Create a SAM predictor using the shared model."""
+    global _sam_predictor
+    if _sam_predictor is None:
+        _sam_predictor = SamPredictor(_get_sam_model())
+    return _sam_predictor
+
+
+def _get_sam_mask_generator():
+    """Create a SAM automatic mask generator using the shared model."""
+    global _sam_mask_generator
+    if _sam_mask_generator is None:
+        _sam_mask_generator = SamAutomaticMaskGenerator(
+            _get_sam_model(),
+            points_per_side=8,
+            pred_iou_thresh=0.86,
+            stability_score_thresh=0.92,
+            crop_n_layers=0,
+            crop_n_points_downscale_factor=2,
+            min_mask_region_area=200,
+        )
+    return _sam_mask_generator
+
+
+def _keep_largest_cc_near_center(mask, cx, cy):
+    """
+    Keep only the connected component that contains or is closest to (cx, cy).
+    Removes disconnected fragments from the SAM mask.
+    
+    Args:
+        mask: Binary mask (H, W) with values 0/1
+        cx, cy: Center coordinates to anchor selection
+    Returns:
+        Cleaned mask with only the main object CC
+    """
+    if mask is None or mask.sum() == 0:
+        return mask
+    
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+        mask.astype(np.uint8), connectivity=8
+    )
+    
+    if num_labels <= 2:
+        # Only background + 1 component — already clean
+        return mask
+    
+    # First: check if center pixel belongs to a CC
+    if 0 <= cy < mask.shape[0] and 0 <= cx < mask.shape[1]:
+        center_label = labels[cy, cx]
+        if center_label > 0:
+            # The center pixel is on a foreground CC — keep that one
+            result = (labels == center_label).astype(np.uint8)
+            dropped = num_labels - 2  # minus background and kept
+            if dropped > 0:
+                print(f"    CC cleanup: kept CC at center, dropped {dropped} disconnected region(s)")
+            return result
+    
+    # Fallback: pick CC closest to center with area > 1% of largest CC
+    largest_area = max(stats[lid, cv2.CC_STAT_AREA] for lid in range(1, num_labels))
+    min_area = max(100, int(largest_area * 0.01))
+    
+    best_label = -1
+    best_dist = float('inf')
+    for lid in range(1, num_labels):
+        area = stats[lid, cv2.CC_STAT_AREA]
+        if area < min_area:
+            continue
+        ccx, ccy = centroids[lid]
+        dist = np.sqrt((ccx - cx)**2 + (ccy - cy)**2)
+        if dist < best_dist:
+            best_dist = dist
+            best_label = lid
+    
+    if best_label > 0:
+        result = (labels == best_label).astype(np.uint8)
+        dropped = sum(1 for lid in range(1, num_labels) if lid != best_label)
+        if dropped > 0:
+            print(f"    CC cleanup: kept CC {best_label} (dist={best_dist:.0f}), dropped {dropped} region(s)")
+        return result
+    
+    return mask
+
+
+def _exclude_tag_from_mask(mask, tag_corners, margin_px=80):
+    """
+    Zero out the AprilTag region (with a fixed pixel margin) from any mask.
+    Uses a dilated convex hull of the tag corners rather than a large circle,
+    so the exclusion zone stays tight around the actual tag.
+
+    Args:
+        mask: Binary mask (H, W) with values 0/1
+        tag_corners: 4x2 array of tag corner coordinates, or None
+        margin_px: Fixed pixel margin to expand beyond the tag corners
+    Returns:
+        Mask with tag region zeroed out
+    """
+    if tag_corners is None or len(tag_corners) == 0:
+        return mask
+
+    h, w = mask.shape[:2]
+    tag_pts = np.array(tag_corners, dtype=np.float32)
+    tag_center = tag_pts.mean(axis=0)
+
+    # Expand each corner outward from center by margin_px
+    expanded = []
+    for pt in tag_pts:
+        direction = pt - tag_center
+        length = np.linalg.norm(direction)
+        if length > 0:
+            direction = direction / length
+        expanded.append(pt + direction * margin_px)
+    expanded = np.array(expanded, dtype=np.int32)
+
+    mask_out = mask.copy()
+    cv2.fillConvexPoly(mask_out, expanded, 0)
+
+    return mask_out
+
+
+def segment_object(image, tag_corners=None):
+    """
+    Segment the object using center-pixel SAM prompt.
+    
+    Strategy:
+    1. User places the object at the center of the frame
+    2. Downscale image to ~1024px for SAM efficiency
+    3. Prompt SAM with center point (Method A) and center point+box (Method C)
+    4. Pick the best non-empty mask with reasonable size
+    5. Exclude the AprilTag region
+    6. Keep only the largest connected component near the center
+       to remove disconnected fragments
+    
+    Args:
+        image: BGR image (from cv2.imread)
+        tag_corners: Optional 4x2 array of AprilTag corners (used to exclude tag)
+    
+    Returns:
+        Binary mask where object pixels == 1 (foreground), background == 0
+    """
+    if image is None or image.size == 0:
+        raise ValueError("Invalid image")
+    
+    h, w = image.shape[:2]
+    cx, cy = w // 2, h // 2
+
+    # Downscale BGR first, then convert to RGB (matches SAM's expected input)
+    max_sam_dim = 1024
+    scale = min(1.0, float(max_sam_dim) / float(max(h, w)))
+    sam_w = int(w * scale)
+    sam_h = int(h * scale)
+    if scale < 1.0:
+        image_bgr_sam = cv2.resize(image, (sam_w, sam_h))
+    else:
+        sam_h, sam_w = h, w
+        image_bgr_sam = image
+    image_rgb_sam = cv2.cvtColor(image_bgr_sam, cv2.COLOR_BGR2RGB)
+
+    scx, scy = sam_w // 2, sam_h // 2
+    print(f"  Center-pixel SAM: image {w}x{h}, SAM input {sam_w}x{sam_h}, center=({scx},{scy})")
+
+    predictor = _get_sam_predictor()
+    predictor.set_image(image_rgb_sam)
+
+    # Collect candidate masks from multiple prompt strategies
+    all_candidates = []  # (mask_small, score, method_label)
+
+    # Method A: Center point only
+    masks_a, scores_a, _ = predictor.predict(
+        point_coords=np.array([[scx, scy]]),
+        point_labels=np.array([1]),
+        multimask_output=True,
+    )
+    for i, (m, s) in enumerate(zip(masks_a, scores_a)):
+        all_candidates.append((m, float(s), f"A:pt#{i}"))
+
+    # Method C: Center point + center box (50% of image)
+    bx1, by1 = sam_w // 4, sam_h // 4
+    bx2, by2 = 3 * sam_w // 4, 3 * sam_h // 4
+    masks_c, scores_c, _ = predictor.predict(
+        point_coords=np.array([[scx, scy]]),
+        point_labels=np.array([1]),
+        box=np.array([bx1, by1, bx2, by2]),
+        multimask_output=True,
+    )
+    for i, (m, s) in enumerate(zip(masks_c, scores_c)):
+        all_candidates.append((m, float(s), f"C:pt+box#{i}"))
+
+    # Evaluate all candidates: upscale, exclude tag, keep reasonable size
+    total_px = h * w
+    evaluated = []
+    for mask_small, score, label in all_candidates:
+        m_up = cv2.resize(mask_small.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST)
+        m_clean = _exclude_tag_from_mask(m_up, tag_corners)
+        px = int(m_clean.sum())
+        pct = px / total_px * 100
+        print(f"    {label}: {px:>10,}px ({pct:5.1f}%), score={score:.3f}")
+        evaluated.append((m_clean, px, score, label))
+
+    # Filter: must have pixels, size between 0.1% and 30% of image
+    min_pct, max_pct = 0.1, 30.0
+    valid = [(mc, px, s, lbl) for mc, px, s, lbl in evaluated
+             if px > 0 and (px / total_px * 100) >= min_pct and (px / total_px * 100) <= max_pct]
+
+    if valid:
+        # Among valid masks, pick highest score
+        valid.sort(key=lambda x: x[2], reverse=True)
+        best_mask, best_px, best_score, best_label = valid[0]
+        print(f"    -> Selected {best_label} (score={best_score:.3f}, {best_px:,}px)")
+    elif any(px > 0 for _, px, _, _ in evaluated):
+        # No mask in size range but some have pixels — pick smallest non-empty
+        non_empty = [(mc, px, s, lbl) for mc, px, s, lbl in evaluated if px > 0]
+        non_empty.sort(key=lambda x: x[1])
+        best_mask, best_px, best_score, best_label = non_empty[0]
+        print(f"    -> Fallback: {best_label} (smallest non-empty, {best_px:,}px)")
+    else:
+        # All empty — try SAM auto mask generator
+        print("  [WARN] All center-pixel SAM masks empty, falling back to SAM auto")
+        generator = _get_sam_mask_generator()
+        auto_masks = generator.generate(image_rgb_sam)
+        if auto_masks:
+            # Pick mask closest to center
+            best_auto = min(auto_masks, key=lambda m: np.sqrt(
+                (m['bbox'][0] + m['bbox'][2] / 2 - scx)**2 +
+                (m['bbox'][1] + m['bbox'][3] / 2 - scy)**2
+            ))
+            fallback = best_auto['segmentation'].astype(np.uint8)
+            fallback = cv2.resize(fallback, (w, h), interpolation=cv2.INTER_NEAREST)
+            fallback = _exclude_tag_from_mask(fallback, tag_corners)
+            return _keep_largest_cc_near_center(fallback, cx, cy)
+        return np.zeros((h, w), dtype=np.uint8)
+
+    # Keep only the largest connected component near the center
+    mask_out = _keep_largest_cc_near_center(best_mask, cx, cy)
+
+    final_px = int(mask_out.sum())
+    print(f"    -> After CC cleanup: {final_px:,}px ({final_px / total_px * 100:.1f}%)")
+    return mask_out
 
 
 # ============================================================================

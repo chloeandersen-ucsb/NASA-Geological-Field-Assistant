@@ -1,65 +1,68 @@
-# Setup Guide
+# Rock Volume Measurement – Setup & Usage
 
-Get started with Rock Estimator in 3 steps.
+## Prerequisites
 
-## Step 1: Install Dependencies
+Install required Python packages:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Step 2: Download SAM Model (Required)
+## Required: Download SAM Model
 
 ```bash
 python download_sam.py
 ```
 
-This downloads the Segment Anything model (~375 MB) to `~/.sam_models/`.
+Downloads the Segment Anything model (~375 MB) to `~/.sam_models/`. This is required for automatic object segmentation.
 
-**Note**: This is required for automatic object segmentation. If not installed, `measure_rock.py` will remind you.
+## Optional: Camera Calibration
 
-## Step 3: (Optional) Calibrate Camera
-
-For best accuracy, calibrate your camera using a printed ChArUco board:
+For best accuracy, calibrate your camera using a ChArUco board:
 
 ```bash
-# Generate board (printed calibration target)
+# Generate printable board
 python charuco_calibration.py --board_only
 
-# Capture 20+ images of the board at different angles/distances
-# Print board a 100% scale, ensure board is correct size
-# Then run calibration
-python charuco_calibration.py --images <path_to_calib_images>
+# Capture 20+ calibration images, then run:
+python charuco_calibration.py --images <images_directory>
 ```
 
-This creates `camera_intrinsics.json` for lens correction.
-
-If you skip this, the pipeline uses AprilTag markers for scaling only (still works fine).
+Creates `camera_intrinsics.json` for lens distortion correction. Without this, the tool uses AprilTag markers for scaling (still accurate).
 
 ---
 
 ## Usage: Measure an Object
 
-Once setup is complete:
+Measure an object using two orthogonal images (top and side view):
 
 ```bash
-# Automatic measurement (top + side view)
-python measure_rock.py --mode auto --top top_image.jpg --side side_image.jpg
+python measure_rock.py --top top_view.jpg --side side_view.jpg
 ```
 
-**Output**: `outputs/measurement.json` with:
-- Dimensions (L × W × H in cm)
+**Required Arguments:**
+- `--top`: Path to top-down image
+- `--side`: Path to side-view image
+
+**Optional Arguments:**
+- `--ref_cm`: AprilTag size in cm (default: 10.0 for tag36h11)
+- `--dens_min`: Min density in g/cm³ (default: 2.5)
+- `--dens_max`: Max density in g/cm³ (default: 3.0)
+- `--out`: Output JSON path (default: `outputs/TIMESTAMP-measurement.json`)
+
+**Output**: JSON file containing:
+- Dimensions: L × W × H (cm)
 - Volume (cm³)
-- Mass range (g)
-- All measurement details
+- Mass range (g, kg)
+- Shape analysis & segmentation details
 
 ---
 
-## Quick Test
-
-Test the pipeline on default test images:
+## Test Run
 
 ```bash
-python measure_rock.py --mode auto --top rock_centered_1.jpg --side rock_centered_2.jpg
+python measure_rock.py --top test_images/rock_centered_1.jpg --side test_images/rock_centered_2.jpg
 ```
+
+Expected output: Volume ~8.7 cm³, mass range 0.022–0.026 kg.
 
