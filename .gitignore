@@ -25,6 +25,9 @@ Thumbs.db
 # Project specific
 sage_data/
 *.log
+rock-analysis/outputs/
+microphone-testing/outputs/
+ML-classifications/outputs/
 
 # Distribution / packaging
 dist/
