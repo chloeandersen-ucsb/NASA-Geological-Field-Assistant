@@ -194,8 +194,9 @@ class ViewModel(QObject):
         self.state_changed.emit(new_state)
 
     def go_home(self) -> None:
-        # if self.state == AppStateType.VOICE_TO_TEXT:
-        #     self.stop_voice_to_text()
+        if self.state == AppStateType.VOICE_TO_TEXT:
+            self.stop_voice_to_text()
+        
         if self.state == AppStateType.CAMERA_PREVIEW:
             self.camera.kill()
         self._set_state(AppStateType.HOME)
@@ -318,7 +319,8 @@ class ViewModel(QObject):
         self.transcriber.start_recording()
         self.recording_status_changed.emit(True) 
         self._set_state(AppStateType.VOICE_TO_TEXT)
-        
+        # self._set_state(AppStateType.VOICE_TO_TEXT_LOADING)
+        # self.transcriber.start()
 
     def stop_voice_to_text(self) -> None:
         import sys

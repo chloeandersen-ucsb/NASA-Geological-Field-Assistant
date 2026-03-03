@@ -7,6 +7,12 @@ import signal
 import sys
 from pathlib import Path
 
+import cv2
+import datetime
+import uuid
+from PySide6.QtCore import QThread
+from PySide6.QtGui import QImage
+
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -35,39 +41,85 @@ class ProcessService(QObject):
         self.failed.emit("Process error")
 
 
-class CameraService(ProcessService):
+class CameraService(QThread):
+    frame_ready = Signal(QImage)
     capture_finished = Signal(str)
     capture_failed = Signal(str)
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.capture_failed.connect(self.failed.emit)
+        self._run_flag = False
+        self._is_capturing = False
         
-        script_path = connector.get_camera_script_path()
-        python_exe = connector.get_python_executable()
+        # We will save images exactly where your teammate wanted them
+        self.save_dir = project_root / "ML-classifications" / "camera-pipeline" / "images"
         
-        self.cmd = [python_exe, str(script_path)]
-    
-    def capture(self) -> None:
-        self.proc.start(self.cmd[0], self.cmd[1:])
-    
-    def _on_finished(self, exit_code: int, _status) -> None:
-        out = bytes(self.proc.readAllStandardOutput()).decode("utf-8", errors="ignore").strip()
-        err = bytes(self.proc.readAllStandardError()).decode("utf-8", errors="ignore").strip()
+    def start_preview(self, x=0, y=0, w=0, h=0) -> None:
+        if not self.isRunning():
+            self._run_flag = True
+            self._is_capturing = False
+            self.start()
+            
+    def trigger_capture(self) -> None:
+        if self.isRunning():
+            print("[CAMERA] Capture triggered via OpenCV...", file=sys.stderr)
+            self._is_capturing = True
+            
+    def stop_preview(self) -> None:
+        self._run_flag = False
+        self.wait()
         
-        if exit_code != 0:
-            self.capture_failed.emit(err or f"Camera script failed (exit {exit_code})")
+    def kill(self) -> None:
+        self.stop_preview()
+        
+    def run(self) -> None:
+        # The Jetson CSI hardware pipeline
+        pipeline = (
+            "nvarguscamerasrc ! "
+            "video/x-raw(memory:NVMM), width=1920, height=1080, format=(string)NV12, framerate=(fraction)30/1 ! "
+            "nvvidconv ! video/x-raw, format=(string)BGRx ! "
+            "videoconvert ! video/x-raw, format=(string)BGR ! appsink"
+        )
+        cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+        
+        if not cap.isOpened():
+            self.capture_failed.emit("Failed to open CSI camera via OpenCV")
             return
-        
-        image_path = out.splitlines()[-1].strip() if out else ""
-        if not image_path:
-            self.capture_failed.emit("Camera script did not output image path")
-            return
-        
-        self.capture_finished.emit(image_path)
-    
-    def _on_error(self, _err) -> None:
-        self.capture_failed.emit("Camera process error")
+            
+        print("[CAMERA] Native Preview started", file=sys.stderr)
+        while self._run_flag:
+            ret, frame = cap.read()
+            if not ret:
+                continue
+                
+            if self._is_capturing:
+                self._is_capturing = False
+                self._run_flag = False
+                
+                today_dir = self.save_dir / datetime.datetime.now().strftime("%Y%m%d")
+                today_dir.mkdir(parents=True, exist_ok=True)
+                
+                filename = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4()}.jpg"
+                filepath = str(today_dir / filename)
+                
+                cv2.imwrite(filepath, frame)
+                print(f"[CAMERA] Image saved to {filepath}", file=sys.stderr)
+                
+                cap.release()
+                self.capture_finished.emit(filepath)
+                return
+                
+            # Convert OpenCV frame to PySide6 QImage
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = frame_rgb.shape
+            bytes_per_line = ch * w
+            
+            # Create the UI image and copy it so memory is managed safely
+            qt_img = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888).copy()
+            self.frame_ready.emit(qt_img)
+            
+        cap.release()
+        print("[CAMERA] Native Preview stopped", file=sys.stderr)
 
 
 class ClassificationService(ProcessService):
@@ -218,53 +270,90 @@ class TranscriptionService(ProcessService):
         self._user_stopped = False
         # self.process.stateChanged.connect(self._on_state_changed)
         # self.proc.stateChanged.connect(self._on_state_changed)
-
+        
+    def boot_model(self) -> None:
+        """Starts the Python script and blocks until 'Model loaded' is detected"""
+        if self.proc.state() != QProcess.NotRunning:
+            return
+        
+        from PySide6.QtCore import QEventLoop
+        loop = QEventLoop()
+        self.ready.connect(loop.quit)
+        
+        cmd = [self.python, str(self.script)]
+        print(f"[VOICE-TO-TEXT] Booting model: {' '.join(cmd)}", file=sys.stderr)
+        
+        self.proc.start(cmd[0], cmd[1:])
+        
+        loop.exec()
+        print("VOICE-TO-TEXT] Boot complete. Model is in memory.", file=sys.stderr)
 
     def _on_state_changed(self, state):
         if state == QProcess.Running:
             print("[VOICE-TO-TEXT] Process running → emitting ready", file=sys.stderr)
             self.ready.emit()
     
-    def start(self) -> None:
-        if self.proc.state() != QProcess.NotRunning:
-            self.failed.emit("Transcription already running")
-            return
+   # def start(self) -> None:
+    #    if self.proc.state() != QProcess.NotRunning:
+     #       self.failed.emit("Transcription already running")
+      #      return
         
+#        self._text_parts = []
+ #       self._final_phrases = []
+  #      self._active = True
+   #     self._in_final_dump = False
+    #    self._user_stopped = False
+        
+     #   cmd = [self.python, str(self.script)]
+      #  print(f"[VOICE-TO-TEXT] Starting transcription process: {' '.join(cmd)}", file=sys.stderr)
+       # self.proc.start(cmd[0], cmd[1:])
+        #print(f"[VOICE-TO-TEXT] Process started, PID: {self.proc.processId()}", file=sys.stderr)
+        
+    def start_recording(self) -> None:
+        """Sends the 'start' command to the already-running engine."""
         self._text_parts = []
         self._final_phrases = []
-        self._active = True
         self._in_final_dump = False
         self._user_stopped = False
         
-        cmd = [self.python, str(self.script)]
-        print(f"[VOICE-TO-TEXT] Starting transcription process: {' '.join(cmd)}", file=sys.stderr)
-        self.proc.start(cmd[0], cmd[1:])
-        print(f"[VOICE-TO-TEXT] Process started, PID: {self.proc.processId()}", file=sys.stderr)
-    
-    def stop(self) -> None:
-        print(f"[VOICE-TO-TEXT] stop() called, process state: {self.proc.state()}", file=sys.stderr)
-        print(f"[VOICE-TO-TEXT] Current text parts count: {len(self._text_parts)}", file=sys.stderr)
-        print(f"[VOICE-TO-TEXT] Current accumulated text: '{self.full_text()}'", file=sys.stderr)
-        
-        if self.proc.state() == QProcess.NotRunning:
-            print("[VOICE-TO-TEXT] Process already stopped, emitting completed signal", file=sys.stderr)
-            self.completed.emit(self.full_text())
-            return
-        
-        self._user_stopped = True
-        self._stopping = True  # NEW FLAG
-        
-        pid = int(self.proc.processId())
-        if pid > 0:
-            try:
-                print(f"[VOICE-TO-TEXT] Sending SIGINT to process {pid}", file=sys.stderr)
-                os.kill(pid, signal.SIGINT)
-            except Exception as e:
-                print(f"[VOICE-TO-TEXT] Failed to send SIGINT: {e}, falling back to terminate", file=sys.stderr)
-                self.proc.terminate()
+        if self.proc.state() == QProcess.Running:
+            print("[VOICE-TO-TEXT] Sending START command...", file=sys.stderr)
+            self.proc.write(b"start\n")
         else:
-            print("[VOICE-TO-TEXT] No valid PID, calling terminate()", file=sys.stderr)
-            self.proc.terminate()
+            self.boot_model()
+            self.proc.write(b"start\n")
+    
+#    def stop(self) -> None:
+ #       print(f"[VOICE-TO-TEXT] stop() called, process state: {self.proc.state()}", file=sys.stderr)
+  #      print(f"[VOICE-TO-TEXT] Current text parts count: {len(self._text_parts)}", file=sys.stderr)
+   #     print(f"[VOICE-TO-TEXT] Current accumulated text: '{self.full_text()}'", file=sys.stderr)
+        
+    #    if self.proc.state() == QProcess.NotRunning:
+     #       print("[VOICE-TO-TEXT] Process already stopped, emitting completed signal", file=sys.stderr)
+      #      self.completed.emit(self.full_text())
+       #     return
+        
+        #self._user_stopped = True
+#        self._stopping = True  # NEW FLAG
+        
+ #       pid = int(self.proc.processId())
+  #      if pid > 0:
+   #         try:
+    #            print(f"[VOICE-TO-TEXT] Sending SIGINT to process {pid}", file=sys.stderr)
+     #           os.kill(pid, signal.SIGINT)
+      #      except Exception as e:
+       #         print(f"[VOICE-TO-TEXT] Failed to send SIGINT: {e}, falling back to terminate", file=sys.stderr)
+        #        self.proc.terminate()
+#        else:
+ #           print("[VOICE-TO-TEXT] No valid PID, calling terminate()", file=sys.stderr)
+  #          self.proc.terminate()
+  
+    def stop_recording(self) -> None:
+        """Sends the 'stop' command to the engine."""
+        if self.proc.state() == QProcess.Running:
+            print("[VOICE-TO-TEXT] Sending STOP command...", file=sys.stderr)
+            self._user_stopped = True
+            self.proc.write(b"stop\n")
     
     def full_text(self) -> str:
         return "".join(self._text_parts).strip()
@@ -288,9 +377,20 @@ class TranscriptionService(ProcessService):
             
             print(f"[VOICE-TO-TEXT] Processing line: {line[:100]}", file=sys.stderr)
             
-            if "FINAL TRANSCRIPT" in line or "STREAMING COMPLETE" in line:
+            if "FINAL TRANSCRIPT" in line:
                 print("[VOICE-TO-TEXT] Detected final transcript marker", file=sys.stderr)
                 self._in_final_dump = True
+                continue
+                
+            if "STREAMING COMPLETE" in line:
+                print("[VOICE-TO-TEXT] Engine finished processing. Emitting completed.", file=sys.stderr)
+                self._in_final_dump = False
+                
+                final_text = " ".join(self._final_phrases) if self._final_phrases else self.full_text()
+                self.completed.emit(final_text)
+                
+                self._text_parts = []
+                self._final_phrases = []
                 continue
             
             # transcriber_fine_tuned.py startup/shutdown chatter (and mock "Using device:", "RECORDING NOW")

@@ -7,7 +7,6 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtGui import QFont
 from PySide6.QtGui import QImage
 
-
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
@@ -151,7 +150,6 @@ class CameraPreviewPage(QWidget):
        # layout.addWidget(self.btn_capture)
        # layout.addWidget(self.btn_cancel)
         #layout.addStretch(1)
-
 
 class ClassifiedPage(QWidget):
     def __init__(self, vm):
@@ -650,22 +648,22 @@ class AppWindow(QMainWindow):
             self.camera_preview.video_label.setPixmap(scaled_pixmap)
 
     def _show_state(self, state: AppStateType) -> None:
-        # if state == AppStateType.HOME:
-        #     self.stack.setCurrentWidget(self.home)
-        # elif state == AppStateType.CAMERA_PREVIEW:
-        #     self.stack.setCurrentWidget(self.camera_preview)
-        #     self.vm.start_camera_stream(0, 0, 0, 0)
-        # elif state == AppStateType.CLASSIFYING:
-        #     self.stack.setCurrentWidget(self.loading)
-        # elif state == AppStateType.CLASSIFIED:
-        #     self.stack.setCurrentWidget(self.classified)
-        # elif state == AppStateType.VOICE_TO_TEXT_LOADING:
-        #     self.stack.setCurrentWidget(self.voice_loading)
-        # elif state == AppStateType.VOICE_TO_TEXT:
-        #     self.stack.setCurrentWidget(self.voice)
-        #     self.voice.btn_save.setEnabled(False)  # disable until transcription finishes
-        # elif state == AppStateType.TRIP_LOAD:
-        #     self.stack.setCurrentWidget(self.trip)
+        if state == AppStateType.HOME:
+            self.stack.setCurrentWidget(self.home)
+        elif state == AppStateType.CAMERA_PREVIEW:
+            self.stack.setCurrentWidget(self.camera_preview)
+            self.vm.start_camera_stream(0, 0, 0, 0)
+        elif state == AppStateType.CLASSIFYING:
+            self.stack.setCurrentWidget(self.loading)
+        elif state == AppStateType.CLASSIFIED:
+            self.stack.setCurrentWidget(self.classified)
+        elif state == AppStateType.VOICE_TO_TEXT_LOADING:
+            self.stack.setCurrentWidget(self.voice_loading)
+        elif state == AppStateType.VOICE_TO_TEXT:
+            self.stack.setCurrentWidget(self.voice)
+            self.voice.btn_save.setEnabled(False)  # disable until transcription finishes
+        elif state == AppStateType.TRIP_LOAD:
+            self.stack.setCurrentWidget(self.trip)
         if state == AppStateType.VOICE_TO_TEXT:
             if self.stack.currentWidget() == self.camera_preview:
                 return 
