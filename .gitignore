@@ -25,7 +25,7 @@ Thumbs.db
 # Project specific
 sage_data/
 *.log
-rock-analysis/outputs/
+rock-volume/outputs/
 
 # Distribution / packaging
 dist/

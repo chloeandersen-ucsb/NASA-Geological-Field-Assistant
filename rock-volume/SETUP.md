@@ -37,7 +37,7 @@ Creates `camera_intrinsics.json` for lens distortion correction. Without this, t
 Measure an object using two orthogonal images (top and side view):
 
 ```bash
-python measure_rock.py --top top_view.jpg --side side_view.jpg
+python measure_rock_volume.py --top top_view.jpg --side side_view.jpg
 ```
 
 **Required Arguments:**
@@ -61,7 +61,7 @@ python measure_rock.py --top top_view.jpg --side side_view.jpg
 ## Test Run
 
 ```bash
-python measure_rock.py --top test_images/rock_centered_1.jpg --side test_images/rock_centered_2.jpg
+python measure_rock_volume.py --top test_images/rock_centered_1.jpg --side test_images/rock_centered_2.jpg
 ```
 
 Expected output: Volume ~8.7 cm³, mass range 0.022–0.026 kg.
