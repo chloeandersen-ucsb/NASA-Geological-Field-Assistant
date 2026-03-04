@@ -25,7 +25,9 @@ Thumbs.db
 # Project specific
 sage_data/
 *.log
-rock-analysis/outputs/
+*.nemo
+*.pt
+voiceNotes/ilai-files/newest_model.nemo
 
 # Distribution / packaging
 dist/
