@@ -603,8 +603,15 @@ class ViewModel(QObject):
                 except (TypeError, ValueError):
                     pass
             w = r.result.estimated_weight
-            if w is not None and isinstance(w, (int, float)):
-                total_weight += float(w)
+            if w is not None:
+                if isinstance(w, (int, float)):
+                    total_weight += float(w)
+                elif isinstance(w, str):
+                    try:
+                        a, b = w.replace(" kg", "").split("–")
+                        total_weight += (float(a) + float(b)) / 2 # using average of min and max weight
+                    except (ValueError, TypeError):
+                        pass
         summary = TripSummary(rocks=rocks, total_volume=total_volume, total_weight=total_weight, voice_notes=voice_notes)
         self.trip_changed.emit(summary)
 

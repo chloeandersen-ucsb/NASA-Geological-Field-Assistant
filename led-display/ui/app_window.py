@@ -975,7 +975,7 @@ class AppWindow(QMainWindow):
             self.trip._voice_notes_data.append(note)
 
     def _on_error(self, message: str) -> None:
-        QMessageBox.warning(self, "Error", message)
+        QMessageBox.warning(self, "Error", "Something went wrong. Please press escape to return to home screen.")
     
     def _on_recording_status_changed(self, is_recording: bool):
     # Update the hover widget (as we did before)
