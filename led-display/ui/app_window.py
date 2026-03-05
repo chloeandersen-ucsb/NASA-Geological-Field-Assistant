@@ -702,10 +702,7 @@ class AppWindow(QMainWindow):
         if is_jetson:
             try:
                 self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
-                self.setMinimumSize(0, 0)
-                screen = QApplication.primaryScreen()
-                if screen:
-                    self.setGeometry(screen.availableGeometry())
+                self._apply_fullscreen_geometry()
                 self.showFullScreen()
             except Exception as e:
                 import sys
@@ -759,17 +756,29 @@ class AppWindow(QMainWindow):
         
         super().keyPressEvent(event)
 
+    def _apply_fullscreen_geometry(self) -> None:
+        """Set window to exact screen size (edge-to-edge). Use geometry(), not availableGeometry()."""
+        screen = self.screen() if self.windowHandle() else QApplication.primaryScreen()
+        if not screen:
+            return
+        rect = screen.geometry()
+        self.setMinimumSize(rect.size())
+        self.setMaximumSize(rect.size())
+        self.setGeometry(rect)
+
     def _toggle_fullscreen(self) -> None:
         if self.isFullScreen():
+            self.setMinimumSize(0, 0)
+            self.setMaximumSize(16777215, 16777215)
             self.showNormal()
         else:
-            screen = QApplication.primaryScreen()
-            if screen:
-                self.setGeometry(screen.availableGeometry())
+            self._apply_fullscreen_geometry()
             self.showFullScreen()
 
     def _exit_fullscreen(self) -> None:
         if self.isFullScreen():
+            self.setMinimumSize(0, 0)
+            self.setMaximumSize(16777215, 16777215)
             self.showNormal()
 
     def _quit_application(self) -> None:
