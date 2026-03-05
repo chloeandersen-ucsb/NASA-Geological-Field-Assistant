@@ -126,7 +126,6 @@ def get_mock_rocknet_script_path() -> Path:
     """Get the path to mock_rocknet_infer.py script."""
     return get_led_display_dir() / "scripts" / "mock_rocknet_infer.py"
 
-
 def get_mock_voice_to_text_script_path() -> Path:
     """Get the path to mock_improved2.py script."""
     return get_led_display_dir() / "scripts" / "mock_improved2.py"

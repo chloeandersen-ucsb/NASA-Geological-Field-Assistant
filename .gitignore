@@ -23,11 +23,11 @@ ENV/
 Thumbs.db
 
 # Project specific
-sage_data/
+ML-classifications/camera-pipeline/images
 *.log
+rock-volume/outputs/
 *.nemo
 *.pt
-voiceNotes/ilai-files/newest_model.nemo
 
 # Distribution / packaging
 dist/

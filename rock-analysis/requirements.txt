@@ -1,6 +1,0 @@
-opencv-contrib-python
-numpy
-torch
-torchvision
-segment-anything
-reportlab

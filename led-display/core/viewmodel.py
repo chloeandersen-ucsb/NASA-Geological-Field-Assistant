@@ -2,21 +2,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from enum import Enum, auto
-from typing import Optional, List
+from pathlib import Path
+from typing import Optional, List, Union
 import json
 import os
+import sys
 import time
 import uuid
 
 from PySide6.QtCore import QObject, Signal, QTimer
 
-from services.process_service import CameraService, ClassificationService, TranscriptionService
+from services.process_service import CameraService, ClassificationService, TranscriptionService, VolumeService
 #from voiceNotes.ilai_files import transcriber_fine_tuned
 
 
 class AppStateType(Enum):
     HOME = auto()
     CAMERA_PREVIEW = auto()
+    CONFIRM_CAPTURES = auto()
     CLASSIFYING = auto()
     CLASSIFIED = auto()
     VOICE_TO_TEXT_LOADING = auto()
@@ -29,8 +32,9 @@ class ClassificationResult:
     label: str
     confidence: float
     image_path: Optional[str] = None
+    side_image_path: Optional[str] = None
     estimated_volume: Optional[float] = None
-    estimated_weight: Optional[float] = None
+    estimated_weight: Optional[Union[float, str]] = None
     raw: Optional[dict] = None
 
 
@@ -84,7 +88,13 @@ class Store:
                 rec = json.loads(line)
                 if rec.get("type") != "rock":
                     continue
-                result = ClassificationResult(**rec["result"])
+                r = rec["result"]
+                result = ClassificationResult(
+                    label=r["label"], confidence=float(r["confidence"]),
+                    image_path=r.get("image_path"), side_image_path=r.get("side_image_path"),
+                    estimated_volume=r.get("estimated_volume"), estimated_weight=r.get("estimated_weight"),
+                    raw=r.get("raw"),
+                )
                 rocks.append(RockEntry(rock_id=rec["rock_id"], ts=rec["ts"], result=result))
         return rocks
 
@@ -97,7 +107,26 @@ class Store:
         }
         with open(self.voice_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec) + "\n")
-    
+
+    def update_rock_volume(self, rock_id: str, volume: Optional[float], weight: Optional[str]) -> None:
+        if not os.path.exists(self.rocks_path):
+            return
+        lines = []
+        with open(self.rocks_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                if rec.get("type") == "rock" and rec.get("rock_id") == rock_id:
+                    r = rec["result"]
+                    r["estimated_volume"] = volume
+                    r["estimated_weight"] = weight
+                lines.append(rec)
+        with open(self.rocks_path, "w", encoding="utf-8") as f:
+            for rec in lines:
+                f.write(json.dumps(rec) + "\n")
+
     def list_voice_notes(self) -> List[dict]:
         if not os.path.exists(self.voice_path):
             return []
@@ -118,10 +147,12 @@ class Store:
 class ViewModel(QObject):
     state_changed = Signal(object)
     classification_changed = Signal(object)
+    volume_display_changed = Signal(str)
     transcription_changed = Signal(str)
     recording_status_changed = Signal(bool)
     trip_changed = Signal(object)
     error = Signal(str)
+    two_step_capture_message = Signal(str)
 
     def __init__(self, store_dir: str, parent=None):
         super().__init__(parent)
@@ -158,30 +189,49 @@ class ViewModel(QObject):
         try:
             self.transcriber = TranscriptionService(self)
         except Exception as e:
-            import sys
             print(f"ERROR: Failed to create TranscriptionService: {e}", file=sys.stderr)
             import traceback
             traceback.print_exc(file=sys.stderr)
             raise
-            
+        try:
+            self.volume_service = VolumeService(self)
+        except Exception as e:
+            print(f"ERROR: Failed to create VolumeService: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            raise
+
         self.transcriber.boot_model()
-        
-        self.state = AppStateType.HOME
-        
+
         self.state = AppStateType.HOME
         self.current_classification: ClassificationResult | None = None
         self.transcription_text = ""
+
+        self._capture_phase: Optional[str] = None
+        self._pending_top_path: Optional[str] = None
+        self._pending_side_path: Optional[str] = None
+        self._last_top_path: Optional[str] = None
+        self._last_side_path: Optional[str] = None
+        self._pending_volume_result: Optional[dict] = None
+        self._volume_failed = False
+        self._volume_pending = False
+        self._volume_start_time: Optional[float] = None
+        self._volume_ready_timer: Optional[QTimer] = None
+        self._classification_saved_rock_id: Optional[str] = None
+        self._classify_payload: Optional[dict] = None
+        self._classification_applied = False
 
         self.classification_timeout_ms = 20_000
         self._classify_timeout = QTimer(self)
         self._classify_timeout.setSingleShot(True)
         self._classify_timeout.timeout.connect(self._on_classify_timeout)
 
-        #self.camera.preview_started.connect(self._on_preview_started)
         self.camera.capture_finished.connect(self._on_photo_captured)
         self.camera.capture_failed.connect(self._fail)
         self.classifier.finished.connect(self._on_classified)
         self.classifier.failed.connect(self._fail)
+        self.volume_service.finished.connect(self._on_volume_finished)
+        self.volume_service.failed.connect(self._on_volume_failed)
         self.transcriber.token.connect(self._on_transcription_token)
         self.transcriber.completed.connect(self._on_transcription_completed)
         self.transcriber.failed.connect(self._fail)
@@ -196,9 +246,11 @@ class ViewModel(QObject):
     def go_home(self) -> None:
         if self.state == AppStateType.VOICE_TO_TEXT:
             self.stop_voice_to_text()
-        
         if self.state == AppStateType.CAMERA_PREVIEW:
             self.camera.kill()
+            self._capture_phase = None
+            self._pending_top_path = None
+            self._pending_side_path = None
         self._set_state(AppStateType.HOME)
 
     def _on_transcriber_ready(self) -> None:
@@ -212,18 +264,56 @@ class ViewModel(QObject):
         self._set_state(AppStateType.TRIP_LOAD)
         
     def open_camera_preview(self) -> None:
+        self._capture_phase = "top"
+        self._pending_top_path = None
+        self._pending_side_path = None
+        if self._volume_ready_timer:
+            self._volume_ready_timer.stop()
+            self._volume_ready_timer = None
+        self.camera.set_stop_after_capture(False)
         self._set_state(AppStateType.CAMERA_PREVIEW)
-        
+
     def start_camera_stream(self, x: int, y: int, w: int, h: int) -> None:
         self.camera.start_preview(x, y, w, h)
-       
+
     def trigger_capture(self) -> None:
-        self._set_state(AppStateType.CLASSIFYING)
+        if self._capture_phase == "side":
+            self.camera.set_stop_after_capture(True)
         self.camera.trigger_capture()
-        
+
     def cancel_camera(self) -> None:
         self.camera.stop_preview()
         self.go_home()
+
+    def get_review_image_paths(self) -> tuple[Optional[str], Optional[str]]:
+        return (self._pending_top_path, self._pending_side_path)
+
+    def confirm_captures_and_classify(self) -> None:
+        self._pending_volume_result = None
+        self._volume_failed = False
+        self._volume_pending = False
+        classify_path = self._pending_top_path or self._pending_side_path
+        self._last_captured_path = classify_path
+        self._set_state(AppStateType.CLASSIFYING)
+        self._classify_timeout.start(self.classification_timeout_ms)
+        self.classifier.classify(classify_path)
+        # Volume is started only after classification finishes (in _on_classified) to avoid
+        # GPU memory contention on Jetson — classification gets full GPU, then volume runs.
+
+    def retake_captures(self) -> None:
+        for p in (self._pending_top_path, self._pending_side_path):
+            if p and os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+        self._pending_top_path = None
+        self._pending_side_path = None
+        self._last_top_path = None
+        self._last_side_path = None
+        self._capture_phase = "top"
+        self.camera.set_stop_after_capture(False)
+        self._set_state(AppStateType.CAMERA_PREVIEW)
 
     def start_classification(self) -> None:
         self.current_classification = None
@@ -238,9 +328,30 @@ class ViewModel(QObject):
         self.camera.capture()
 
     def reclassify(self) -> None:
-        self.start_classification()
+        for p in (self._last_top_path, self._last_side_path):
+            if p and os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+        self.current_classification = None
+        self._last_top_path = None
+        self._last_side_path = None
+        self.open_camera_preview()
 
     def _on_photo_captured(self, image_path: str) -> None:
+        if self._capture_phase == "top":
+            self._pending_top_path = image_path
+            self._capture_phase = "side"
+            self.camera.set_stop_after_capture(True)
+            self.two_step_capture_message.emit("First view captured. Rotate rock and press Capture again.")
+            return
+        if self._capture_phase == "side":
+            self._pending_side_path = image_path
+            self._last_top_path = self._pending_top_path
+            self._last_side_path = self._pending_side_path
+            self._set_state(AppStateType.CONFIRM_CAPTURES)
+            return
         self._last_captured_path = image_path
         self._set_state(AppStateType.CLASSIFYING)
         self._classify_timeout.start(self.classification_timeout_ms)
@@ -248,22 +359,87 @@ class ViewModel(QObject):
 
     def _on_classified(self, payload: dict) -> None:
         self._classify_timeout.stop()
+        self._classify_payload = payload
+        self._classification_applied = False
+        # Start volume estimation after classification so GPU is not shared (avoids Jetson OOM).
+        if self._pending_top_path and self._pending_side_path:
+            print(f"[VOLUME] Sending photos to volume estimation: top={self._pending_top_path!r}, side={self._pending_side_path!r}", file=sys.stderr)
+            self._volume_pending = True
+            self._volume_start_time = time.time()
+            self.volume_service.estimate(self._pending_top_path, self._pending_side_path)
+        else:
+            print(f"[VOLUME] Skipping volume estimation: missing top or side image (top={self._pending_top_path!r}, side={self._pending_side_path!r})", file=sys.stderr)
+        if self._pending_volume_result is not None:
+            self._apply_classification_result()
+            return
+        if self._pending_volume_result is None:
+            self._volume_ready_timer = QTimer(self)
+            self._volume_ready_timer.setSingleShot(True)
+            self._volume_ready_timer.timeout.connect(self._on_volume_ready_timeout)
+            self._volume_ready_timer.start(10_000)
+            return
+        self._apply_classification_result()
+
+    def _on_volume_ready_timeout(self) -> None:
+        if self._volume_ready_timer:
+            self._volume_ready_timer.stop()
+            self._volume_ready_timer = None
+        if self._classify_payload is not None and not self._classification_applied:
+            self._apply_classification_result()
+
+    def _apply_classification_result(self) -> None:
+        if self._classify_payload is None or self._classification_applied:
+            return
+        self._classification_applied = True
+        if self._volume_ready_timer:
+            self._volume_ready_timer.stop()
+            self._volume_ready_timer = None
+        payload = self._classify_payload
+        self._classify_payload = None
+        vol = self._pending_volume_result
+        if vol is not None and "volume_cm3" in vol:
+            try:
+                v = float(vol["volume_cm3"])
+                estimated_volume = round(v, 1)
+            except (TypeError, ValueError):
+                estimated_volume = None
+            mr = vol
+            if mr.get("min_kg") is not None and mr.get("max_kg") is not None:
+                try:
+                    estimated_weight = f"{float(mr['min_kg']):.2f}–{float(mr['max_kg']):.2f} kg"
+                except (TypeError, ValueError):
+                    estimated_weight = None
+            else:
+                estimated_weight = None
+        else:
+            estimated_volume = None
+            estimated_weight = None
         result = ClassificationResult(
             label=str(payload.get("label", "UNKNOWN")),
             confidence=float(payload.get("confidence", 0.0)),
-            image_path=self._last_captured_path, # <--- Use the stored path
-            estimated_volume=payload.get("estimated_volume"),
-            estimated_weight=payload.get("estimated_weight"),
+            image_path=self._last_top_path or self._last_captured_path,
+            side_image_path=self._last_side_path,
+            estimated_volume=estimated_volume,
+            estimated_weight=estimated_weight,
             raw=payload,
         )
         self.current_classification = result
         self.classification_changed.emit(result)
+        if self._volume_pending:
+            volume_str = "Volume = Calculating..."
+        elif self._volume_failed:
+            volume_str = "Volume = N/A"
+        elif estimated_volume is not None:
+            volume_str = f"Volume = {estimated_volume} cm³"
+        else:
+            volume_str = "Volume = N/A"
+        self.volume_display_changed.emit(volume_str)
         self._set_state(AppStateType.CLASSIFIED)
 
     def save_classification(self) -> None:
         if self.current_classification:
-            self.store.save_rock(self.current_classification)
-            
+            entry = self.store.save_rock(self.current_classification)
+            self._classification_saved_rock_id = entry.rock_id
             label = self.current_classification.label
             #Yestranscriber_fine_tuned.update_visual_context(label)
             
@@ -276,12 +452,169 @@ class ViewModel(QObject):
         self.go_home()
 
     def delete_classification(self) -> None:
+        if self.current_classification:
+            self._delete_classification_files(self.current_classification)
         self.current_classification = None
         self.go_home()
+
+    def _delete_classification_files(self, result: ClassificationResult) -> None:
+        """Delete the two images and _prediction.json for this classification from camera-pipeline/images/{date}/."""
+        # Only delete files under ML-classifications/camera-pipeline/images/
+        project_root = Path(__file__).resolve().parent.parent.parent
+        images_root = project_root / "ML-classifications" / "camera-pipeline" / "images"
+        try:
+            images_root = images_root.resolve()
+        except OSError:
+            return
+        to_delete: List[str] = []
+        for path_str in (result.image_path, result.side_image_path):
+            if not path_str:
+                continue
+            try:
+                p = Path(path_str).resolve()
+                if p.exists() and str(p).startswith(str(images_root)):
+                    to_delete.append(str(p))
+            except OSError:
+                pass
+        # _prediction.json is next to the top image (the one used for classification)
+        if result.image_path:
+            base, _ = os.path.splitext(result.image_path)
+            pred_path = base + "_prediction.json"
+            try:
+                p = Path(pred_path).resolve()
+                if p.exists() and str(p).startswith(str(images_root)):
+                    to_delete.append(str(p))
+            except OSError:
+                pass
+        for path_str in to_delete:
+            try:
+                os.remove(path_str)
+                print(f"[VIEWMODEL] Deleted: {path_str}", file=sys.stderr)
+            except OSError as e:
+                print(f"[VIEWMODEL] Failed to delete {path_str}: {e}", file=sys.stderr)
+
+    def _delete_pending_classification_files(self) -> None:
+        """Delete pending session images, _prediction.json, and _volume.json under camera-pipeline/images/."""
+        project_root = Path(__file__).resolve().parent.parent.parent
+        images_root = project_root / "ML-classifications" / "camera-pipeline" / "images"
+        try:
+            images_root = images_root.resolve()
+        except OSError:
+            return
+        to_delete: set = set()
+        classify_path = self._pending_top_path or self._pending_side_path or self._last_captured_path
+        for path_str in (self._pending_top_path, self._pending_side_path, self._last_captured_path):
+            if not path_str:
+                continue
+            try:
+                p = Path(path_str).resolve()
+                if p.exists() and str(p).startswith(str(images_root)):
+                    to_delete.add(str(p))
+            except OSError:
+                pass
+        if classify_path:
+            base, _ = os.path.splitext(classify_path)
+            pred_path = base + "_prediction.json"
+            try:
+                p = Path(pred_path).resolve()
+                if p.exists() and str(p).startswith(str(images_root)):
+                    to_delete.add(str(p))
+            except OSError:
+                pass
+        if self._pending_top_path:
+            base, _ = os.path.splitext(self._pending_top_path)
+            vol_path = base + "_volume.json"
+            try:
+                p = Path(vol_path).resolve()
+                if p.exists() and str(p).startswith(str(images_root)):
+                    to_delete.add(str(p))
+            except OSError:
+                pass
+        for path_str in to_delete:
+            try:
+                os.remove(path_str)
+                print(f"[VIEWMODEL] Deleted: {path_str}", file=sys.stderr)
+            except OSError as e:
+                print(f"[VIEWMODEL] Failed to delete {path_str}: {e}", file=sys.stderr)
+
+    def _on_volume_finished(self, payload: dict) -> None:
+        if self._volume_start_time is not None and (time.time() - self._volume_start_time) > 120:
+            return
+        self._volume_pending = False
+        self._pending_volume_result = payload
+        if self._classify_payload is not None and not self._classification_applied:
+            self._apply_classification_result()
+            return
+        if self._classification_applied and self.current_classification:
+            vol = payload.get("volume_cm3")
+            mr = payload
+            try:
+                v = float(vol) if vol is not None else None
+            except (TypeError, ValueError):
+                v = None
+            w = None
+            if mr.get("min_kg") is not None and mr.get("max_kg") is not None:
+                try:
+                    w = f"{float(mr['min_kg']):.2f}–{float(mr['max_kg']):.2f} kg"
+                except (TypeError, ValueError):
+                    pass
+            new_result = ClassificationResult(
+                label=self.current_classification.label,
+                confidence=self.current_classification.confidence,
+                image_path=self.current_classification.image_path,
+                side_image_path=self.current_classification.side_image_path,
+                estimated_volume=round(v, 1) if v is not None else None,
+                estimated_weight=w or self.current_classification.estimated_weight,
+                raw=self.current_classification.raw,
+            )
+            self.current_classification = new_result
+            self.classification_changed.emit(new_result)
+            volume_str = f"Volume = {round(v, 1)} cm³" if v is not None else "Volume = N/A"
+            self.volume_display_changed.emit(volume_str)
+            if self._classification_saved_rock_id:
+                self.store.update_rock_volume(self._classification_saved_rock_id, v, w)
+
+    def _on_volume_failed(self, message: str) -> None:
+        self._volume_failed = True
+        self._volume_pending = False
+        self.volume_display_changed.emit("Volume = N/A")
+        print(f"[VOLUME] {message}", file=sys.stderr)
 
     def _on_classify_timeout(self) -> None:
         self.classifier.kill()
         self._fail("Classification timeout (20s)")
+
+    def _abort_classification(self, error_message: Optional[str]) -> None:
+        """Stop timers, kill classification and volume processes, delete images + .json files created, go home"""
+        if self.state != AppStateType.CLASSIFYING:
+            self.go_home()
+            return
+        self._classify_timeout.stop()
+        if self._volume_ready_timer:
+            self._volume_ready_timer.stop()
+            self._volume_ready_timer = None
+        self.classifier.kill()
+        self.volume_service.kill()
+        self._delete_pending_classification_files()
+        self._classify_payload = None
+        self._pending_volume_result = None
+        self._classification_applied = False
+        self._volume_pending = False
+        self._volume_failed = False
+        self._volume_start_time = None
+        self.current_classification = None
+        self._pending_top_path = None
+        self._pending_side_path = None
+        self._last_captured_path = None
+        self._last_top_path = None
+        self._last_side_path = None
+        self.go_home()
+
+    def cancel_classification(self) -> None:
+        """if user cancels in analyzing page, clean up and return to home."""
+        if self.state != AppStateType.CLASSIFYING:
+            return
+        self._abort_classification(None)
 
     def start_voice_to_text(self) -> None:
         # import sys
@@ -380,14 +713,23 @@ class ViewModel(QObject):
         total_weight = 0.0
         for r in rocks:
             if r.result.estimated_volume is not None:
-                total_volume += float(r.result.estimated_volume)
-            if r.result.estimated_weight is not None:
-                total_weight += float(r.result.estimated_weight)
+                try:
+                    total_volume += float(r.result.estimated_volume)
+                except (TypeError, ValueError):
+                    pass
+            w = r.result.estimated_weight
+            if w is not None:
+                if isinstance(w, (int, float)):
+                    total_weight += float(w)
+                elif isinstance(w, str):
+                    try:
+                        a, b = w.replace(" kg", "").split("–")
+                        total_weight += (float(a) + float(b)) / 2 # using average of min and max weight
+                    except (ValueError, TypeError):
+                        pass
         summary = TripSummary(rocks=rocks, total_volume=total_volume, total_weight=total_weight, voice_notes=voice_notes)
         self.trip_changed.emit(summary)
 
     def _fail(self, message: str) -> None:
-        self._classify_timeout.stop()
-        self.error.emit(message)
-        self.go_home()
+        self._abort_classification(message)
 

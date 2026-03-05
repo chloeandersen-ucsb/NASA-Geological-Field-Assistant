@@ -50,21 +50,24 @@ class CameraService(QThread):
         super().__init__(parent)
         self._run_flag = False
         self._is_capturing = False
-        
-        # We will save images exactly where your teammate wanted them
+        self._stop_after_capture = True  # False = two-step mode: keep preview after first capture
+
         self.save_dir = project_root / "ML-classifications" / "camera-pipeline" / "images"
-        
+
+    def set_stop_after_capture(self, stop: bool) -> None:
+        self._stop_after_capture = stop
+
     def start_preview(self, x=0, y=0, w=0, h=0) -> None:
         if not self.isRunning():
             self._run_flag = True
             self._is_capturing = False
             self.start()
-            
+
     def trigger_capture(self) -> None:
         if self.isRunning():
             print("[CAMERA] Capture triggered via OpenCV...", file=sys.stderr)
             self._is_capturing = True
-            
+
     def stop_preview(self) -> None:
         self._run_flag = False
         self.wait()
@@ -94,20 +97,23 @@ class CameraService(QThread):
                 
             if self._is_capturing:
                 self._is_capturing = False
-                self._run_flag = False
-                
+                if self._stop_after_capture:
+                    self._run_flag = False
+
                 today_dir = self.save_dir / datetime.datetime.now().strftime("%Y%m%d")
                 today_dir.mkdir(parents=True, exist_ok=True)
-                
+
                 filename = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4()}.jpg"
                 filepath = str(today_dir / filename)
-                
+
                 cv2.imwrite(filepath, frame)
                 print(f"[CAMERA] Image saved to {filepath}", file=sys.stderr)
-                
-                cap.release()
+
+                if self._stop_after_capture:
+                    cap.release()
+                    self.capture_finished.emit(filepath)
+                    return
                 self.capture_finished.emit(filepath)
-                return
                 
             # Convert OpenCV frame to PySide6 QImage
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -217,6 +223,77 @@ class ClassificationService(ProcessService):
     
     def _on_error(self, _err) -> None:
         self.failed.emit("Classifier process error")
+
+
+class VolumeService(ProcessService):
+    finished = Signal(dict)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.python = connector.get_python_executable()
+        self.script = project_root / "rock-volume" / "measure_rock_volume.py"
+        self.work_dir = project_root / "rock-volume"
+        self._expected_json_path: str | None = None
+
+    def estimate(self, top_image_path: str, side_image_path: str) -> None:
+        if self.proc.state() != QProcess.NotRunning:
+            print("[VOLUME] Volume estimation already running, skipping", file=sys.stderr)
+            self.failed.emit("Volume estimation already running")
+            return
+        base, _ = os.path.splitext(top_image_path)
+        out_json = base + "_volume.json"
+        self._expected_json_path = out_json
+        out_dir = os.path.dirname(out_json)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+        print(f"[VOLUME] Starting volume calculation: top={top_image_path!r}, side={side_image_path!r}, out={out_json!r}", file=sys.stderr)
+        cmd = [
+            self.python,
+            str(self.script),
+            "--top", top_image_path,
+            "--side", side_image_path,
+            "--out", out_json,
+        ]
+        self.proc.setWorkingDirectory(str(self.work_dir))
+        self.proc.start(cmd[0], cmd[1:])
+
+    def _on_finished(self, exit_code: int, _status) -> None:
+        err = bytes(self.proc.readAllStandardError()).decode("utf-8", errors="ignore").strip()
+        if exit_code != 0:
+            msg = err or f"Volume estimation failed (exit {exit_code})"
+            print(f"[VOLUME] Volume calculation failed: {msg}", file=sys.stderr)
+            self.failed.emit(msg)
+            return
+        if not self._expected_json_path or not os.path.exists(self._expected_json_path):
+            print("[VOLUME] Volume output JSON not found", file=sys.stderr)
+            self.failed.emit("Volume output JSON not found")
+            return
+        try:
+            with open(self._expected_json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"[VOLUME] Failed to read volume JSON: {e}", file=sys.stderr)
+            self.failed.emit(f"Failed to read volume JSON: {e}")
+            return
+        volume_cm3 = data.get("volume_cm3")
+        mass_range = data.get("mass_range") or {}
+        if volume_cm3 is None:
+            print("[VOLUME] Volume JSON missing volume_cm3", file=sys.stderr)
+            self.failed.emit("Volume JSON missing volume_cm3")
+            return
+        payload = {
+            "volume_cm3": float(volume_cm3),
+            "mass_min_g": mass_range.get("min_g"),
+            "mass_max_g": mass_range.get("max_g"),
+            "min_kg": mass_range.get("min_kg"),
+            "max_kg": mass_range.get("max_kg"),
+        }
+        print(f"[VOLUME] Volume calculation finished: volume_cm3={payload['volume_cm3']}", file=sys.stderr)
+        self.finished.emit(payload)
+
+    def _on_error(self, _err) -> None:
+        print(f"[VOLUME] Volume process error: {_err}", file=sys.stderr)
+        self.failed.emit("Volume process error")
 
 
 class TranscriptionService(ProcessService):

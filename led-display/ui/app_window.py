@@ -13,12 +13,11 @@ img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
 
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence
+from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor
 from PySide6.QtWidgets import (
     QMainWindow, QStackedWidget, QMessageBox,
     QWidget, QVBoxLayout, QLabel, QPushButton,
-    QTextEdit, QListWidget, QHBoxLayout, QDialog,
-    QDialogButtonBox, QSizePolicy
+    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy
 )
 
 import connector
@@ -60,12 +59,7 @@ class HomePage(QWidget):
             color: #cad2c5;
         """)
 
-        # self.btn_classify = big_button("CLASSIFY ROCK")
-        # self.btn_voice = big_button("VOICE to TEXT")
-        # self.btn_trip = big_button(" VIEW TRIP NOTES")
-        # self.btn_quit = QPushButton("QUIT")
         self.btn_quit.setMinimumHeight(50)
-        # self.btn_quit.setStyleSheet("font-size: 18px;")
 
         layout.addWidget(self.btn_classify)
         layout.addWidget(self.btn_voice)
@@ -85,7 +79,15 @@ class LoadingPage(QWidget):
         layout.addStretch(1)
         layout.addWidget(label)
         layout.addStretch(1)
-    
+        self.btn_cancel = QPushButton("Cancel")
+        self.btn_cancel.setMinimumHeight(50)
+        self.btn_cancel.setStyleSheet("""
+            background-color: #7e1f23;
+            font-size: 22px;
+            color: white;
+        """)
+        layout.addWidget(self.btn_cancel)
+
     def set_message(self, message: str) -> None:
         for i in range(self.layout().count()):
             item = self.layout().itemAt(i)
@@ -108,20 +110,23 @@ class VoiceLoadingPage(QWidget):
 
 class CameraPreviewPage(QWidget):
     """Shown when camera preview is active; user clicks Capture to take the photo."""
-    def __init__(self, vm): # Added vm parameter
+    def __init__(self, vm):
         super().__init__()
         self.vm = vm
         layout = QVBoxLayout(self)
-        
+
+        self.lbl_step = QLabel("Step 1/2: Capture top view")
+        self.lbl_step.setAlignment(Qt.AlignCenter)
+        self.lbl_step.setStyleSheet("font-size: 18px; color: #344f41;")
+        layout.addWidget(self.lbl_step)
+
         self.video_label = QLabel()
         self.video_label.setAlignment(Qt.AlignCenter)
         self.video_label.setStyleSheet("background-color: #000000; border: 4px solid #344f41; border-radius: 8px;")
-     
         self.video_label.setMinimumSize(400, 300)
         self.video_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
-     
         layout.addWidget(self.video_label, stretch=1)
-        
+
         self.voice_ctrl = ExpandingVoiceWidget(self.vm, self)
         layout.addWidget(self.voice_ctrl, 0, Qt.AlignCenter)
         
@@ -143,13 +148,68 @@ class CameraPreviewPage(QWidget):
         row.addWidget(self.btn_capture)
         layout.addSpacing(15)
         layout.addLayout(row)
-        
-        #layout.addStretch(1)
-      #  layout.addWidget(label)
-       # layout.addSpacing(30)
-       # layout.addWidget(self.btn_capture)
-       # layout.addWidget(self.btn_cancel)
-        #layout.addStretch(1)
+
+
+class CaptureReviewPage(QWidget):
+    """After both captures: preview top and side images with Classify or Retake."""
+    _IMG_W, _IMG_H = 320, 240
+
+    def __init__(self, vm):
+        super().__init__()
+        self.vm = vm
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
+        title = QLabel("Review captures")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("""
+            font-size: 22px;
+            font-weight: bold;
+            border: 2px solid #697d6a;
+            border-radius: 8px;
+            padding: 8px;
+        """)
+        layout.addWidget(title)
+
+        images_row = QHBoxLayout()
+        images_row.setSpacing(12)
+        self.lbl_top = QLabel()
+        self.lbl_top.setAlignment(Qt.AlignCenter)
+        self.lbl_top.setFixedSize(self._IMG_W, self._IMG_H)
+        self.lbl_top.setStyleSheet("background-color: #222; border: 2px solid #344f41; border-radius: 6px;")
+        self.lbl_side = QLabel()
+        self.lbl_side.setAlignment(Qt.AlignCenter)
+        self.lbl_side.setFixedSize(self._IMG_W, self._IMG_H)
+        self.lbl_side.setStyleSheet("background-color: #222; border: 2px solid #344f41; border-radius: 6px;")
+        images_row.addWidget(self.lbl_top)
+        images_row.addWidget(self.lbl_side)
+        layout.addLayout(images_row)
+
+        btns = QHBoxLayout()
+        self.btn_retake = QPushButton("Retake")
+        self.btn_retake.setMinimumHeight(55)
+        self.btn_retake.setStyleSheet("background-color: #95b7dc; font-size: 20px; color: #385573;")
+        self.btn_classify = QPushButton("Classify")
+        self.btn_classify.setMinimumHeight(55)
+        self.btn_classify.setStyleSheet("background-color: #617c32; font-size: 20px; color: #f5f6f4;")
+        btns.addWidget(self.btn_retake)
+        btns.addWidget(self.btn_classify)
+        layout.addLayout(btns)
+
+    def set_images(self, top_path: str | None, side_path: str | None) -> None:
+        w, h = self._IMG_W, self._IMG_H
+        if top_path and os.path.exists(top_path):
+            pix = QPixmap(top_path)
+            self.lbl_top.setPixmap(pix.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            self.lbl_top.setText("Top")
+        if side_path and os.path.exists(side_path):
+            pix = QPixmap(side_path)
+            self.lbl_side.setPixmap(pix.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            self.lbl_side.setText("Side")
+
 
 class ClassifiedPage(QWidget):
     def __init__(self, vm):
@@ -160,20 +220,19 @@ class ClassifiedPage(QWidget):
         self.main_layout.setSpacing(5)
         self.main_layout.setContentsMargins(15, 15, 15, 15)
         
-        # --- THE FIX: A dedicated container for the image ---
         self.image_container = QWidget()
-        self.image_container.setFixedSize(400, 300) # LOCK THE BOX SIZE HERE
+        self.image_container.setFixedSize(560, 280)
         self.image_container.setStyleSheet("background-color: transparent;")
-        container_layout = QVBoxLayout(self.image_container)
+        container_layout = QHBoxLayout(self.image_container)
         container_layout.setContentsMargins(0, 0, 0, 0)
-        
         self.lbl_image = QLabel()
         self.lbl_image.setAlignment(Qt.AlignCenter)
-        # Remove the border and the black background to make it seamless
         self.lbl_image.setStyleSheet("background-color: transparent; border: none;")
+        self.lbl_side_image = QLabel()
+        self.lbl_side_image.setAlignment(Qt.AlignCenter)
+        self.lbl_side_image.setStyleSheet("background-color: transparent; border: none;")
         container_layout.addWidget(self.lbl_image)
-        
-        # Add the locked container to the main layout
+        container_layout.addWidget(self.lbl_side_image)
         self.main_layout.addWidget(self.image_container, 0, Qt.AlignCenter)
 
         # Result Labels
@@ -185,6 +244,10 @@ class ClassifiedPage(QWidget):
         self.lbl_conf = QLabel("Confidence: --")
         self.lbl_conf.setAlignment(Qt.AlignCenter)
         self.lbl_conf.setStyleSheet("font-size: 25px; color: #666;") #color = white
+
+        self.lbl_volume = QLabel("Volume = --")
+        self.lbl_volume.setAlignment(Qt.AlignCenter)
+        self.lbl_volume.setStyleSheet("font-size: 20px;")
 
         self.lbl_top2 = QLabel("")
         self.lbl_top2.setAlignment(Qt.AlignCenter)
@@ -235,6 +298,7 @@ class ClassifiedPage(QWidget):
         # Assemble main layout
         self.main_layout.addWidget(self.lbl_label)
         self.main_layout.addWidget(self.lbl_conf)
+        self.main_layout.addWidget(self.lbl_volume)
         self.main_layout.addWidget(self.lbl_top2)
         self.main_layout.addWidget(self.lbl_top3)
         self.main_layout.addWidget(self.lbl_extra)
@@ -372,44 +436,128 @@ class TripLoadPage(QWidget):
         
         self._voice_notes_data = []
         
-class RockDetailDialog(QDialog):
-    def __init__(self, entry, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Rock Sample Detail")
-        self.setMinimumWidth(500)
-        self.setMinimumHeight(600)
-        
+class RockDetailPage(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setStyleSheet("""
+            background-color: #f5f6f4;
+            color: #344f41;
+            font-family: "Courier New";
+        """)
         layout = QVBoxLayout(self)
-        
-        # 1. Image View
-        lbl_img = QLabel()
-        lbl_img.setAlignment(Qt.AlignCenter)
-        if entry.result.image_path and os.path.exists(entry.result.image_path):
-            pixmap = QPixmap(entry.result.image_path)
-            lbl_img.setPixmap(pixmap.scaled(480, 360, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        else:
-            lbl_img.setText("Image File Not Found")
-        layout.addWidget(lbl_img)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
 
-        # 2. Metadata (Date/Time)
-        dt = datetime.datetime.fromtimestamp(entry.ts)
-        lbl_time = QLabel(f"Captured: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
-        lbl_time.setStyleSheet("font-weight: bold; font-size: 16px; margin-top: 10px;")
-        layout.addWidget(lbl_time)
+        self.lbl_title = QLabel("Rock Detail")
+        self.lbl_title.setAlignment(Qt.AlignCenter)
+        self.lbl_title.setStyleSheet("font-size: 24px; font-weight: 700;")
+        layout.addWidget(self.lbl_title)
 
-        # 3. Classification Results
+        self.lbl_time = QLabel("")
+        self.lbl_time.setAlignment(Qt.AlignCenter)
+        self.lbl_time.setStyleSheet("font-size: 16px; font-weight: 600;")
+        layout.addWidget(self.lbl_time)
+
+        images_row = QHBoxLayout()
+        images_row.setSpacing(10)
+        self.lbl_top = QLabel()
+        self.lbl_top.setAlignment(Qt.AlignCenter)
+        self.lbl_top.setMinimumSize(260, 200)
+        self.lbl_top.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.lbl_top.setStyleSheet("background-color: #222; border: 3px solid #344f41; border-radius: 6px;")
+
+        self.lbl_side = QLabel()
+        self.lbl_side.setAlignment(Qt.AlignCenter)
+        self.lbl_side.setMinimumSize(260, 200)
+        self.lbl_side.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.lbl_side.setStyleSheet("background-color: #222; border: 3px solid #344f41; border-radius: 6px;")
+
+        images_row.addWidget(self.lbl_top, stretch=1)
+        images_row.addWidget(self.lbl_side, stretch=1)
+        layout.addLayout(images_row, stretch=3)
+
+        self.lbl_info = QLabel("")
+        self.lbl_info.setWordWrap(True)
+        self.lbl_info.setStyleSheet("font-size: 18px; padding: 10px; border: 2px solid #cbd2c5; border-radius: 8px;")
+        layout.addWidget(self.lbl_info, stretch=2)
+
+        self.btn_back = big_button("Back")
+        layout.addWidget(self.btn_back)
+
+    def set_entry(self, entry) -> None:
+        dt = datetime.datetime.fromtimestamp(entry.ts) if entry.ts else None
+        self.lbl_time.setText(f"{dt.strftime('%Y-%m-%d %H:%M:%S')}" if dt else "Unknown time")
+
         res = entry.result
-        lbl_info = QLabel(
-            f"Primary: {res.label.upper()} ({int(res.confidence * 100)}%)\n"
-            f"Volume: {res.estimated_volume or 'N/A'} | Weight: {res.estimated_weight or 'N/A'}"
-        )
-        lbl_info.setStyleSheet("font-size: 15px; color: #344f41; padding: 5px; border: 1px solid #cbd2c5;")
-        layout.addWidget(lbl_info)
+        self.lbl_title.setText(f"{res.label.upper()} ({int(res.confidence * 100)}%)")
 
-        # 4. Close Button
-        btns = QDialogButtonBox(QDialogButtonBox.Ok)
-        btns.accepted.connect(self.accept)
-        layout.addWidget(btns)
+        # Use stable target sizes (label widths can be 0 before first show).
+        w, h = 520, 360
+
+        if res.image_path and os.path.exists(res.image_path):
+            self.lbl_top.setPixmap(QPixmap(res.image_path).scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            self.lbl_top.setPixmap(QPixmap())
+            self.lbl_top.setText("Top")
+
+        has_side = bool(res.side_image_path and os.path.exists(res.side_image_path))
+        self.lbl_side.setVisible(has_side)
+        if has_side:
+            self.lbl_side.setPixmap(QPixmap(res.side_image_path).scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            self.lbl_side.setPixmap(QPixmap())
+            self.lbl_side.setText("Side")
+
+        vol_txt = f"{res.estimated_volume} cm³" if res.estimated_volume is not None else "N/A"
+        weight_txt = res.estimated_weight if res.estimated_weight is not None else "N/A"
+        self.lbl_info.setText(f"Volume: {vol_txt}\nWeight: {weight_txt}")
+
+
+class VoiceNoteDetailPage(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setStyleSheet("""
+            background-color: #f5f6f4;
+            color: #344f41;
+            font-family: "Courier New";
+        """)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
+
+        self.lbl_title = QLabel("Voice Note")
+        self.lbl_title.setAlignment(Qt.AlignCenter)
+        self.lbl_title.setStyleSheet("font-size: 24px; font-weight: 700;")
+        layout.addWidget(self.lbl_title)
+
+        self.lbl_time = QLabel("")
+        self.lbl_time.setAlignment(Qt.AlignCenter)
+        self.lbl_time.setStyleSheet("font-size: 16px; font-weight: 600;")
+        layout.addWidget(self.lbl_time)
+
+        self.text = QTextEdit()
+        self.text.setReadOnly(True)
+        self.text.setStyleSheet("""
+            font-size: 18px;
+            border: 2px solid #697d6a;
+            border-radius: 8px;
+            padding: 10px;
+        """)
+        layout.addWidget(self.text, stretch=1)
+
+        self.btn_back = big_button("Back")
+        layout.addWidget(self.btn_back)
+
+    def set_note(self, note: dict) -> None:
+        ts = note.get("ts", 0)
+        if ts:
+            dt = datetime.datetime.fromtimestamp(ts)
+            self.lbl_time.setText(dt.strftime("%Y-%m-%d %H:%M:%S"))
+        else:
+            self.lbl_time.setText("Unknown time")
+        cleaned = note.get("cleaned", note.get("transcript", ""))
+        transcript = note.get("transcript", "")
+        self.text.setPlainText(cleaned if cleaned else transcript)
 
 class ExpandingVoiceWidget(QWidget):
     def __init__(self, vm, parent=None):
@@ -518,18 +666,24 @@ class AppWindow(QMainWindow):
         self.home = HomePage()
         self.loading = LoadingPage()
         self.camera_preview = CameraPreviewPage(self.vm)
+        self.capture_review = CaptureReviewPage(self.vm)
         self.classified = ClassifiedPage(self.vm)
         self.voice_loading = VoiceLoadingPage()
         self.voice = VoicePage()
         self.trip = TripLoadPage()
+        self.rock_detail = RockDetailPage()
+        self.voice_note_detail = VoiceNoteDetailPage()
 
         self.stack.addWidget(self.home)
         self.stack.addWidget(self.loading)
         self.stack.addWidget(self.camera_preview)
+        self.stack.addWidget(self.capture_review)
         self.stack.addWidget(self.classified)
         self.stack.addWidget(self.voice_loading)
         self.stack.addWidget(self.voice)
         self.stack.addWidget(self.trip)
+        self.stack.addWidget(self.rock_detail)
+        self.stack.addWidget(self.voice_note_detail)
 
         self._wire_ui()
         self._wire_vm()
@@ -551,6 +705,8 @@ class AppWindow(QMainWindow):
                 self.show()
         else:
             self.resize(800, 600)
+            self.setMinimumSize(800, 600)
+            self.setMaximumSize(800, 600)
             self.show()
         
         self._setup_shortcuts()
@@ -570,8 +726,8 @@ class AppWindow(QMainWindow):
         summary = self.vm.store.list_rocks() # Get the full data list
         if 0 <= index < len(summary):
             entry = summary[index]
-            dialog = RockDetailDialog(entry, self)
-            dialog.exec()
+            self.rock_detail.set_entry(entry)
+            self.stack.setCurrentWidget(self.rock_detail)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key_F11:
@@ -614,6 +770,9 @@ class AppWindow(QMainWindow):
 
         self.camera_preview.btn_capture.clicked.connect(self.vm.trigger_capture)
         self.camera_preview.btn_cancel.clicked.connect(self.vm.cancel_camera)
+        self.capture_review.btn_classify.clicked.connect(self.vm.confirm_captures_and_classify)
+        self.capture_review.btn_retake.clicked.connect(self.vm.retake_captures)
+        self.loading.btn_cancel.clicked.connect(self.vm.cancel_classification)
 
         self.classified.btn_reclassify.clicked.connect(self.vm.reclassify)
         self.classified.btn_save.clicked.connect(self.vm.save_classification)
@@ -627,22 +786,35 @@ class AppWindow(QMainWindow):
         self.trip.btn_back.clicked.connect(self.vm.go_home)
         self.trip.notes_list.itemClicked.connect(self._on_voice_note_clicked)
         self.trip.list.itemClicked.connect(self._on_rock_clicked)
+        self.rock_detail.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(self.trip))
+        self.voice_note_detail.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(self.trip))
 
     def _wire_vm(self) -> None:
         self.vm.state_changed.connect(self._show_state)
         self.vm.classification_changed.connect(self._on_classification)
+        self.vm.volume_display_changed.connect(self._on_volume_display)
         self.vm.transcription_changed.connect(self._on_transcription)
         self.vm.trip_changed.connect(self._on_trip)
         self.vm.error.connect(self._on_error)
         self.vm.recording_status_changed.connect(self._on_recording_status_changed)
+        self.vm.two_step_capture_message.connect(self.camera_preview.lbl_step.setText)
         self.vm.camera.frame_ready.connect(self._on_camera_frame)
         
     def _on_camera_frame(self, image: QImage) -> None:
         if self.vm.state == AppStateType.CAMERA_PREVIEW:
-            pixmap = QPixmap.fromImage(image)
+            img = image.copy()
+            w, h = img.width(), img.height()
+            painter = QPainter(img)
+            painter.setPen(QPen(QColor(255, 255, 255), 2, Qt.SolidLine))
+            cx, cy = w // 2, h // 2
+            size = min(w, h) // 15
+            painter.drawLine(cx - size, cy, cx + size, cy)
+            painter.drawLine(cx, cy - size, cx, cy + size)
+            painter.end()
+            pixmap = QPixmap.fromImage(img)
             scaled_pixmap = pixmap.scaled(
-                self.camera_preview.video_label.size(), 
-                Qt.KeepAspectRatio, 
+                self.camera_preview.video_label.size(),
+                Qt.KeepAspectRatio,
                 Qt.SmoothTransformation
             )
             self.camera_preview.video_label.setPixmap(scaled_pixmap)
@@ -653,6 +825,10 @@ class AppWindow(QMainWindow):
         elif state == AppStateType.CAMERA_PREVIEW:
             self.stack.setCurrentWidget(self.camera_preview)
             self.vm.start_camera_stream(0, 0, 0, 0)
+        elif state == AppStateType.CONFIRM_CAPTURES:
+            self.stack.setCurrentWidget(self.capture_review)
+            top_path, side_path = self.vm.get_review_image_paths()
+            self.capture_review.set_images(top_path, side_path)
         elif state == AppStateType.CLASSIFYING:
             self.stack.setCurrentWidget(self.loading)
         elif state == AppStateType.CLASSIFIED:
@@ -671,6 +847,7 @@ class AppWindow(QMainWindow):
         mapping = {
             AppStateType.HOME: self.home,
             AppStateType.CAMERA_PREVIEW: self.camera_preview,
+            AppStateType.CONFIRM_CAPTURES: self.capture_review,
             AppStateType.CLASSIFYING: self.loading,
             AppStateType.CLASSIFIED: self.classified,
             AppStateType.VOICE_TO_TEXT_LOADING: self.voice_loading,
@@ -698,28 +875,30 @@ class AppWindow(QMainWindow):
                 self.voice.btn_save.setEnabled(bool(self.vm.transcription_text.strip()))
                 
             if state == AppStateType.CAMERA_PREVIEW:
+                self.camera_preview.lbl_step.setText("Step 1/2: Capture top view")
                 self.vm.start_camera_stream(0, 0, 0, 0)
 
     def _on_classification(self, result: ClassificationResult) -> None:
-        if result.image_path and os.path.exists(result.image_path):
-            pixmap = QPixmap(result.image_path)
-            
-            # Scale the image to fit INSIDE the 400x300 box without stretching the UI
-            scaled_pixmap = pixmap.scaled(
-                400, 300, 
-                Qt.KeepAspectRatio, 
-                Qt.SmoothTransformation
-            )
-            
-            self.classified.lbl_image.setPixmap(scaled_pixmap)
-            # We NO LONGER call setFixedSize on the label here 
-            # so it doesn't fight the container.
+        has_side = result.side_image_path and os.path.exists(result.side_image_path)
+        if has_side:
+            self.classified.lbl_side_image.show()
+            w, h = 280, 210
+            if result.image_path and os.path.exists(result.image_path):
+                pixmap = QPixmap(result.image_path)
+                self.classified.lbl_image.setPixmap(pixmap.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            else:
+                self.classified.lbl_image.setText("No image")
+            pixmap_side = QPixmap(result.side_image_path)
+            self.classified.lbl_side_image.setPixmap(pixmap_side.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
-            self.classified.lbl_image.setText("No Image Available")
-            
-        # UI labels (Basalt, etc.) follow here...
-    
-        # Display top result
+            self.classified.lbl_side_image.hide()
+            self.classified.lbl_side_image.setPixmap(QPixmap())
+            if result.image_path and os.path.exists(result.image_path):
+                pixmap = QPixmap(result.image_path)
+                self.classified.lbl_image.setPixmap(pixmap.scaled(560, 280, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            else:
+                self.classified.lbl_image.setText("No Image Available")
+
         self.classified.lbl_label.setText(result.label.upper())
         self.classified.lbl_conf.setText(f"Confidence: {int(result.confidence * 100)}%")
 
@@ -749,11 +928,12 @@ class AppWindow(QMainWindow):
             self.classified.lbl_top3.setText("")
 
         extras = []
-        if result.estimated_volume is not None:
-            extras.append(f"Volume: {result.estimated_volume}")
         if result.estimated_weight is not None:
             extras.append(f"Weight: {result.estimated_weight}")
-        self.classified.lbl_extra.setText("   ".join(extras))
+        self.classified.lbl_extra.setText("   ".join(extras) if extras else "")
+
+    def _on_volume_display(self, text: str) -> None:
+        self.classified.lbl_volume.setText(text)
 
     def _on_transcription(self, text: str) -> None:
         # Switch from loading to live screen
@@ -804,7 +984,7 @@ class AppWindow(QMainWindow):
             self.trip._voice_notes_data.append(note)
 
     def _on_error(self, message: str) -> None:
-        QMessageBox.warning(self, "Error", message)
+        QMessageBox.warning(self, "Error", "Something went wrong. Please press escape to return to home screen.")
     
     def _on_recording_status_changed(self, is_recording: bool):
     # Update the hover widget (as we did before)
@@ -819,34 +999,5 @@ class AppWindow(QMainWindow):
         index = self.trip.notes_list.row(item)
         if 0 <= index < len(self.trip._voice_notes_data):
             note = self.trip._voice_notes_data[index]
-            cleaned = note.get("cleaned", note.get("transcript", ""))
-            transcript = note.get("transcript", "")
-            
-            dialog = QDialog(self)
-            dialog.setWindowTitle("Voice Note")
-            dialog.setMinimumWidth(600)
-            dialog.setMinimumHeight(400)
-            
-            layout = QVBoxLayout(dialog)
-            
-            ts = note.get("ts", 0)
-            if ts:
-                dt = datetime.datetime.fromtimestamp(ts)
-                time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-            else:
-                time_str = "Unknown"
-            time_label = QLabel(f"Date/Time: {time_str}")
-            time_label.setStyleSheet("font-size: 14px; font-weight: 600;")
-            layout.addWidget(time_label)
-            
-            text_edit = QTextEdit()
-            text_edit.setReadOnly(True)
-            text_edit.setPlainText(cleaned if cleaned else transcript)
-            text_edit.setStyleSheet("font-size: 14px;")
-            layout.addWidget(text_edit, stretch=1)
-            
-            button_box = QDialogButtonBox(QDialogButtonBox.Ok)
-            button_box.accepted.connect(dialog.accept)
-            layout.addWidget(button_box)
-            
-            dialog.exec()
+            self.voice_note_detail.set_note(note)
+            self.stack.setCurrentWidget(self.voice_note_detail)

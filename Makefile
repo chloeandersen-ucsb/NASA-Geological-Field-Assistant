@@ -24,14 +24,18 @@ ifeq ($(IS_JETSON),1)
 	@echo "Installing dependencies for Jetson..."
 	@sudo apt-get update
 	@sudo apt-get install -y python3-pip python3-dev
-	@pip3 install PySide6
+	@pip3 install -r requirements.txt
+	@echo "Downloading SAM model if needed"
+	@cd $(PROJECT_ROOT) && $(PYTHON) rock-volume/download_sam.py
 	@echo "Creating data directory: $(SAGE_STORE_DIR)"
 	@sudo mkdir -p $(SAGE_STORE_DIR)
 	@sudo chown $$USER:$$USER $(SAGE_STORE_DIR)
 	@echo "Setup complete for Jetson"
 else
 	@echo "Installing dependencies for development platform..."
-	@pip3 install PySide6
+	@pip3 install -r requirements.txt
+	@echo "Downloading SAM model if needed"
+	@cd $(PROJECT_ROOT) && $(PYTHON) rock-volume/download_sam.py
 	@echo "Setup complete"
 endif
 

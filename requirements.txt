@@ -1,0 +1,6 @@
+PySide6
+numpy<2
+torch
+torchvision
+segment-anything
+reportlab
