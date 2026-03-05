@@ -27,6 +27,7 @@ ML-classifications/camera-pipeline/images
 *.log
 rock-volume/outputs/
 *.nemo
+*.pt
 
 # Distribution / packaging
 dist/
