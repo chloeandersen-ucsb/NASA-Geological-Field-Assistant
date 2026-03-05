@@ -12,8 +12,8 @@ sys.path.insert(0, str(project_root))
 img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
 
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor
+from PySide6.QtCore import Qt, QTimer, QPointF
+from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor, QPolygonF
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QStackedWidget, QMessageBox,
     QWidget, QVBoxLayout, QLabel, QPushButton,
@@ -126,6 +126,12 @@ class CameraPreviewPage(QWidget):
         self.video_label.setMinimumSize(400, 300)
         self.video_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         layout.addWidget(self.video_label, stretch=1)
+
+        self.apriltag_hint = QLabel("Place AprilTag next to rock")
+        self.apriltag_hint.setAlignment(Qt.AlignCenter)
+        self.apriltag_hint.setStyleSheet("font-size: 16px; color: #7e1f23;")
+        self.apriltag_hint.hide()
+        layout.addWidget(self.apriltag_hint)
 
         self.voice_ctrl = ExpandingVoiceWidget(self.vm, self)
         layout.addWidget(self.voice_ctrl, 0, Qt.AlignCenter)
@@ -823,30 +829,57 @@ class AppWindow(QMainWindow):
         self.vm.two_step_capture_message.connect(self.camera_preview.lbl_step.setText)
         self.vm.camera.frame_ready.connect(self._on_camera_frame)
         
-    def _on_camera_frame(self, image: QImage) -> None:
-        if self.vm.state == AppStateType.CAMERA_PREVIEW:
-            img = image.copy()
-            w, h = img.width(), img.height()
-            painter = QPainter(img)
-            painter.setPen(QPen(QColor(255, 255, 255), 2, Qt.SolidLine))
-            cx, cy = w // 2, h // 2
-            size = min(w, h) // 15
-            painter.drawLine(cx - size, cy, cx + size, cy)
-            painter.drawLine(cx, cy - size, cx, cy + size)
-            painter.end()
-            pixmap = QPixmap.fromImage(img)
-            scaled_pixmap = pixmap.scaled(
-                self.camera_preview.video_label.size(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation
-            )
-            self.camera_preview.video_label.setPixmap(scaled_pixmap)
+    def _on_camera_frame(self, image: QImage, tag_result: object) -> None:
+        if self.vm.state != AppStateType.CAMERA_PREVIEW:
+            return
+        corners, in_focus = (None, False) if tag_result is None else tag_result
+        if not isinstance(corners, list):
+            corners = None
+        img = image.copy()
+        w, h = img.width(), img.height()
+        painter = QPainter(img)
+        painter.setPen(QPen(QColor(255, 255, 255), 2, Qt.SolidLine))
+        cx, cy = w // 2, h // 2
+        size = min(w, h) // 15
+        painter.drawLine(cx - size, cy, cx + size, cy)
+        painter.drawLine(cx, cy - size, cx, cy + size)
+        if corners is not None and len(corners) == 4:
+            poly = QPolygonF([QPointF(c[0], c[1]) for c in corners])
+            if in_focus:
+                painter.setPen(QPen(QColor(0, 180, 0), 4, Qt.SolidLine))
+            else:
+                painter.setPen(QPen(QColor(220, 165, 0), 4, Qt.SolidLine))
+            painter.drawPolygon(poly)
+        painter.end()
+        pixmap = QPixmap.fromImage(img)
+        scaled_pixmap = pixmap.scaled(
+            self.camera_preview.video_label.size(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
+        )
+        self.camera_preview.video_label.setPixmap(scaled_pixmap)
+        if corners is not None:
+            if hasattr(self, "_apriltag_hint_timer") and self._apriltag_hint_timer.isActive():
+                self._apriltag_hint_timer.stop()
+            self.camera_preview.apriltag_hint.hide()
+        else:
+            if not hasattr(self, "_apriltag_hint_timer"):
+                self._apriltag_hint_timer = QTimer(self)
+                self._apriltag_hint_timer.setSingleShot(True)
+                self._apriltag_hint_timer.timeout.connect(
+                    lambda: self.camera_preview.apriltag_hint.setVisible(True)
+                )
+            if not self._apriltag_hint_timer.isActive() and not self.camera_preview.apriltag_hint.isVisible():
+                self._apriltag_hint_timer.start(2000)
 
     def _show_state(self, state: AppStateType) -> None:
         if state == AppStateType.HOME:
             self.stack.setCurrentWidget(self.home)
         elif state == AppStateType.CAMERA_PREVIEW:
             self.stack.setCurrentWidget(self.camera_preview)
+            self.camera_preview.apriltag_hint.hide()
+            if hasattr(self, "_apriltag_hint_timer") and self._apriltag_hint_timer.isActive():
+                self._apriltag_hint_timer.stop()
             self.vm.start_camera_stream(0, 0, 0, 0)
         elif state == AppStateType.CONFIRM_CAPTURES:
             self.stack.setCurrentWidget(self.capture_review)

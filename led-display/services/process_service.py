@@ -42,7 +42,7 @@ class ProcessService(QObject):
 
 
 class CameraService(QThread):
-    frame_ready = Signal(QImage)
+    frame_ready = Signal(QImage, object)  # (QImage, (corners | None, in_focus))
     capture_finished = Signal(str)
     capture_failed = Signal(str)
     
@@ -115,14 +115,24 @@ class CameraService(QThread):
                     return
                 self.capture_finished.emit(filepath)
                 
+            # AprilTag detection for preview overlay (corners + in_focus)
+            try:
+                if str(project_root / "rock-volume") not in sys.path:
+                    sys.path.insert(0, str(project_root / "rock-volume"))
+                from apriltag_preview import detect_corners_for_preview
+                corners, in_focus = detect_corners_for_preview(frame)
+                tag_result = (corners, in_focus)
+            except Exception:
+                tag_result = (None, False)
+
             # Convert OpenCV frame to PySide6 QImage
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             h, w, ch = frame_rgb.shape
             bytes_per_line = ch * w
-            
+
             # Create the UI image and copy it so memory is managed safely
             qt_img = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888).copy()
-            self.frame_ready.emit(qt_img)
+            self.frame_ready.emit(qt_img, tag_result)
             
         cap.release()
         print("[CAMERA] Native Preview stopped", file=sys.stderr)
