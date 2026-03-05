@@ -4,6 +4,7 @@ from dataclasses import dataclass, asdict
 from enum import Enum, auto
 from pathlib import Path
 from typing import Optional, List, Union
+import datetime
 import json
 import os
 import sys
@@ -54,11 +55,11 @@ class TripSummary:
 
 
 class Store:
-    def __init__(self, base_dir: str):
+    def __init__(self, base_dir: str, voice_notes_data_dir: str):
         self.base_dir = base_dir
+        self.voice_notes_data_dir = voice_notes_data_dir
         os.makedirs(self.base_dir, exist_ok=True)
         self.rocks_path = os.path.join(self.base_dir, "rocks.jsonl")
-        self.voice_path = os.path.join(self.base_dir, "voice_notes.jsonl")
 
     def save_rock(self, result: ClassificationResult) -> RockEntry:
         entry = RockEntry(
@@ -99,14 +100,19 @@ class Store:
         return rocks
 
     def save_voice_note(self, transcript: str, cleaned: Optional[str] = None) -> None:
+        ts = time.time()
+        now = datetime.datetime.fromtimestamp(ts)
+        date_dir = os.path.join(self.voice_notes_data_dir, now.strftime("%Y%m%d"))
+        os.makedirs(date_dir, exist_ok=True)
+        filename = f"{now.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4()}.json"
+        filepath = os.path.join(date_dir, filename)
         rec = {
-            "type": "voice",
-            "ts": time.time(),
+            "ts": ts,
             "transcript": transcript,
             "cleaned": cleaned or transcript,
         }
-        with open(self.voice_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(rec) + "\n")
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(rec, f, ensure_ascii=False)
 
     def update_rock_volume(self, rock_id: str, volume: Optional[float], weight: Optional[str]) -> None:
         if not os.path.exists(self.rocks_path):
@@ -128,18 +134,21 @@ class Store:
                 f.write(json.dumps(rec) + "\n")
 
     def list_voice_notes(self) -> List[dict]:
-        if not os.path.exists(self.voice_path):
+        if not os.path.isdir(self.voice_notes_data_dir):
             return []
         notes: List[dict] = []
-        with open(self.voice_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
+        for root, _dirs, files in os.walk(self.voice_notes_data_dir, topdown=True):
+            for f in files:
+                if not f.endswith(".json"):
                     continue
-                rec = json.loads(line)
-                if rec.get("type") != "voice":
+                path = os.path.join(root, f)
+                try:
+                    with open(path, "r", encoding="utf-8") as fp:
+                        rec = json.load(fp)
+                    if "ts" in rec and "transcript" in rec:
+                        notes.append(rec)
+                except (json.JSONDecodeError, OSError):
                     continue
-                notes.append(rec)
         notes.sort(key=lambda x: x.get("ts", 0), reverse=True)
         return notes
 
@@ -154,13 +163,13 @@ class ViewModel(QObject):
     error = Signal(str)
     two_step_capture_message = Signal(str)
 
-    def __init__(self, store_dir: str, parent=None):
+    def __init__(self, store_dir: str, voice_notes_data_dir: str, parent=None):
         super().__init__(parent)
         
         self._last_captured_path: str | None = None
         
         try:
-            self.store = Store(store_dir)
+            self.store = Store(store_dir, voice_notes_data_dir)
         except Exception as e:
             import sys
             print(f"ERROR: Failed to create Store: {e}", file=sys.stderr)
