@@ -293,9 +293,8 @@ class ViewModel(QObject):
         self._set_state(AppStateType.CLASSIFYING)
         self._classify_timeout.start(self.classification_timeout_ms)
         self.classifier.classify(classify_path)
-        if self._pending_top_path and self._pending_side_path:
-            self._volume_start_time = time.time()
-            self.volume_service.estimate(self._pending_top_path, self._pending_side_path)
+        # Volume is started only after classification finishes (in _on_classified) to avoid
+        # GPU memory contention on Jetson — classification gets full GPU, then volume runs.
 
     def retake_captures(self) -> None:
         for p in (self._pending_top_path, self._pending_side_path):
@@ -358,6 +357,10 @@ class ViewModel(QObject):
         self._classify_timeout.stop()
         self._classify_payload = payload
         self._classification_applied = False
+        # Start volume estimation after classification so GPU is not shared (avoids Jetson OOM).
+        if self._pending_top_path and self._pending_side_path:
+            self._volume_start_time = time.time()
+            self.volume_service.estimate(self._pending_top_path, self._pending_side_path)
         if self._pending_volume_result is not None:
             self._apply_classification_result()
             return
