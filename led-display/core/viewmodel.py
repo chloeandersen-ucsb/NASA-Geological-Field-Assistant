@@ -671,6 +671,8 @@ class ViewModel(QObject):
             self.store.save_voice_note(text, cleaned=text)
 
         self.stop_voice_to_text()
+        
+        self.transcription_text = ""
 
         self.transcription_changed.emit("")
         self.recording_status_changed.emit(False)
@@ -695,6 +697,11 @@ class ViewModel(QObject):
     def _on_transcription_completed(self, final_text: str) -> None:
         import sys
         print(f"[VIEWMODEL] Received transcription completed signal", file=sys.stderr)
+        
+        if self.state == AppStateType.HOME:
+            print("[VIEWMODEL] Ignored late text because session is closed.", file=sys.stderr)
+            return
+            
         print(f"[VIEWMODEL] Final text received: '{final_text}'", file=sys.stderr)
         print(f"[VIEWMODEL] Final text length: {len(final_text)}", file=sys.stderr)
         if final_text.strip():

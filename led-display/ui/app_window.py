@@ -12,12 +12,13 @@ sys.path.insert(0, str(project_root))
 img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
 
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor, QTextCursor
 from PySide6.QtWidgets import (
     QMainWindow, QStackedWidget, QMessageBox,
     QWidget, QVBoxLayout, QLabel, QPushButton,
-    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy
+    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy,
+    QDialog
 )
 
 import connector
@@ -721,6 +722,43 @@ class AppWindow(QMainWindow):
         shortcut_quit = QShortcut(QKeySequence("Ctrl+C"), self)
         shortcut_quit.activated.connect(self._quit_application)
         
+    def _on_virtual_key_pressed(self, key: str) -> None:
+        cursor = self.voice.text.textCursor()
+        
+        if key == "⌫":
+            cursor.deletePreviousChar()
+        elif key == "Space":
+            cursor.insertText(" ")
+        elif key == "←":
+            cursor.movePosition(QTextCursor.Left)
+        elif key == "→":
+            cursor.movePosition(QTextCursor.Right)
+        elif key == "↑":
+            cursor.movePosition(QTextCursor.Up)
+        elif key == "↓":
+            cursor.movePosition(QTextCursor.Down)
+        else:
+            cursor.insertText(key)
+            
+        self.voice.text.setTextCursor(cursor)
+        self.voice.text.setFocus()
+        self.vm.transcription_text = self.voice.text.toPlainText()
+        
+        # --- SMART AUTO-SHIFT LOGIC ---
+        # Grab all the text leading up to the cursor's current position
+        text_so_far = self.voice.text.toPlainText()[:cursor.position()]
+        
+        if len(text_so_far) == 0:
+            # If the box is completely empty, capitalize the first letter!
+            self.inline_keyboard.set_shift_state(1)
+        elif len(text_so_far) >= 2 and text_so_far[-2:] in [". ", "? ", "! "]:
+            # If the last two characters were punctuation + space, capitalize!
+            self.inline_keyboard.set_shift_state(1)
+        elif len(text_so_far) >= 1 and text_so_far[-1] == "\n":
+            # If they just went to a new line, capitalize!
+            self.inline_keyboard.set_shift_state(1)
+        
+        
     def _on_rock_clicked(self, item) -> None:
         index = self.trip.list.row(item)
         summary = self.vm.store.list_rocks() # Get the full data list
@@ -778,7 +816,8 @@ class AppWindow(QMainWindow):
         self.classified.btn_save.clicked.connect(self.vm.save_classification)
         self.classified.btn_delete.clicked.connect(self.vm.delete_classification)
 
-        self.voice.btn_stop.clicked.connect(self.vm.stop_voice_to_text)
+        #self.voice.btn_stop.clicked.connect(self.vm.stop_voice_to_text)
+        self.voice.btn_stop.clicked.connect(self._on_stop_or_edit_clicked)
         self.voice.btn_redo.clicked.connect(self.vm.redo_voice_to_text)
         self.voice.btn_save.clicked.connect(self.vm.save_transcription)
         self.voice.btn_delete.clicked.connect(self.vm.delete_transcription)
@@ -788,6 +827,23 @@ class AppWindow(QMainWindow):
         self.trip.list.itemClicked.connect(self._on_rock_clicked)
         self.rock_detail.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(self.trip))
         self.voice_note_detail.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(self.trip))
+        
+    def _on_stop_or_edit_clicked(self) -> None:
+        if self.voice.btn_stop.text() == "Stop":
+            self.vm.stop_voice_to_text()
+        else:
+            self.inline_keyboard.show()
+            self.voice.text.setReadOnly(False)
+            self.voice.text.setFocus()
+            self.voice.text.moveCursor(QTextCursor.End)
+            
+            # --- STARTUP CHECK ---
+            text = self.voice.text.toPlainText()
+            # If the text is empty, OR ends in punctuation, start with Shift ON!
+            if not text or (len(text) >= 2 and text[-2:] in [". ", "? ", "! "]):
+                self.inline_keyboard.set_shift_state(1)
+            else:
+                self.inline_keyboard.set_shift_state(0)
 
     def _wire_vm(self) -> None:
         self.vm.state_changed.connect(self._show_state)
@@ -799,6 +855,19 @@ class AppWindow(QMainWindow):
         self.vm.recording_status_changed.connect(self._on_recording_status_changed)
         self.vm.two_step_capture_message.connect(self.camera_preview.lbl_step.setText)
         self.vm.camera.frame_ready.connect(self._on_camera_frame)
+        
+        self.inline_keyboard = Keyboard()
+        self.inline_keyboard.hide()
+        
+        self.inline_keyboard.btn_close.clicked.connect(self.inline_keyboard.hide)
+        
+        voice_layout = self.voice.layout()
+        if voice_layout:
+            voice_layout.insertWidget(voice_layout.count() - 1, self.inline_keyboard)
+            
+        self.inline_keyboard.hide()
+        
+        self.inline_keyboard.key_pressed.connect(self._on_virtual_key_pressed)
         
     def _on_camera_frame(self, image: QImage) -> None:
         if self.vm.state == AppStateType.CAMERA_PREVIEW:
@@ -820,30 +889,7 @@ class AppWindow(QMainWindow):
             self.camera_preview.video_label.setPixmap(scaled_pixmap)
 
     def _show_state(self, state: AppStateType) -> None:
-        if state == AppStateType.HOME:
-            self.stack.setCurrentWidget(self.home)
-        elif state == AppStateType.CAMERA_PREVIEW:
-            self.stack.setCurrentWidget(self.camera_preview)
-            self.vm.start_camera_stream(0, 0, 0, 0)
-        elif state == AppStateType.CONFIRM_CAPTURES:
-            self.stack.setCurrentWidget(self.capture_review)
-            top_path, side_path = self.vm.get_review_image_paths()
-            self.capture_review.set_images(top_path, side_path)
-        elif state == AppStateType.CLASSIFYING:
-            self.stack.setCurrentWidget(self.loading)
-        elif state == AppStateType.CLASSIFIED:
-            self.stack.setCurrentWidget(self.classified)
-        elif state == AppStateType.VOICE_TO_TEXT_LOADING:
-            self.stack.setCurrentWidget(self.voice_loading)
-        elif state == AppStateType.VOICE_TO_TEXT:
-            self.stack.setCurrentWidget(self.voice)
-            self.voice.btn_save.setEnabled(False)  # disable until transcription finishes
-        elif state == AppStateType.TRIP_LOAD:
-            self.stack.setCurrentWidget(self.trip)
-        if state == AppStateType.VOICE_TO_TEXT:
-            if self.stack.currentWidget() == self.camera_preview:
-                return 
-
+        # 1. Switch the widget on the screen
         mapping = {
             AppStateType.HOME: self.home,
             AppStateType.CAMERA_PREVIEW: self.camera_preview,
@@ -854,29 +900,45 @@ class AppWindow(QMainWindow):
             AppStateType.VOICE_TO_TEXT: self.voice,
             AppStateType.TRIP_LOAD: self.trip
         }
-
+        
         if state in mapping:
-            self.stack.setCurrentWidget(mapping[state])
-            
-            # --- MANDATORY CLEANUP ON STATE CHANGE ---
-            if state == AppStateType.HOME:
-                # If we are home, and the VM says we aren't recording, 
-                # ensure the VoicePage is visually empty for the next time.
-                if not getattr(self.vm.transcriber, 'is_recording', False):
-                    self.voice.text.clear()
-                    self.camera_preview.voice_ctrl.trigger_btn.setText("🎤")
-                    self.camera_preview.voice_ctrl.trigger_btn.setStyleSheet(
-                        "background-color: #344f41; color: white; border-radius: 25px; font-size: 20px;"
-                    )
+            # Edge case: If we are in camera preview, don't switch screens just to show VTT
+            if state == AppStateType.VOICE_TO_TEXT and self.stack.currentWidget() == self.camera_preview:
+                pass
+            else:
+                self.stack.setCurrentWidget(mapping[state])
 
-            if state == AppStateType.VOICE_TO_TEXT:
-                # Load current data from VM
-                self.voice.text.setPlainText(self.vm.transcription_text)
-                self.voice.btn_save.setEnabled(bool(self.vm.transcription_text.strip()))
+        # 2. Handle state-specific setup and cleanup
+        if state == AppStateType.HOME:
+            # If we return Home, and the mic is off, aggressively factory-reset the Voice module
+            if not getattr(self.vm.transcriber, 'is_recording', False):
+                self.voice.text.clear()
+                self.vm.transcription_text = ""  # <--- THE MAGIC FIX: Wipes ghost text from memory!
                 
-            if state == AppStateType.CAMERA_PREVIEW:
-                self.camera_preview.lbl_step.setText("Step 1/2: Capture top view")
-                self.vm.start_camera_stream(0, 0, 0, 0)
+                # Reset the little camera-preview voice button
+                self.camera_preview.voice_ctrl.trigger_btn.setText("🎤")
+                self.camera_preview.voice_ctrl.trigger_btn.setStyleSheet(
+                    "background-color: #344f41; color: white; border-radius: 25px; font-size: 20px;"
+                )
+
+        elif state == AppStateType.CAMERA_PREVIEW:
+            self.camera_preview.lbl_step.setText("Step 1/2: Capture top view")
+            self.vm.start_camera_stream(0, 0, 0, 0)
+
+        elif state == AppStateType.CONFIRM_CAPTURES:
+            top_path, side_path = self.vm.get_review_image_paths()
+            self.capture_review.set_images(top_path, side_path)
+
+        elif state == AppStateType.VOICE_TO_TEXT:
+            # Reset UI elements for safety
+            self.inline_keyboard.hide()       
+            self.inline_keyboard.set_shift_state(0)
+            self.voice.btn_stop.setText("Stop")      
+            self.voice.text.setReadOnly(True)
+            
+            # Load text directly from VM (If it's a new session, this will safely be empty!)
+            self.voice.text.setPlainText(self.vm.transcription_text)
+            self.voice.btn_save.setEnabled(bool(self.vm.transcription_text.strip()))
 
     def _on_classification(self, result: ClassificationResult) -> None:
         has_side = result.side_image_path and os.path.exists(result.side_image_path)
@@ -990,8 +1052,13 @@ class AppWindow(QMainWindow):
     # Update the hover widget (as we did before)
         self.camera_preview.voice_ctrl._update_ui_state(is_recording)
         
+        if is_recording:
+            self.voice.btn_stop.setText("Stop")
+            self.inline_keyboard.hide()
+            self.voice.text.setReadOnly(True)
         # If recording has stopped, explicitly clear the VoicePage text box
         if not is_recording:
+            self.voice.btn_stop.setText("Edit")
             self.voice.text.clear() 
             self.voice.btn_save.setEnabled(False)
 
@@ -1001,3 +1068,135 @@ class AppWindow(QMainWindow):
             note = self.trip._voice_notes_data[index]
             self.voice_note_detail.set_note(note)
             self.stack.setCurrentWidget(self.voice_note_detail)
+            
+
+class Keyboard(QDialog):
+    key_pressed = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumHeight(260)
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(2, 2, 2, 2)
+        main_layout.setSpacing(4)
+        
+        # 0 = lower, 1 = Single shift, 2 = CAPS LOCK
+        self.shift_state = 0
+        self.letter_btns = []
+        
+        rows = [
+            ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "⌫"],
+            ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+            ["A", "S", "D", "F", "G", "H", "J", "K", "L", "'"],
+            ["Z", "X", "C", "V", "B", "N", "M", ",", ".", "!", "?"]
+        ]
+        
+        for row in rows:
+            row_layout = QHBoxLayout()
+            row_layout.setSpacing(4)
+            for key in row:
+                btn = QPushButton(key)
+                btn.setMinimumHeight(45)
+                btn.setMinimumWidth(20)
+                btn.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #e0e0e0; color: black;")
+                
+                if key.isalpha() and len(key) == 1:
+                    self.letter_btns.append(btn)
+                    btn.clicked.connect(lambda checked=False, b=btn: self._on_letter_clicked(b.text()))
+                else:
+                    btn.clicked.connect(lambda checked=False, char=key: self.key_pressed.emit(char))
+                
+                row_layout.addWidget(btn)
+            main_layout.addLayout(row_layout)
+            
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setSpacing(4)
+        
+        self.btn_shift = QPushButton("⇧")
+        self.btn_shift.setMinimumHeight(45)
+        self.btn_shift.setMinimumWidth(40)
+        self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #c0c0c0; color: black;")
+        self.btn_shift.clicked.connect(self._on_shift_clicked)
+        bottom_layout.addWidget(self.btn_shift, stretch=1)
+        
+        self.shift_timer = QTimer(self)
+        self.shift_timer.setSingleShot(True)
+        
+        self.btn_space = QPushButton("Space")
+        self.btn_space.setMinimumHeight(45)
+        self.btn_space.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #e0e0e0; color: black;")
+        self.btn_space.clicked.connect(lambda checked=False: self.key_pressed.emit("Space"))
+        bottom_layout.addWidget(self.btn_space, stretch=3)
+        
+        # Arrow Keys
+        for arrow in ["←", "↑", "↓", "→"]:
+            btn = QPushButton(arrow)
+            btn.setMinimumHeight(45)
+            btn.setMinimumWidth(20)
+            btn.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #c0c0c0; color: black;")
+            btn.clicked.connect(lambda checked=False, char=arrow: self.key_pressed.emit(char))
+            bottom_layout.addWidget(btn)
+            
+        # The Close Button (keeping the name btn_close so our hiding logic still works!)
+        self.btn_close = QPushButton("Close")
+        self.btn_close.setMinimumHeight(45)
+        self.btn_close.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #8c4b4b; color: white;")
+        bottom_layout.addWidget(self.btn_close, stretch=1)
+        
+        main_layout.addLayout(bottom_layout)
+        
+        self._update_keyboard_case()
+        
+    def _on_letter_clicked(self, char):
+        self.key_pressed.emit(char)
+        # iPhone logic: After typing a single shifted letter, instantly revert to lowercase
+        if self.shift_state == 1:
+            self.shift_state = 0
+            self._update_keyboard_case()
+
+    def _on_shift_clicked(self):
+        if self.shift_timer.isActive():
+            # Second click happened within 300ms! Activate Caps Lock!
+            self.shift_timer.stop()
+            self.shift_state = 2
+        else:
+            self.shift_timer.start(300) # Start the 300ms window waiting for a double click
+            # Toggle normal shift
+            if self.shift_state == 0:
+                self.shift_state = 1
+            elif self.shift_state == 1:
+                self.shift_state = 0
+            elif self.shift_state == 2:
+                self.shift_state = 0
+                
+        self._update_keyboard_case()
+
+    def set_shift_state(self, state):
+        # Don't auto-override the user if they specifically turned on Caps Lock
+        if self.shift_state != 2:
+            self.shift_state = state
+            self._update_keyboard_case()
+
+    def _update_keyboard_case(self):
+        is_upper = (self.shift_state > 0)
+        
+        # Flip all the letters A-Z
+        for btn in self.letter_btns:
+            text = btn.text()
+            btn.setText(text.upper() if is_upper else text.lower())
+            
+        # Update Shift Button icon & colors
+        if self.shift_state == 0:
+            self.btn_shift.setText("⇧")
+            self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #c0c0c0; color: black;")
+        elif self.shift_state == 1:
+            self.btn_shift.setText("⬆")
+            self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #ffffff; color: black;")
+        elif self.shift_state == 2:
+            self.btn_shift.setText("⇪") # Caps lock icon
+            self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #4a90e2; color: white;")
+                
+
+
+
