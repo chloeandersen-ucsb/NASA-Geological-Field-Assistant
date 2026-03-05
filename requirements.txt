@@ -1,6 +1,5 @@
 PySide6
-opencv-contrib-python
-numpy
+numpy<2
 torch
 torchvision
 segment-anything

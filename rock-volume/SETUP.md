@@ -2,19 +2,12 @@
 
 ## Prerequisites
 
-Install required Python packages:
-
-```bash
-pip install -r requirements.txt
-```
-
-## Required: Download SAM Model
+Run `make setup` which should download all requirements for project in requirements.txt and downloads SAM module: 
 
 ```bash
 python download_sam.py
 ```
-
-Downloads the Segment Anything model (~375 MB) to `~/.sam_models/`. This is required for automatic object segmentation.
+(~375 MB) 
 
 ## Optional: Camera Calibration
 

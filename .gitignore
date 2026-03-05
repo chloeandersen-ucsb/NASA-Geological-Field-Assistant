@@ -23,9 +23,10 @@ ENV/
 Thumbs.db
 
 # Project specific
-sage_data/
+ML-classifications/camera-pipeline/images
 *.log
 rock-volume/outputs/
+*.nemo
 
 # Distribution / packaging
 dist/
