@@ -79,7 +79,15 @@ class LoadingPage(QWidget):
         layout.addStretch(1)
         layout.addWidget(label)
         layout.addStretch(1)
-    
+        self.btn_cancel = QPushButton("Cancel")
+        self.btn_cancel.setMinimumHeight(50)
+        self.btn_cancel.setStyleSheet("""
+            background-color: #7e1f23;
+            font-size: 22px;
+            color: white;
+        """)
+        layout.addWidget(self.btn_cancel)
+
     def set_message(self, message: str) -> None:
         for i in range(self.layout().count()):
             item = self.layout().itemAt(i)
@@ -764,6 +772,7 @@ class AppWindow(QMainWindow):
         self.camera_preview.btn_cancel.clicked.connect(self.vm.cancel_camera)
         self.capture_review.btn_classify.clicked.connect(self.vm.confirm_captures_and_classify)
         self.capture_review.btn_retake.clicked.connect(self.vm.retake_captures)
+        self.loading.btn_cancel.clicked.connect(self.vm.cancel_classification)
 
         self.classified.btn_reclassify.clicked.connect(self.vm.reclassify)
         self.classified.btn_save.clicked.connect(self.vm.save_classification)

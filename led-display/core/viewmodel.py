@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from enum import Enum, auto
+from pathlib import Path
 from typing import Optional, List, Union
 import json
 import os
@@ -451,8 +452,90 @@ class ViewModel(QObject):
         self.go_home()
 
     def delete_classification(self) -> None:
+        if self.current_classification:
+            self._delete_classification_files(self.current_classification)
         self.current_classification = None
         self.go_home()
+
+    def _delete_classification_files(self, result: ClassificationResult) -> None:
+        """Delete the two images and _prediction.json for this classification from camera-pipeline/images/{date}/."""
+        # Only delete files under ML-classifications/camera-pipeline/images/
+        project_root = Path(__file__).resolve().parent.parent.parent
+        images_root = project_root / "ML-classifications" / "camera-pipeline" / "images"
+        try:
+            images_root = images_root.resolve()
+        except OSError:
+            return
+        to_delete: List[str] = []
+        for path_str in (result.image_path, result.side_image_path):
+            if not path_str:
+                continue
+            try:
+                p = Path(path_str).resolve()
+                if p.exists() and str(p).startswith(str(images_root)):
+                    to_delete.append(str(p))
+            except OSError:
+                pass
+        # _prediction.json is next to the top image (the one used for classification)
+        if result.image_path:
+            base, _ = os.path.splitext(result.image_path)
+            pred_path = base + "_prediction.json"
+            try:
+                p = Path(pred_path).resolve()
+                if p.exists() and str(p).startswith(str(images_root)):
+                    to_delete.append(str(p))
+            except OSError:
+                pass
+        for path_str in to_delete:
+            try:
+                os.remove(path_str)
+                print(f"[VIEWMODEL] Deleted: {path_str}", file=sys.stderr)
+            except OSError as e:
+                print(f"[VIEWMODEL] Failed to delete {path_str}: {e}", file=sys.stderr)
+
+    def _delete_pending_classification_files(self) -> None:
+        """Delete pending session images, _prediction.json, and _volume.json under camera-pipeline/images/."""
+        project_root = Path(__file__).resolve().parent.parent.parent
+        images_root = project_root / "ML-classifications" / "camera-pipeline" / "images"
+        try:
+            images_root = images_root.resolve()
+        except OSError:
+            return
+        to_delete: set = set()
+        classify_path = self._pending_top_path or self._pending_side_path or self._last_captured_path
+        for path_str in (self._pending_top_path, self._pending_side_path, self._last_captured_path):
+            if not path_str:
+                continue
+            try:
+                p = Path(path_str).resolve()
+                if p.exists() and str(p).startswith(str(images_root)):
+                    to_delete.add(str(p))
+            except OSError:
+                pass
+        if classify_path:
+            base, _ = os.path.splitext(classify_path)
+            pred_path = base + "_prediction.json"
+            try:
+                p = Path(pred_path).resolve()
+                if p.exists() and str(p).startswith(str(images_root)):
+                    to_delete.add(str(p))
+            except OSError:
+                pass
+        if self._pending_top_path:
+            base, _ = os.path.splitext(self._pending_top_path)
+            vol_path = base + "_volume.json"
+            try:
+                p = Path(vol_path).resolve()
+                if p.exists() and str(p).startswith(str(images_root)):
+                    to_delete.add(str(p))
+            except OSError:
+                pass
+        for path_str in to_delete:
+            try:
+                os.remove(path_str)
+                print(f"[VIEWMODEL] Deleted: {path_str}", file=sys.stderr)
+            except OSError as e:
+                print(f"[VIEWMODEL] Failed to delete {path_str}: {e}", file=sys.stderr)
 
     def _on_volume_finished(self, payload: dict) -> None:
         if self._volume_start_time is not None and (time.time() - self._volume_start_time) > 120:
@@ -500,6 +583,38 @@ class ViewModel(QObject):
     def _on_classify_timeout(self) -> None:
         self.classifier.kill()
         self._fail("Classification timeout (20s)")
+
+    def _abort_classification(self, error_message: Optional[str]) -> None:
+        """Stop timers, kill classification and volume processes, delete images + .json files created, go home"""
+        if self.state != AppStateType.CLASSIFYING:
+            self.go_home()
+            return
+        self._classify_timeout.stop()
+        if self._volume_ready_timer:
+            self._volume_ready_timer.stop()
+            self._volume_ready_timer = None
+        self.classifier.kill()
+        self.volume_service.kill()
+        self._delete_pending_classification_files()
+        self._classify_payload = None
+        self._pending_volume_result = None
+        self._classification_applied = False
+        self._volume_pending = False
+        self._volume_failed = False
+        self._volume_start_time = None
+        self.current_classification = None
+        self._pending_top_path = None
+        self._pending_side_path = None
+        self._last_captured_path = None
+        self._last_top_path = None
+        self._last_side_path = None
+        self.go_home()
+
+    def cancel_classification(self) -> None:
+        """if user cancels in analyzing page, clean up and return to home."""
+        if self.state != AppStateType.CLASSIFYING:
+            return
+        self._abort_classification(None)
 
     def start_voice_to_text(self) -> None:
         # import sys
@@ -616,11 +731,5 @@ class ViewModel(QObject):
         self.trip_changed.emit(summary)
 
     def _fail(self, message: str) -> None:
-        self._classify_timeout.stop()
-        if self._volume_ready_timer:
-            self._volume_ready_timer.stop()
-            self._volume_ready_timer = None
-        self.volume_service.kill()
-        self.error.emit(message)
-        self.go_home()
+        self._abort_classification(message)
 
