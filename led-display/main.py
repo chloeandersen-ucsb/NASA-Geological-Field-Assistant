@@ -35,6 +35,7 @@ def main() -> int:
     
     try:
         store_dir = connector.ensure_data_dir()
+        voice_notes_data_dir = connector.ensure_voice_notes_data_dir()
     except Exception as e:
         print(f"ERROR: Failed to get data store directory: {e}", file=sys.stderr)
         import traceback
@@ -42,7 +43,7 @@ def main() -> int:
         return 1
     
     try:
-        vm = ViewModel(store_dir=str(store_dir))
+        vm = ViewModel(store_dir=str(store_dir), voice_notes_data_dir=str(voice_notes_data_dir))
     except Exception as e:
         print(f"ERROR: Failed to create ViewModel: {e}", file=sys.stderr)
         import traceback

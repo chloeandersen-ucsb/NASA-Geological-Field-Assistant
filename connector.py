@@ -72,6 +72,21 @@ def get_voice_to_text_dir() -> Path:
     return get_project_root() / "voiceNotes"
 
 
+def get_voice_notes_data_dir() -> Path:
+    """
+    Get the voice notes data directory (voiceNotes/data).
+    Same on all devices. Used for saving and loading voice note transcriptions.
+    """
+    return get_voice_to_text_dir() / "data"
+
+
+def ensure_voice_notes_data_dir() -> Path:
+    """Ensure voiceNotes/data exists and is writable; return its path."""
+    data_dir = get_voice_notes_data_dir()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
+
+
 def get_data_store_dir() -> Path:
     """
     Get the data storage directory path.

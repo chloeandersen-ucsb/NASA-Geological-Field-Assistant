@@ -15,7 +15,7 @@ img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor
 from PySide6.QtWidgets import (
-    QMainWindow, QStackedWidget, QMessageBox,
+    QApplication, QMainWindow, QStackedWidget, QMessageBox,
     QWidget, QVBoxLayout, QLabel, QPushButton,
     QTextEdit, QListWidget, QHBoxLayout, QSizePolicy
 )
@@ -661,6 +661,8 @@ class AppWindow(QMainWindow):
 
 
         self.stack = QStackedWidget()
+        self.stack.setMinimumSize(0, 0)
+        self.stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setCentralWidget(self.stack)
 
         self.home = HomePage()
@@ -685,6 +687,11 @@ class AppWindow(QMainWindow):
         self.stack.addWidget(self.rock_detail)
         self.stack.addWidget(self.voice_note_detail)
 
+        for i in range(self.stack.count()):
+            w = self.stack.widget(i)
+            w.setMinimumSize(0, 0)
+            w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
         self._wire_ui()
         self._wire_vm()
 
@@ -695,6 +702,7 @@ class AppWindow(QMainWindow):
         if is_jetson:
             try:
                 self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+                self._apply_fullscreen_geometry()
                 self.showFullScreen()
             except Exception as e:
                 import sys
@@ -748,14 +756,29 @@ class AppWindow(QMainWindow):
         
         super().keyPressEvent(event)
 
+    def _apply_fullscreen_geometry(self) -> None:
+        """Set window to exact screen size (edge-to-edge). Use geometry(), not availableGeometry()."""
+        screen = self.screen() if self.windowHandle() else QApplication.primaryScreen()
+        if not screen:
+            return
+        rect = screen.geometry()
+        self.setMinimumSize(rect.size())
+        self.setMaximumSize(rect.size())
+        self.setGeometry(rect)
+
     def _toggle_fullscreen(self) -> None:
         if self.isFullScreen():
+            self.setMinimumSize(0, 0)
+            self.setMaximumSize(16777215, 16777215)
             self.showNormal()
         else:
+            self._apply_fullscreen_geometry()
             self.showFullScreen()
 
     def _exit_fullscreen(self) -> None:
         if self.isFullScreen():
+            self.setMinimumSize(0, 0)
+            self.setMaximumSize(16777215, 16777215)
             self.showNormal()
 
     def _quit_application(self) -> None:

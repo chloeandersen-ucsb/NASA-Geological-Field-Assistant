@@ -27,6 +27,7 @@ ML-classifications/camera-pipeline/images
 *.log
 rock-volume/outputs/
 *.pt
+voiceNotes/data
 
 # Distribution / packaging
 dist/
