@@ -144,23 +144,40 @@ class CameraPreviewPage(QWidget):
 
 class CaptureReviewPage(QWidget):
     """After both captures: preview top and side images with Classify or Retake."""
+    _IMG_W, _IMG_H = 320, 240
+
     def __init__(self, vm):
         super().__init__()
         self.vm = vm
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Review captures"))
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
+        title = QLabel("Review captures")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("""
+            font-size: 22px;
+            font-weight: bold;
+            border: 2px solid #697d6a;
+            border-radius: 8px;
+            padding: 8px;
+        """)
+        layout.addWidget(title)
+
         images_row = QHBoxLayout()
+        images_row.setSpacing(12)
         self.lbl_top = QLabel()
         self.lbl_top.setAlignment(Qt.AlignCenter)
-        self.lbl_top.setMinimumSize(200, 150)
-        self.lbl_top.setStyleSheet("background-color: #222; border: 2px solid #344f41;")
+        self.lbl_top.setFixedSize(self._IMG_W, self._IMG_H)
+        self.lbl_top.setStyleSheet("background-color: #222; border: 2px solid #344f41; border-radius: 6px;")
         self.lbl_side = QLabel()
         self.lbl_side.setAlignment(Qt.AlignCenter)
-        self.lbl_side.setMinimumSize(200, 150)
-        self.lbl_side.setStyleSheet("background-color: #222; border: 2px solid #344f41;")
+        self.lbl_side.setFixedSize(self._IMG_W, self._IMG_H)
+        self.lbl_side.setStyleSheet("background-color: #222; border: 2px solid #344f41; border-radius: 6px;")
         images_row.addWidget(self.lbl_top)
         images_row.addWidget(self.lbl_side)
         layout.addLayout(images_row)
+
         btns = QHBoxLayout()
         self.btn_retake = QPushButton("Retake")
         self.btn_retake.setMinimumHeight(55)
@@ -173,7 +190,7 @@ class CaptureReviewPage(QWidget):
         layout.addLayout(btns)
 
     def set_images(self, top_path: str | None, side_path: str | None) -> None:
-        w, h = 200, 150
+        w, h = self._IMG_W, self._IMG_H
         if top_path and os.path.exists(top_path):
             pix = QPixmap(top_path)
             self.lbl_top.setPixmap(pix.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -196,7 +213,7 @@ class ClassifiedPage(QWidget):
         self.main_layout.setContentsMargins(15, 15, 15, 15)
         
         self.image_container = QWidget()
-        self.image_container.setFixedSize(400, 300)
+        self.image_container.setFixedSize(560, 280)
         self.image_container.setStyleSheet("background-color: transparent;")
         container_layout = QHBoxLayout(self.image_container)
         container_layout.setContentsMargins(0, 0, 0, 0)
@@ -219,6 +236,10 @@ class ClassifiedPage(QWidget):
         self.lbl_conf = QLabel("Confidence: --")
         self.lbl_conf.setAlignment(Qt.AlignCenter)
         self.lbl_conf.setStyleSheet("font-size: 25px; color: #666;") #color = white
+
+        self.lbl_volume = QLabel("Volume = --")
+        self.lbl_volume.setAlignment(Qt.AlignCenter)
+        self.lbl_volume.setStyleSheet("font-size: 20px;")
 
         self.lbl_top2 = QLabel("")
         self.lbl_top2.setAlignment(Qt.AlignCenter)
@@ -269,6 +290,7 @@ class ClassifiedPage(QWidget):
         # Assemble main layout
         self.main_layout.addWidget(self.lbl_label)
         self.main_layout.addWidget(self.lbl_conf)
+        self.main_layout.addWidget(self.lbl_volume)
         self.main_layout.addWidget(self.lbl_top2)
         self.main_layout.addWidget(self.lbl_top3)
         self.main_layout.addWidget(self.lbl_extra)
@@ -675,6 +697,8 @@ class AppWindow(QMainWindow):
                 self.show()
         else:
             self.resize(800, 600)
+            self.setMinimumSize(800, 600)
+            self.setMaximumSize(800, 600)
             self.show()
         
         self._setup_shortcuts()
@@ -759,6 +783,7 @@ class AppWindow(QMainWindow):
     def _wire_vm(self) -> None:
         self.vm.state_changed.connect(self._show_state)
         self.vm.classification_changed.connect(self._on_classification)
+        self.vm.volume_display_changed.connect(self._on_volume_display)
         self.vm.transcription_changed.connect(self._on_transcription)
         self.vm.trip_changed.connect(self._on_trip)
         self.vm.error.connect(self._on_error)
@@ -848,7 +873,7 @@ class AppWindow(QMainWindow):
         has_side = result.side_image_path and os.path.exists(result.side_image_path)
         if has_side:
             self.classified.lbl_side_image.show()
-            w, h = 200, 150
+            w, h = 280, 210
             if result.image_path and os.path.exists(result.image_path):
                 pixmap = QPixmap(result.image_path)
                 self.classified.lbl_image.setPixmap(pixmap.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -861,7 +886,7 @@ class AppWindow(QMainWindow):
             self.classified.lbl_side_image.setPixmap(QPixmap())
             if result.image_path and os.path.exists(result.image_path):
                 pixmap = QPixmap(result.image_path)
-                self.classified.lbl_image.setPixmap(pixmap.scaled(400, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                self.classified.lbl_image.setPixmap(pixmap.scaled(560, 280, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             else:
                 self.classified.lbl_image.setText("No Image Available")
 
@@ -894,11 +919,12 @@ class AppWindow(QMainWindow):
             self.classified.lbl_top3.setText("")
 
         extras = []
-        if result.estimated_volume is not None:
-            extras.append(f"Volume: {result.estimated_volume} cm³")
         if result.estimated_weight is not None:
             extras.append(f"Weight: {result.estimated_weight}")
         self.classified.lbl_extra.setText("   ".join(extras) if extras else "")
+
+    def _on_volume_display(self, text: str) -> None:
+        self.classified.lbl_volume.setText(text)
 
     def _on_transcription(self, text: str) -> None:
         # Switch from loading to live screen

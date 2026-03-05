@@ -146,6 +146,7 @@ class Store:
 class ViewModel(QObject):
     state_changed = Signal(object)
     classification_changed = Signal(object)
+    volume_display_changed = Signal(str)
     transcription_changed = Signal(str)
     recording_status_changed = Signal(bool)
     trip_changed = Signal(object)
@@ -212,6 +213,7 @@ class ViewModel(QObject):
         self._last_side_path: Optional[str] = None
         self._pending_volume_result: Optional[dict] = None
         self._volume_failed = False
+        self._volume_pending = False
         self._volume_start_time: Optional[float] = None
         self._volume_ready_timer: Optional[QTimer] = None
         self._classification_saved_rock_id: Optional[str] = None
@@ -288,6 +290,7 @@ class ViewModel(QObject):
     def confirm_captures_and_classify(self) -> None:
         self._pending_volume_result = None
         self._volume_failed = False
+        self._volume_pending = False
         classify_path = self._pending_top_path or self._pending_side_path
         self._last_captured_path = classify_path
         self._set_state(AppStateType.CLASSIFYING)
@@ -359,8 +362,12 @@ class ViewModel(QObject):
         self._classification_applied = False
         # Start volume estimation after classification so GPU is not shared (avoids Jetson OOM).
         if self._pending_top_path and self._pending_side_path:
+            print(f"[VOLUME] Sending photos to volume estimation: top={self._pending_top_path!r}, side={self._pending_side_path!r}", file=sys.stderr)
+            self._volume_pending = True
             self._volume_start_time = time.time()
             self.volume_service.estimate(self._pending_top_path, self._pending_side_path)
+        else:
+            print(f"[VOLUME] Skipping volume estimation: missing top or side image (top={self._pending_top_path!r}, side={self._pending_side_path!r})", file=sys.stderr)
         if self._pending_volume_result is not None:
             self._apply_classification_result()
             return
@@ -417,6 +424,15 @@ class ViewModel(QObject):
         )
         self.current_classification = result
         self.classification_changed.emit(result)
+        if self._volume_pending:
+            volume_str = "Volume = Calculating..."
+        elif self._volume_failed:
+            volume_str = "Volume = N/A"
+        elif estimated_volume is not None:
+            volume_str = f"Volume = {estimated_volume} cm³"
+        else:
+            volume_str = "Volume = N/A"
+        self.volume_display_changed.emit(volume_str)
         self._set_state(AppStateType.CLASSIFIED)
 
     def save_classification(self) -> None:
@@ -441,11 +457,12 @@ class ViewModel(QObject):
     def _on_volume_finished(self, payload: dict) -> None:
         if self._volume_start_time is not None and (time.time() - self._volume_start_time) > 120:
             return
+        self._volume_pending = False
         self._pending_volume_result = payload
         if self._classify_payload is not None and not self._classification_applied:
             self._apply_classification_result()
             return
-        if self._classification_applied and self._classification_saved_rock_id and self.current_classification:
+        if self._classification_applied and self.current_classification:
             vol = payload.get("volume_cm3")
             mr = payload
             try:
@@ -458,10 +475,26 @@ class ViewModel(QObject):
                     w = f"{float(mr['min_kg']):.2f}–{float(mr['max_kg']):.2f} kg"
                 except (TypeError, ValueError):
                     pass
-            self.store.update_rock_volume(self._classification_saved_rock_id, v, w)
+            new_result = ClassificationResult(
+                label=self.current_classification.label,
+                confidence=self.current_classification.confidence,
+                image_path=self.current_classification.image_path,
+                side_image_path=self.current_classification.side_image_path,
+                estimated_volume=round(v, 1) if v is not None else None,
+                estimated_weight=w or self.current_classification.estimated_weight,
+                raw=self.current_classification.raw,
+            )
+            self.current_classification = new_result
+            self.classification_changed.emit(new_result)
+            volume_str = f"Volume = {round(v, 1)} cm³" if v is not None else "Volume = N/A"
+            self.volume_display_changed.emit(volume_str)
+            if self._classification_saved_rock_id:
+                self.store.update_rock_volume(self._classification_saved_rock_id, v, w)
 
     def _on_volume_failed(self, message: str) -> None:
         self._volume_failed = True
+        self._volume_pending = False
+        self.volume_display_changed.emit("Volume = N/A")
         print(f"[VOLUME] {message}", file=sys.stderr)
 
     def _on_classify_timeout(self) -> None:

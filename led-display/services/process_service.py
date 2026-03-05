@@ -237,6 +237,7 @@ class VolumeService(ProcessService):
 
     def estimate(self, top_image_path: str, side_image_path: str) -> None:
         if self.proc.state() != QProcess.NotRunning:
+            print("[VOLUME] Volume estimation already running, skipping", file=sys.stderr)
             self.failed.emit("Volume estimation already running")
             return
         base, _ = os.path.splitext(top_image_path)
@@ -245,6 +246,7 @@ class VolumeService(ProcessService):
         out_dir = os.path.dirname(out_json)
         if out_dir:
             os.makedirs(out_dir, exist_ok=True)
+        print(f"[VOLUME] Starting volume calculation: top={top_image_path!r}, side={side_image_path!r}, out={out_json!r}", file=sys.stderr)
         cmd = [
             self.python,
             str(self.script),
@@ -258,20 +260,25 @@ class VolumeService(ProcessService):
     def _on_finished(self, exit_code: int, _status) -> None:
         err = bytes(self.proc.readAllStandardError()).decode("utf-8", errors="ignore").strip()
         if exit_code != 0:
-            self.failed.emit(err or f"Volume estimation failed (exit {exit_code})")
+            msg = err or f"Volume estimation failed (exit {exit_code})"
+            print(f"[VOLUME] Volume calculation failed: {msg}", file=sys.stderr)
+            self.failed.emit(msg)
             return
         if not self._expected_json_path or not os.path.exists(self._expected_json_path):
+            print("[VOLUME] Volume output JSON not found", file=sys.stderr)
             self.failed.emit("Volume output JSON not found")
             return
         try:
             with open(self._expected_json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as e:
+            print(f"[VOLUME] Failed to read volume JSON: {e}", file=sys.stderr)
             self.failed.emit(f"Failed to read volume JSON: {e}")
             return
         volume_cm3 = data.get("volume_cm3")
         mass_range = data.get("mass_range") or {}
         if volume_cm3 is None:
+            print("[VOLUME] Volume JSON missing volume_cm3", file=sys.stderr)
             self.failed.emit("Volume JSON missing volume_cm3")
             return
         payload = {
@@ -281,9 +288,11 @@ class VolumeService(ProcessService):
             "min_kg": mass_range.get("min_kg"),
             "max_kg": mass_range.get("max_kg"),
         }
+        print(f"[VOLUME] Volume calculation finished: volume_cm3={payload['volume_cm3']}", file=sys.stderr)
         self.finished.emit(payload)
 
     def _on_error(self, _err) -> None:
+        print(f"[VOLUME] Volume process error: {_err}", file=sys.stderr)
         self.failed.emit("Volume process error")
 
 
