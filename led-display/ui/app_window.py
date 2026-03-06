@@ -17,7 +17,7 @@ from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPain
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QStackedWidget, QMessageBox,
     QWidget, QVBoxLayout, QLabel, QPushButton,
-    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy
+    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout,
 )
 
 import connector
@@ -115,7 +115,7 @@ class CameraPreviewPage(QWidget):
         self.vm = vm
         layout = QVBoxLayout(self)
 
-        self.lbl_step = QLabel("Step 1/2: Capture top view")
+        self.lbl_step = QLabel("Capture First View")
         self.lbl_step.setAlignment(Qt.AlignCenter)
         self.lbl_step.setStyleSheet("font-size: 18px; color: #344f41;")
         layout.addWidget(self.lbl_step)
@@ -133,15 +133,20 @@ class CameraPreviewPage(QWidget):
        # label = QLabel("Camera ready. Click Capture to take photo.")
        # label.setAlignment(Qt.AlignCenter)
        # label.setStyleSheet("font-size: 22px;")
-        self.btn_capture = big_button("Capture")
+       # self.btn_capture = big_button("Capture")
+        self.btn_capture = QPushButton("Capture")
         self.btn_cancel = QPushButton("Cancel")
         self.btn_cancel.setMinimumHeight(50)
+        self.btn_capture.setMinimumHeight(50)
         #self.btn_cancel.setStyleSheet("font-size: 18px;")
         
         self.btn_cancel.setStyleSheet("""
             background-color: #7e1f23;
             font-size: 22px;
             color: white;
+        """)
+        self.btn_capture.setStyleSheet("""
+            font-size: 22px;
         """)
         row = QHBoxLayout()
         row.addWidget(self.btn_cancel)
@@ -152,39 +157,36 @@ class CameraPreviewPage(QWidget):
 
 class CaptureReviewPage(QWidget):
     """After both captures: preview top and side images with Classify or Retake."""
-    _IMG_W, _IMG_H = 320, 240
+    _IMG_W, _IMG_H = 440, 330
 
     def __init__(self, vm):
         super().__init__()
         self.vm = vm
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(12)
 
-        title = QLabel("Review captures")
+        title = QLabel("REVIEW CAPTURES")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("""
             font-size: 22px;
             font-weight: bold;
-            border: 2px solid #697d6a;
             border-radius: 8px;
-            padding: 8px;
+            padding: 10px;
         """)
-        layout.addWidget(title)
+        layout.addWidget(title, 0, Qt.AlignHCenter)
+        layout.addStretch(1)
 
-        images_row = QHBoxLayout()
-        images_row.setSpacing(12)
+        images_row = QVBoxLayout()
+        images_row.setAlignment(Qt.AlignCenter)
+        img_style = "border: 2px solid #344f41; border-radius: 4px; padding: 2px"
         self.lbl_top = QLabel()
-        self.lbl_top.setAlignment(Qt.AlignCenter)
-        self.lbl_top.setFixedSize(self._IMG_W, self._IMG_H)
-        self.lbl_top.setStyleSheet("background-color: #222; border: 2px solid #344f41; border-radius: 6px;")
+        self.lbl_top.setStyleSheet(img_style)
         self.lbl_side = QLabel()
-        self.lbl_side.setAlignment(Qt.AlignCenter)
-        self.lbl_side.setFixedSize(self._IMG_W, self._IMG_H)
-        self.lbl_side.setStyleSheet("background-color: #222; border: 2px solid #344f41; border-radius: 6px;")
+        self.lbl_side.setStyleSheet(img_style)
         images_row.addWidget(self.lbl_top)
+        images_row.addSpacing(50)
         images_row.addWidget(self.lbl_side)
         layout.addLayout(images_row)
+        layout.addStretch(1)
 
         btns = QHBoxLayout()
         self.btn_retake = QPushButton("Retake")
@@ -201,12 +203,16 @@ class CaptureReviewPage(QWidget):
         w, h = self._IMG_W, self._IMG_H
         if top_path and os.path.exists(top_path):
             pix = QPixmap(top_path)
-            self.lbl_top.setPixmap(pix.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            scaled_pix = pix.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.lbl_top.setPixmap(scaled_pix)
+            self.lbl_top.setFixedSize(scaled_pix.size())
         else:
             self.lbl_top.setText("Top")
         if side_path and os.path.exists(side_path):
             pix = QPixmap(side_path)
-            self.lbl_side.setPixmap(pix.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            scaled_pix = pix.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.lbl_side.setPixmap(scaled_pix)
+            self.lbl_side.setFixedSize(scaled_pix.size())
         else:
             self.lbl_side.setText("Side")
 
@@ -217,29 +223,37 @@ class ClassifiedPage(QWidget):
         self.vm = vm
         # Main layout for the whole page
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setSpacing(5)
-        self.main_layout.setContentsMargins(15, 15, 15, 15)
+        # self.main_layout.setSpacing(5)
+        # self.main_layout.setContentsMargins(15, 15, 15, 15)
+        self.main_layout.addStretch(1)
         
         self.image_container = QWidget()
-        self.image_container.setFixedSize(560, 280)
+        # self.image_container.setFixedSize(600, 900)
         self.image_container.setStyleSheet("background-color: transparent;")
         container_layout = QHBoxLayout(self.image_container)
+        # container_layout.addSpacing(50)
         container_layout.setContentsMargins(0, 0, 0, 0)
         self.lbl_image = QLabel()
         self.lbl_image.setAlignment(Qt.AlignCenter)
         self.lbl_image.setStyleSheet("background-color: transparent; border: none;")
+        self.lbl_image.setFixedSize(200, 150)
+        self.lbl_image.setScaledContents(True)
         self.lbl_side_image = QLabel()
         self.lbl_side_image.setAlignment(Qt.AlignCenter)
         self.lbl_side_image.setStyleSheet("background-color: transparent; border: none;")
+        self.lbl_side_image.setFixedSize(200, 150)
+        self.lbl_side_image.setScaledContents(True)
         container_layout.addWidget(self.lbl_image)
         container_layout.addWidget(self.lbl_side_image)
         self.main_layout.addWidget(self.image_container, 0, Qt.AlignCenter)
+        self.main_layout.addStretch(1)
 
         # Result Labels
         self.lbl_label = QLabel("LABEL")
         self.lbl_label.setAlignment(Qt.AlignCenter)
         self.lbl_label.setStyleSheet("font-size: 28px; font-weight: 700;")
         self.lbl_label.setStyleSheet("font-size: 24px; font-weight: 700; margin-top: 5px;")
+        
 
         self.lbl_conf = QLabel("Confidence: --")
         self.lbl_conf.setAlignment(Qt.AlignCenter)
@@ -249,13 +263,33 @@ class ClassifiedPage(QWidget):
         self.lbl_volume.setAlignment(Qt.AlignCenter)
         self.lbl_volume.setStyleSheet("font-size: 20px;")
 
-        self.lbl_top2 = QLabel("")
-        self.lbl_top2.setAlignment(Qt.AlignCenter)
-        self.lbl_top2.setStyleSheet("font-size: 20px;")
+        # self.lbl_top2 = QLabel("")
+        # self.lbl_top2.setAlignment(Qt.AlignCenter)
+        # self.lbl_top2.setStyleSheet("font-size: 20px;")
 
-        self.lbl_top3 = QLabel("")
-        self.lbl_top3.setAlignment(Qt.AlignCenter)
-        self.lbl_top3.setStyleSheet("font-size: 20px;")
+        # self.lbl_top3 = QLabel("")
+        # self.lbl_top3.setAlignment(Qt.AlignCenter)
+        # self.lbl_top3.setStyleSheet("font-size: 20px;")
+
+        self.extra_results_widget = QWidget()
+        self.extra_grid = QGridLayout(self.extra_results_widget)
+        self.extra_grid.setAlignment(Qt.AlignCenter)
+        # self.extra_grid.setContentsMargins(100, 0, 100, 0) # Adjust margins to control width
+        
+        # Create the sub-labels
+        self.lbl_rank2 = QLabel(""); self.lbl_name2 = QLabel(""); self.lbl_perc2 = QLabel("")
+        self.lbl_rank3 = QLabel(""); self.lbl_name3 = QLabel(""); self.lbl_perc3 = QLabel("")
+
+        # Style and Add to Grid
+        sub_style = "font-size: 20px;"
+        for i, lbl in enumerate([self.lbl_rank2, self.lbl_name2, self.lbl_perc2, 
+                                 self.lbl_rank3, self.lbl_name3, self.lbl_perc3]):
+            lbl.setStyleSheet(sub_style)
+            # Row 0 for 2nd, Row 1 for 3rd
+            row = i // 3
+            col = i % 3
+            alignment = [Qt.AlignLeft, Qt.AlignCenter, Qt.AlignRight][col]
+            self.extra_grid.addWidget(lbl, row, col, alignment)
 
         self.lbl_extra = QLabel("")
         self.lbl_extra.setAlignment(Qt.AlignCenter)
@@ -298,18 +332,22 @@ class ClassifiedPage(QWidget):
         # Assemble main layout
         self.main_layout.addWidget(self.lbl_label)
         self.main_layout.addWidget(self.lbl_conf)
-        self.main_layout.addWidget(self.lbl_volume)
-        self.main_layout.addWidget(self.lbl_top2)
-        self.main_layout.addWidget(self.lbl_top3)
-        self.main_layout.addWidget(self.lbl_extra)
-        
         self.main_layout.addSpacing(10)
+        self.main_layout.addWidget(self.lbl_volume)
+        self.main_layout.addWidget(self.lbl_extra)
+        self.main_layout.addSpacing(10)
+        # self.main_layout.addWidget(self.lbl_top2)
+        # self.main_layout.addWidget(self.lbl_top3)
+        self.main_layout.addWidget(self.extra_results_widget)
+        self.main_layout.addStretch(1)
+        
+        # self.main_layout.addSpacing(10)
         self.main_layout.addWidget(self.btn_reclassify)
         self.main_layout.addWidget(self.btn_save)
         self.main_layout.addWidget(self.btn_delete)
         
         # Pushes everything up against our fixed image container
-        self.main_layout.addStretch(1)
+        # self.main_layout.addStretch(1)
 
 
 class VoicePage(QWidget):
@@ -423,8 +461,9 @@ class TripLoadPage(QWidget):
         self.list.setStyleSheet("font-size: 14px;")
         layout.addWidget(self.list, stretch=1)
 
+        
         notes_label = QLabel("Voice Notes:")
-        notes_label.setStyleSheet("font-size: 18px; font-weight: 600;")
+        notes_label.setStyleSheet("font-size: 14px; font-weight: 600;")
         layout.addWidget(notes_label)
         
         self.notes_list = QListWidget()
@@ -450,7 +489,7 @@ class RockDetailPage(QWidget):
 
         self.lbl_title = QLabel("Rock Detail")
         self.lbl_title.setAlignment(Qt.AlignCenter)
-        self.lbl_title.setStyleSheet("font-size: 24px; font-weight: 700;")
+        self.lbl_title.setStyleSheet("font-size: 24px; font-weight: 700; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
         layout.addWidget(self.lbl_title)
 
         self.lbl_time = QLabel("")
@@ -462,13 +501,13 @@ class RockDetailPage(QWidget):
         images_row.setSpacing(10)
         self.lbl_top = QLabel()
         self.lbl_top.setAlignment(Qt.AlignCenter)
-        self.lbl_top.setMinimumSize(260, 200)
+        # self.lbl_top.setMinimumSize(260, 200)
         self.lbl_top.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.lbl_top.setStyleSheet("background-color: #222; border: 3px solid #344f41; border-radius: 6px;")
 
         self.lbl_side = QLabel()
         self.lbl_side.setAlignment(Qt.AlignCenter)
-        self.lbl_side.setMinimumSize(260, 200)
+        # self.lbl_side.setMinimumSize(260, 200)
         self.lbl_side.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.lbl_side.setStyleSheet("background-color: #222; border: 3px solid #344f41; border-radius: 6px;")
 
@@ -478,7 +517,7 @@ class RockDetailPage(QWidget):
 
         self.lbl_info = QLabel("")
         self.lbl_info.setWordWrap(True)
-        self.lbl_info.setStyleSheet("font-size: 18px; padding: 10px; border: 2px solid #cbd2c5; border-radius: 8px;")
+        self.lbl_info.setStyleSheet("font-size: 18px; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
         layout.addWidget(self.lbl_info, stretch=2)
 
         self.btn_back = big_button("Back")
@@ -492,7 +531,7 @@ class RockDetailPage(QWidget):
         self.lbl_title.setText(f"{res.label.upper()} ({int(res.confidence * 100)}%)")
 
         # Use stable target sizes (label widths can be 0 before first show).
-        w, h = 520, 360
+        w, h = 300, 225
 
         if res.image_path and os.path.exists(res.image_path):
             self.lbl_top.setPixmap(QPixmap(res.image_path).scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -527,7 +566,8 @@ class VoiceNoteDetailPage(QWidget):
 
         self.lbl_title = QLabel("Voice Note")
         self.lbl_title.setAlignment(Qt.AlignCenter)
-        self.lbl_title.setStyleSheet("font-size: 24px; font-weight: 700;")
+        self.lbl_title.setStyleSheet("font-size: 24px; font-weight: 700; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
+        
         layout.addWidget(self.lbl_title)
 
         self.lbl_time = QLabel("")
@@ -709,12 +749,12 @@ class AppWindow(QMainWindow):
                 print(f"ERROR: Failed to show fullscreen: {e}", file=sys.stderr)
                 import traceback
                 traceback.print_exc(file=sys.stderr)
-                self.resize(800, 600)
+                self.resize(480, 800 )
                 self.show()
         else:
-            self.resize(800, 600)
-            self.setMinimumSize(800, 600)
-            self.setMaximumSize(800, 600)
+            self.resize(480, 800 )
+            self.setMinimumSize(480, 800 )
+            self.setMaximumSize(480, 800 )
             self.show()
         
         self._setup_shortcuts()
@@ -768,18 +808,22 @@ class AppWindow(QMainWindow):
 
     def _toggle_fullscreen(self) -> None:
         if self.isFullScreen():
-            self.setMinimumSize(0, 0)
-            self.setMaximumSize(16777215, 16777215)
-            self.showNormal()
+            self._exit_fullscreen()
+            # self.setMinimumSize(0, 0)
+            # self.setMaximumSize(16777215, 16777215)
+            # self.showNormal()
         else:
             self._apply_fullscreen_geometry()
             self.showFullScreen()
 
     def _exit_fullscreen(self) -> None:
         if self.isFullScreen():
-            self.setMinimumSize(0, 0)
-            self.setMaximumSize(16777215, 16777215)
             self.showNormal()
+            # self.setMinimumSize(0, 0)
+            # self.setMaximumSize(16777215, 16777215)
+            # self.showNormal()
+            sim_w, sim_h = 480, 800 
+            self.setFixedSize(sim_w, sim_h)
 
     def _quit_application(self) -> None:
         self.close()
@@ -898,7 +942,7 @@ class AppWindow(QMainWindow):
                 self.voice.btn_save.setEnabled(bool(self.vm.transcription_text.strip()))
                 
             if state == AppStateType.CAMERA_PREVIEW:
-                self.camera_preview.lbl_step.setText("Step 1/2: Capture top view")
+                self.camera_preview.lbl_step.setText("Capture First View")
                 self.vm.start_camera_stream(0, 0, 0, 0)
 
     def _on_classification(self, result: ClassificationResult) -> None:
@@ -934,21 +978,31 @@ class AppWindow(QMainWindow):
             label2 = top3[1].get("label", "")
             conf2 = float(top3[1].get("confidence", 0.0))
             if conf2 > 0:
-                self.classified.lbl_top2.setText(f"2nd: {label2.upper()} ({int(conf2 * 100)}%)")
+                # self.classified.lbl_top2.setText(f"2nd: {label2.upper()} ({int(conf2 * 100)}%)")
+                self.classified.lbl_rank2.setText("2nd:")
+                self.classified.lbl_name2.setText(top3[1].get("label", "").upper())
+                self.classified.lbl_perc2.setText(f"({int(float(top3[1]['confidence']) * 100)}%)")
             else:
-                self.classified.lbl_top2.setText("")
+                # self.classified.lbl_top2.setText("")
+                for lbl in [self.classified.lbl_rank2, self.classified.lbl_name2, self.classified.lbl_perc2]: lbl.setText("")
         else:
-            self.classified.lbl_top2.setText("")
+            # self.classified.lbl_top2.setText("")
+            for lbl in [self.classified.lbl_rank2, self.classified.lbl_name2, self.classified.lbl_perc2]: lbl.setText("")
         
         if top3 and len(top3) >= 3:
             label3 = top3[2].get("label", "")
             conf3 = float(top3[2].get("confidence", 0.0))
             if conf3 > 0:
-                self.classified.lbl_top3.setText(f"3rd: {label3.upper()} ({int(conf3 * 100)}%)")
+                # self.classified.lbl_top3.setText(f"3rd: {label3.upper()} ({int(conf3 * 100)}%)")
+                self.classified.lbl_rank3.setText("3rd:")
+                self.classified.lbl_name3.setText(top3[2].get("label", "").upper())
+                self.classified.lbl_perc3.setText(f"({int(float(top3[2]['confidence']) * 100)}%)")
             else:
-                self.classified.lbl_top3.setText("")
+                # self.classified.lbl_top3.setText("")
+                for lbl in [self.classified.lbl_rank3, self.classified.lbl_name3, self.classified.lbl_perc3]: lbl.setText("")
         else:
-            self.classified.lbl_top3.setText("")
+            # self.classified.lbl_top3.setText("")
+            for lbl in [self.classified.lbl_rank3, self.classified.lbl_name3, self.classified.lbl_perc3]: lbl.setText("")
 
         extras = []
         if result.estimated_weight is not None:

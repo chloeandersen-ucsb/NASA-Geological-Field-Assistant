@@ -353,7 +353,7 @@ class ViewModel(QObject):
             self._pending_top_path = image_path
             self._capture_phase = "side"
             self.camera.set_stop_after_capture(True)
-            self.two_step_capture_message.emit("First view captured. Rotate rock and press Capture again.")
+            self.two_step_capture_message.emit("Rotate Rock and Capture 2nd View")
             return
         if self._capture_phase == "side":
             self._pending_side_path = image_path
