@@ -127,8 +127,8 @@ class CameraPreviewPage(QWidget):
         self.video_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         layout.addWidget(self.video_label, stretch=1)
 
-        self.voice_ctrl = ExpandingVoiceWidget(self.vm, self)
-        layout.addWidget(self.voice_ctrl, 0, Qt.AlignCenter)
+        self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
+        layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
         
        # label = QLabel("Camera ready. Click Capture to take photo.")
        # label.setAlignment(Qt.AlignCenter)
@@ -187,6 +187,9 @@ class CaptureReviewPage(QWidget):
         images_row.addWidget(self.lbl_side)
         layout.addLayout(images_row)
         layout.addStretch(1)
+
+        self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
+        layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
 
         btns = QHBoxLayout()
         self.btn_retake = QPushButton("Retake")
@@ -295,6 +298,8 @@ class ClassifiedPage(QWidget):
         self.lbl_extra.setAlignment(Qt.AlignCenter)
         self.lbl_extra.setStyleSheet("font-size: 20px;")
 
+        self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
+
         self.btn_reclassify = big_button("Reclassify")
         self.btn_reclassify.setStyleSheet("""
             QPushButton {
@@ -386,6 +391,17 @@ class VoicePage(QWidget):
         layout.addWidget(self.text, stretch=1)
 
         row = QHBoxLayout()
+        self.btn_start = QPushButton("Start")
+        self.btn_start.setStyleSheet("""
+            QPushButton {
+                background-color: #617c32;
+                font-size: 22px;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #f5f6f4;
+            }
+        """)
         self.btn_stop = QPushButton("Stop")
         self.btn_stop.setStyleSheet("""
             QPushButton {
@@ -430,7 +446,7 @@ class VoicePage(QWidget):
                 background-color: #f5f6f4;
             }
         """)
-        for b in [self.btn_stop, self.btn_redo, self.btn_save, self.btn_delete]:
+        for b in [self.btn_start, self.btn_stop, self.btn_redo, self.btn_save, self.btn_delete]:
             b.setMinimumHeight(55)
             # b.setStyleSheet("font-size: 20px;")
             row.addWidget(b)
@@ -635,8 +651,8 @@ class ExpandingVoiceWidget(QWidget):
 
         # self.btn_start.clicked.connect(self.vm.start_voice_to_text)
         # self.btn_stop.clicked.connect(self.vm.stop_voice_to_text)
-        self.btn_start.clicked.connect(self._on_start_clicked)
-        self.btn_stop.clicked.connect(self._on_stop_clicked)
+        self.btn_start.clicked.connect(self.vm.start_background_recording)
+        self.btn_stop.clicked.connect(self.vm.stop_voice_to_text)
         self.btn_save.clicked.connect(self.vm.save_transcription)
         self.btn_redo.clicked.connect(self.vm.redo_voice_to_text)
         self.btn_delete.clicked.connect(self.vm.delete_transcription)
@@ -887,63 +903,90 @@ class AppWindow(QMainWindow):
             self.camera_preview.video_label.setPixmap(scaled_pixmap)
 
     def _show_state(self, state: AppStateType) -> None:
-        if state == AppStateType.HOME:
-            self.stack.setCurrentWidget(self.home)
-        elif state == AppStateType.CAMERA_PREVIEW:
-            self.stack.setCurrentWidget(self.camera_preview)
-            self.vm.start_camera_stream(0, 0, 0, 0)
-        elif state == AppStateType.CONFIRM_CAPTURES:
-            self.stack.setCurrentWidget(self.capture_review)
-            top_path, side_path = self.vm.get_review_image_paths()
-            self.capture_review.set_images(top_path, side_path)
-        elif state == AppStateType.CLASSIFYING:
-            self.stack.setCurrentWidget(self.loading)
-        elif state == AppStateType.CLASSIFIED:
-            self.stack.setCurrentWidget(self.classified)
-        elif state == AppStateType.VOICE_TO_TEXT_LOADING:
-            self.stack.setCurrentWidget(self.voice_loading)
-        elif state == AppStateType.VOICE_TO_TEXT:
-            self.stack.setCurrentWidget(self.voice)
-            self.voice.btn_save.setEnabled(False)  # disable until transcription finishes
-        elif state == AppStateType.TRIP_LOAD:
-            self.stack.setCurrentWidget(self.trip)
-        if state == AppStateType.VOICE_TO_TEXT:
-            if self.stack.currentWidget() == self.camera_preview:
-                return 
+        # if state == AppStateType.HOME:
+        #     self.stack.setCurrentWidget(self.home)
+        # elif state == AppStateType.CAMERA_PREVIEW:
+        #     self.stack.setCurrentWidget(self.camera_preview)
+        #     self.vm.start_camera_stream(0, 0, 0, 0)
+        # elif state == AppStateType.CONFIRM_CAPTURES:
+        #     self.stack.setCurrentWidget(self.capture_review)
+        #     top_path, side_path = self.vm.get_review_image_paths()
+        #     self.capture_review.set_images(top_path, side_path)
+        # elif state == AppStateType.CLASSIFYING:
+        #     self.stack.setCurrentWidget(self.loading)
+        # elif state == AppStateType.CLASSIFIED:
+        #     self.stack.setCurrentWidget(self.classified)
+        # elif state == AppStateType.VOICE_TO_TEXT_LOADING:
+        #     self.stack.setCurrentWidget(self.voice_loading)
+        # elif state == AppStateType.VOICE_TO_TEXT:
+        #     self.stack.setCurrentWidget(self.voice)
+        #     self.voice.btn_save.setEnabled(False)  # disable until transcription finishes
+        # elif state == AppStateType.TRIP_LOAD:
+        #     self.stack.setCurrentWidget(self.trip)
+        # if state == AppStateType.VOICE_TO_TEXT:
+        #     if self.stack.currentWidget() == self.camera_preview:
+        #         return 
+
+        # mapping = {
+        #     AppStateType.HOME: self.home,
+        #     AppStateType.CAMERA_PREVIEW: self.camera_preview,
+        #     AppStateType.CONFIRM_CAPTURES: self.capture_review,
+        #     AppStateType.CLASSIFYING: self.loading,
+        #     AppStateType.CLASSIFIED: self.classified,
+        #     AppStateType.VOICE_TO_TEXT_LOADING: self.voice_loading,
+        #     AppStateType.VOICE_TO_TEXT: self.voice,
+        #     AppStateType.TRIP_LOAD: self.trip
+        # }
+
+        # if state in mapping:
+        #     self.stack.setCurrentWidget(mapping[state])
+            
+        #     # --- MANDATORY CLEANUP ON STATE CHANGE ---
+        #     if state == AppStateType.HOME:
+        #         # If we are home, and the VM says we aren't recording, 
+        #         # ensure the VoicePage is visually empty for the next time.
+        #         if not getattr(self.vm.transcriber, 'is_recording', False):
+        #             self.voice.text.clear()
+        #             self.camera_preview.voice_ctrl.trigger_btn.setText("🎤")
+        #             self.camera_preview.voice_ctrl.trigger_btn.setStyleSheet(
+        #                 "background-color: #344f41; color: white; border-radius: 25px; font-size: 20px;"
+        #             )
+
+        #     if state == AppStateType.VOICE_TO_TEXT:
+        #         # Load current data from VM
+        #         self.voice.text.setPlainText(self.vm.transcription_text)
+        #         self.voice.btn_save.setEnabled(bool(self.vm.transcription_text.strip()))
+                
+        #     if state == AppStateType.CAMERA_PREVIEW:
+        #         self.camera_preview.lbl_step.setText("Capture First View")
+        #         self.vm.start_camera_stream(0, 0, 0, 0)
 
         mapping = {
-            AppStateType.HOME: self.home,
-            AppStateType.CAMERA_PREVIEW: self.camera_preview,
-            AppStateType.CONFIRM_CAPTURES: self.capture_review,
-            AppStateType.CLASSIFYING: self.loading,
-            AppStateType.CLASSIFIED: self.classified,
+            AppStateType.HOME:                  self.home,
+            AppStateType.CAMERA_PREVIEW:        self.camera_preview,
+            AppStateType.CONFIRM_CAPTURES:      self.capture_review,
+            AppStateType.CLASSIFYING:           self.loading,
+            AppStateType.CLASSIFIED:            self.classified,
             AppStateType.VOICE_TO_TEXT_LOADING: self.voice_loading,
-            AppStateType.VOICE_TO_TEXT: self.voice,
-            AppStateType.TRIP_LOAD: self.trip
+            AppStateType.VOICE_TO_TEXT:         self.voice,
+            AppStateType.TRIP_LOAD:             self.trip,
         }
-
         if state in mapping:
             self.stack.setCurrentWidget(mapping[state])
-            
-            # --- MANDATORY CLEANUP ON STATE CHANGE ---
-            if state == AppStateType.HOME:
-                # If we are home, and the VM says we aren't recording, 
-                # ensure the VoicePage is visually empty for the next time.
-                if not getattr(self.vm.transcriber, 'is_recording', False):
-                    self.voice.text.clear()
-                    self.camera_preview.voice_ctrl.trigger_btn.setText("🎤")
-                    self.camera_preview.voice_ctrl.trigger_btn.setStyleSheet(
-                        "background-color: #344f41; color: white; border-radius: 25px; font-size: 20px;"
-                    )
-
-            if state == AppStateType.VOICE_TO_TEXT:
-                # Load current data from VM
-                self.voice.text.setPlainText(self.vm.transcription_text)
-                self.voice.btn_save.setEnabled(bool(self.vm.transcription_text.strip()))
-                
-            if state == AppStateType.CAMERA_PREVIEW:
-                self.camera_preview.lbl_step.setText("Capture First View")
-                self.vm.start_camera_stream(0, 0, 0, 0)
+ 
+        # UI-only sync — never touches recording state.
+        if state == AppStateType.VOICE_TO_TEXT:
+            # Always show whatever has accumulated (may be from background recording).
+            self.voice.text.setPlainText(self.vm.transcription_text)
+            self.voice.btn_save.setEnabled(bool(self.vm.transcription_text.strip()))
+ 
+        elif state == AppStateType.CAMERA_PREVIEW:
+            self.camera_preview.lbl_step.setText("Capture First View")
+            self.vm.start_camera_stream(0, 0, 0, 0)
+ 
+        elif state == AppStateType.CONFIRM_CAPTURES:
+            top_path, side_path = self.vm.get_review_image_paths()
+            self.capture_review.set_images(top_path, side_path)
 
     def _on_classification(self, result: ClassificationResult) -> None:
         has_side = result.side_image_path and os.path.exists(result.side_image_path)
@@ -1065,12 +1108,13 @@ class AppWindow(QMainWindow):
     
     def _on_recording_status_changed(self, is_recording: bool):
     # Update the hover widget (as we did before)
-        self.camera_preview.voice_ctrl._update_ui_state(is_recording)
+        # self.camera_preview.voice_ctrl._update_ui_state(is_recording)
         
-        # If recording has stopped, explicitly clear the VoicePage text box
-        if not is_recording:
-            self.voice.text.clear() 
-            self.voice.btn_save.setEnabled(False)
+        # # If recording has stopped, explicitly clear the VoicePage text box
+        # if not is_recording:
+        #     self.voice.text.clear() 
+        #     self.voice.btn_save.setEnabled(False)
+        pass
 
     def _on_voice_note_clicked(self, item) -> None:
         index = self.trip.notes_list.row(item)

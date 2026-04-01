@@ -252,9 +252,22 @@ class ViewModel(QObject):
         self.state = new_state
         self.state_changed.emit(new_state)
 
+    def start_background_recording(self) -> None:
+        if self.transcriber.is_recording:
+            print("[VIEWMODEL] start_background_recording: already recording, ignoring", file=sys.stderr)
+            return
+        print("[VIEWMODEL] start_background_recording: starting new session", file=sys.stderr)
+        self.transcription_text = ""
+        self.transcription_changed.emit("")
+        self.transcriber.start_recording()
+        self.recording_status_changed.emit(True)
+
+    def open_voice_page(self) -> None:
+        # Push current transcript so the text box is up to date on arrival.
+        self.transcription_changed.emit(self.transcription_text)
+        self._set_state(AppStateType.VOICE_TO_TEXT)
+
     def go_home(self) -> None:
-        if self.state == AppStateType.VOICE_TO_TEXT:
-            self.stop_voice_to_text()
         if self.state == AppStateType.CAMERA_PREVIEW:
             self.camera.kill()
             self._capture_phase = None
@@ -671,8 +684,22 @@ class ViewModel(QObject):
         self.recording_status_changed.emit(False)
 
     def redo_voice_to_text(self) -> None:
-        self.transcriber.kill()
-        self.start_voice_to_text()
+        # # self.transcriber.kill()
+        # # self.start_voice_to_text()
+        # self.stop_voice_to_text()
+        # self.transcription_text = ""
+        # self.transcription_changed.emit("")
+        # self._set_state(AppStateType.VOICE_TO_TEXT)
+
+        print("[VIEWMODEL] redo_voice_to_text() called", file=sys.stderr)
+        self.transcriber.stop_recording()
+        self.recording_status_changed.emit(False)
+        self.transcription_text = ""
+        self.transcription_changed.emit("")
+        # Navigate to voice page so the cleared state is visible; if we are
+        # already there this is effectively a no-op for the stacked widget.
+        if self.state != AppStateType.VOICE_TO_TEXT:
+            self._set_state(AppStateType.VOICE_TO_TEXT)
 
     def save_transcription(self) -> None:
         text = self.transcription_text.strip()
@@ -686,7 +713,13 @@ class ViewModel(QObject):
         self.go_home()
 
     def delete_transcription(self) -> None:
-        self.stop_voice_to_text()
+        # self.transcription_text = ""
+        # self.stop_voice_to_text()
+        # self.transcription_changed.emit("")
+        # self.recording_status_changed.emit(False)
+        # self.go_home()
+
+        self.transcriber.stop_recording()
         self.transcription_text = ""
         self.transcription_changed.emit("")
         self.recording_status_changed.emit(False)
@@ -714,6 +747,11 @@ class ViewModel(QObject):
                 self._set_state(AppStateType.VOICE_TO_TEXT)
         else:
             print("[VIEWMODEL] Final text is empty, not updating", file=sys.stderr)
+
+    def _on_transcription_failed(self, message: str) -> None:
+        # Transcription errors are non-fatal — do not abort classification.
+        print(f"[VIEWMODEL] Transcription error (non-fatal): {message}", file=sys.stderr)
+ 
 
     def _publish_trip(self) -> None:
         rocks = self.store.list_rocks()
