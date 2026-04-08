@@ -308,6 +308,11 @@ class TranscriptionService(ProcessService):
     # skip these when in final-dump
     _FINAL_DUMP_SKIP_RE = re.compile(r"^[\s=\-]*$|^FINAL TRANSCRIPT:\s*$", re.IGNORECASE)
     
+    @property
+    def is_recording(self) -> bool:
+        from PySide6.QtCore import QProcess
+        return (not self._user_stopped) and (self.proc.state() == QProcess.Running)
+
     @staticmethod
     def _is_chatter_line(line: str) -> bool:
         """Ignore transcriber_fine_tuned.py startup/shutdown and mock chatter (not phrase lines)."""

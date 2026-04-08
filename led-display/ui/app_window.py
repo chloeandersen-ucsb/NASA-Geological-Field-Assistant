@@ -127,13 +127,9 @@ class CameraPreviewPage(QWidget):
         self.video_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         layout.addWidget(self.video_label, stretch=1)
 
-        self.voice_ctrl = ExpandingVoiceWidget(self.vm, self)
-        layout.addWidget(self.voice_ctrl, 0, Qt.AlignCenter)
+        self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
+        layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
         
-       # label = QLabel("Camera ready. Click Capture to take photo.")
-       # label.setAlignment(Qt.AlignCenter)
-       # label.setStyleSheet("font-size: 22px;")
-       # self.btn_capture = big_button("Capture")
         self.btn_capture = QPushButton("Capture")
         self.btn_cancel = QPushButton("Cancel")
         self.btn_cancel.setMinimumHeight(50)
@@ -187,6 +183,9 @@ class CaptureReviewPage(QWidget):
         images_row.addWidget(self.lbl_side)
         layout.addLayout(images_row)
         layout.addStretch(1)
+
+        self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
+        layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
 
         btns = QHBoxLayout()
         self.btn_retake = QPushButton("Retake")
@@ -295,6 +294,8 @@ class ClassifiedPage(QWidget):
         self.lbl_extra.setAlignment(Qt.AlignCenter)
         self.lbl_extra.setStyleSheet("font-size: 20px;")
 
+        self.mic_ctrl = ExpandingVoiceWidget(self.vm, self) 
+
         self.btn_reclassify = big_button("Reclassify")
         self.btn_reclassify.setStyleSheet("""
             QPushButton {
@@ -336,18 +337,18 @@ class ClassifiedPage(QWidget):
         self.main_layout.addWidget(self.lbl_volume)
         self.main_layout.addWidget(self.lbl_extra)
         self.main_layout.addSpacing(10)
-        # self.main_layout.addWidget(self.lbl_top2)
-        # self.main_layout.addWidget(self.lbl_top3)
+
         self.main_layout.addWidget(self.extra_results_widget)
         self.main_layout.addStretch(1)
         
-        # self.main_layout.addSpacing(10)
+
+        self.main_layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
+        self.main_layout.addSpacing(15)
+
         self.main_layout.addWidget(self.btn_reclassify)
         self.main_layout.addWidget(self.btn_save)
         self.main_layout.addWidget(self.btn_delete)
         
-        # Pushes everything up against our fixed image container
-        # self.main_layout.addStretch(1)
 
 
 class VoicePage(QWidget):
@@ -382,10 +383,20 @@ class VoicePage(QWidget):
             padding: 8px;
         """)
         self.text.setReadOnly(True)
-        # self.text.setStyleSheet("font-size: 16px;")
         layout.addWidget(self.text, stretch=1)
 
         row = QHBoxLayout()
+        self.btn_start = QPushButton("Start")
+        self.btn_start.setStyleSheet("""
+            QPushButton {
+                background-color: #617c32;
+                font-size: 22px;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #f5f6f4;
+            }
+        """)
         self.btn_stop = QPushButton("Stop")
         self.btn_stop.setStyleSheet("""
             QPushButton {
@@ -430,7 +441,7 @@ class VoicePage(QWidget):
                 background-color: #f5f6f4;
             }
         """)
-        for b in [self.btn_stop, self.btn_redo, self.btn_save, self.btn_delete]:
+        for b in [self.btn_start, self.btn_stop, self.btn_redo, self.btn_save, self.btn_delete]:
             b.setMinimumHeight(55)
             # b.setStyleSheet("font-size: 20px;")
             row.addWidget(b)
@@ -530,7 +541,6 @@ class RockDetailPage(QWidget):
         res = entry.result
         self.lbl_title.setText(f"{res.label.upper()} ({int(res.confidence * 100)}%)")
 
-        # Use stable target sizes (label widths can be 0 before first show).
         w, h = 300, 225
 
         if res.image_path and os.path.exists(res.image_path):
@@ -607,9 +617,8 @@ class ExpandingVoiceWidget(QWidget):
         self.main_layout = QHBoxLayout(self)
         self.main_layout.setContentsMargins(5, 5, 5, 5)
         self.main_layout.setSpacing(10)
-        self.vm.recording_status_changed.connect(self._update_ui_state)
 
-        self.trigger_btn = QPushButton("🎙")
+        self.trigger_btn = QPushButton("🎤")
         self.trigger_btn.setFixedSize(50, 50)
         self.trigger_btn.setStyleSheet("background-color: #344f41; color: white; border-radius: 25px; font-size: 20px;")
         self.main_layout.addWidget(self.trigger_btn)
@@ -620,26 +629,24 @@ class ExpandingVoiceWidget(QWidget):
         
         self.btn_start = self._make_sub_btn("Start", "#617c32")
         self.btn_stop = self._make_sub_btn("Stop", "#7e1f23")
-        self.btn_save = self._make_sub_btn("Save", "#386641")
         self.btn_redo = self._make_sub_btn("Redo", "#95b7dc")
-        self.btn_delete = self._make_sub_btn("X", "#313940")
 
         self.container_layout.addWidget(self.btn_start)
         self.container_layout.addWidget(self.btn_stop)
-        self.container_layout.addWidget(self.btn_save)
         self.container_layout.addWidget(self.btn_redo)
-        self.container_layout.addWidget(self.btn_delete)
         
         self.main_layout.addWidget(self.button_container)
         self.button_container.hide()
 
-        # self.btn_start.clicked.connect(self.vm.start_voice_to_text)
-        # self.btn_stop.clicked.connect(self.vm.stop_voice_to_text)
-        self.btn_start.clicked.connect(self._on_start_clicked)
-        self.btn_stop.clicked.connect(self._on_stop_clicked)
-        self.btn_save.clicked.connect(self.vm.save_transcription)
+        self.vm.recording_status_changed.connect(self._update_ui_state)
+        self.btn_start.clicked.connect(lambda: self.vm.start_voice_to_text(silent=True))
+        self.btn_stop.clicked.connect(self.vm.stop_voice_to_text)
         self.btn_redo.clicked.connect(self.vm.redo_voice_to_text)
-        self.btn_delete.clicked.connect(self.vm.delete_transcription)
+
+        if hasattr(self.vm, 'vtt_active'):
+            self._update_ui_state(self.vm.vtt_active)
+        else:
+            self._update_ui_state(False)
 
     def _update_ui_state(self, is_recording: bool):
         """Updates the button appearance based on actual recording state"""
@@ -771,7 +778,7 @@ class AppWindow(QMainWindow):
         
     def _on_rock_clicked(self, item) -> None:
         index = self.trip.list.row(item)
-        summary = self.vm.store.list_rocks() # Get the full data list
+        summary = self.vm.store.list_rocks()
         if 0 <= index < len(summary):
             entry = summary[index]
             self.rock_detail.set_entry(entry)
@@ -809,9 +816,6 @@ class AppWindow(QMainWindow):
     def _toggle_fullscreen(self) -> None:
         if self.isFullScreen():
             self._exit_fullscreen()
-            # self.setMinimumSize(0, 0)
-            # self.setMaximumSize(16777215, 16777215)
-            # self.showNormal()
         else:
             self._apply_fullscreen_geometry()
             self.showFullScreen()
@@ -819,9 +823,6 @@ class AppWindow(QMainWindow):
     def _exit_fullscreen(self) -> None:
         if self.isFullScreen():
             self.showNormal()
-            # self.setMinimumSize(0, 0)
-            # self.setMaximumSize(16777215, 16777215)
-            # self.showNormal()
             sim_w, sim_h = 480, 800 
             self.setFixedSize(sim_w, sim_h)
 
@@ -829,9 +830,8 @@ class AppWindow(QMainWindow):
         self.close()
 
     def _wire_ui(self) -> None:
-        #self.home.btn_classify.clicked.connect(self.vm.start_classification)
         self.home.btn_classify.clicked.connect(self.vm.open_camera_preview)
-        self.home.btn_voice.clicked.connect(self.vm.start_voice_to_text)
+        self.home.btn_voice.clicked.connect(lambda: self.vm.state_changed.emit(AppStateType.VOICE_TO_TEXT))
         self.home.btn_trip.clicked.connect(self.vm.open_trip_load)
         self.home.btn_quit.clicked.connect(self._quit_application)
 
@@ -845,6 +845,7 @@ class AppWindow(QMainWindow):
         self.classified.btn_save.clicked.connect(self.vm.save_classification)
         self.classified.btn_delete.clicked.connect(self.vm.delete_classification)
 
+        self.voice.btn_start.clicked.connect(self.vm.start_voice_to_text)
         self.voice.btn_stop.clicked.connect(self.vm.stop_voice_to_text)
         self.voice.btn_redo.clicked.connect(self.vm.redo_voice_to_text)
         self.voice.btn_save.clicked.connect(self.vm.save_transcription)
@@ -887,63 +888,31 @@ class AppWindow(QMainWindow):
             self.camera_preview.video_label.setPixmap(scaled_pixmap)
 
     def _show_state(self, state: AppStateType) -> None:
-        if state == AppStateType.HOME:
-            self.stack.setCurrentWidget(self.home)
-        elif state == AppStateType.CAMERA_PREVIEW:
-            self.stack.setCurrentWidget(self.camera_preview)
-            self.vm.start_camera_stream(0, 0, 0, 0)
-        elif state == AppStateType.CONFIRM_CAPTURES:
-            self.stack.setCurrentWidget(self.capture_review)
-            top_path, side_path = self.vm.get_review_image_paths()
-            self.capture_review.set_images(top_path, side_path)
-        elif state == AppStateType.CLASSIFYING:
-            self.stack.setCurrentWidget(self.loading)
-        elif state == AppStateType.CLASSIFIED:
-            self.stack.setCurrentWidget(self.classified)
-        elif state == AppStateType.VOICE_TO_TEXT_LOADING:
-            self.stack.setCurrentWidget(self.voice_loading)
-        elif state == AppStateType.VOICE_TO_TEXT:
-            self.stack.setCurrentWidget(self.voice)
-            self.voice.btn_save.setEnabled(False)  # disable until transcription finishes
-        elif state == AppStateType.TRIP_LOAD:
-            self.stack.setCurrentWidget(self.trip)
-        if state == AppStateType.VOICE_TO_TEXT:
-            if self.stack.currentWidget() == self.camera_preview:
-                return 
-
         mapping = {
-            AppStateType.HOME: self.home,
-            AppStateType.CAMERA_PREVIEW: self.camera_preview,
-            AppStateType.CONFIRM_CAPTURES: self.capture_review,
-            AppStateType.CLASSIFYING: self.loading,
-            AppStateType.CLASSIFIED: self.classified,
+            AppStateType.HOME:                  self.home,
+            AppStateType.CAMERA_PREVIEW:        self.camera_preview,
+            AppStateType.CONFIRM_CAPTURES:      self.capture_review,
+            AppStateType.CLASSIFYING:           self.loading,
+            AppStateType.CLASSIFIED:            self.classified,
             AppStateType.VOICE_TO_TEXT_LOADING: self.voice_loading,
-            AppStateType.VOICE_TO_TEXT: self.voice,
-            AppStateType.TRIP_LOAD: self.trip
+            AppStateType.VOICE_TO_TEXT:         self.voice,
+            AppStateType.TRIP_LOAD:             self.trip,
         }
-
         if state in mapping:
             self.stack.setCurrentWidget(mapping[state])
-            
-            # --- MANDATORY CLEANUP ON STATE CHANGE ---
-            if state == AppStateType.HOME:
-                # If we are home, and the VM says we aren't recording, 
-                # ensure the VoicePage is visually empty for the next time.
-                if not getattr(self.vm.transcriber, 'is_recording', False):
-                    self.voice.text.clear()
-                    self.camera_preview.voice_ctrl.trigger_btn.setText("🎤")
-                    self.camera_preview.voice_ctrl.trigger_btn.setStyleSheet(
-                        "background-color: #344f41; color: white; border-radius: 25px; font-size: 20px;"
-                    )
-
-            if state == AppStateType.VOICE_TO_TEXT:
-                # Load current data from VM
-                self.voice.text.setPlainText(self.vm.transcription_text)
-                self.voice.btn_save.setEnabled(bool(self.vm.transcription_text.strip()))
-                
-            if state == AppStateType.CAMERA_PREVIEW:
-                self.camera_preview.lbl_step.setText("Capture First View")
-                self.vm.start_camera_stream(0, 0, 0, 0)
+ 
+        if state == AppStateType.VOICE_TO_TEXT:
+            current_text = self.vm.transcription_text
+            self.voice.text.setPlainText(current_text)
+            self.voice.btn_save.setEnabled(bool(current_text.strip()))
+ 
+        elif state == AppStateType.CAMERA_PREVIEW:
+            self.camera_preview.lbl_step.setText("Capture First View")
+            self.vm.start_camera_stream(0, 0, 0, 0)
+ 
+        elif state == AppStateType.CONFIRM_CAPTURES:
+            top_path, side_path = self.vm.get_review_image_paths()
+            self.capture_review.set_images(top_path, side_path)
 
     def _on_classification(self, result: ClassificationResult) -> None:
         has_side = result.side_image_path and os.path.exists(result.side_image_path)
@@ -969,7 +938,6 @@ class AppWindow(QMainWindow):
         self.classified.lbl_label.setText(result.label.upper())
         self.classified.lbl_conf.setText(f"Confidence: {int(result.confidence * 100)}%")
 
-        # Display 2nd and 3rd most confident results only if confidence > 0%
         top3 = None
         if result.raw and isinstance(result.raw, dict):
             top3 = result.raw.get("top3", [])
@@ -978,30 +946,24 @@ class AppWindow(QMainWindow):
             label2 = top3[1].get("label", "")
             conf2 = float(top3[1].get("confidence", 0.0))
             if conf2 > 0:
-                # self.classified.lbl_top2.setText(f"2nd: {label2.upper()} ({int(conf2 * 100)}%)")
                 self.classified.lbl_rank2.setText("2nd:")
                 self.classified.lbl_name2.setText(top3[1].get("label", "").upper())
                 self.classified.lbl_perc2.setText(f"({int(float(top3[1]['confidence']) * 100)}%)")
             else:
-                # self.classified.lbl_top2.setText("")
                 for lbl in [self.classified.lbl_rank2, self.classified.lbl_name2, self.classified.lbl_perc2]: lbl.setText("")
         else:
-            # self.classified.lbl_top2.setText("")
             for lbl in [self.classified.lbl_rank2, self.classified.lbl_name2, self.classified.lbl_perc2]: lbl.setText("")
         
         if top3 and len(top3) >= 3:
             label3 = top3[2].get("label", "")
             conf3 = float(top3[2].get("confidence", 0.0))
             if conf3 > 0:
-                # self.classified.lbl_top3.setText(f"3rd: {label3.upper()} ({int(conf3 * 100)}%)")
                 self.classified.lbl_rank3.setText("3rd:")
                 self.classified.lbl_name3.setText(top3[2].get("label", "").upper())
                 self.classified.lbl_perc3.setText(f"({int(float(top3[2]['confidence']) * 100)}%)")
             else:
-                # self.classified.lbl_top3.setText("")
                 for lbl in [self.classified.lbl_rank3, self.classified.lbl_name3, self.classified.lbl_perc3]: lbl.setText("")
         else:
-            # self.classified.lbl_top3.setText("")
             for lbl in [self.classified.lbl_rank3, self.classified.lbl_name3, self.classified.lbl_perc3]: lbl.setText("")
 
         extras = []
@@ -1013,20 +975,18 @@ class AppWindow(QMainWindow):
         self.classified.lbl_volume.setText(text)
 
     def _on_transcription(self, text: str) -> None:
-        # Switch from loading to live screen
-        # if self.stack.currentWidget() == self.voice_loading:
-        #     self._show_state(AppStateType.VOICE_TO_TEXT)
-
+        if "No audio recorded" in text or "STREAMING COMPLETE" in text:
+            return
+        if not text:
+            self.voice.text.clear()
+            self.voice.btn_save.setEnabled(False)
+            return
         self.voice.text.setPlainText(text)
-        cursor = self.voice.text.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        self.voice.text.setTextCursor(cursor)
-
-        self.voice.btn_save.setEnabled(bool(text.strip()))
-
-    # def _on_transcription_ready(self):
-    #     self.state_changed.emit(AppStateType.VOICE_TO_TEXT)
-
+        self.voice.btn_save.setEnabled(True)
+        if self.stack.currentWidget() == self.voice:
+            cursor = self.voice.text.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            self.voice.text.setTextCursor(cursor)
 
     def _on_trip(self, summary: TripSummary) -> None:
         self.trip.list.clear()
@@ -1064,13 +1024,7 @@ class AppWindow(QMainWindow):
         QMessageBox.warning(self, "Error", "Something went wrong. Please press escape to return to home screen.")
     
     def _on_recording_status_changed(self, is_recording: bool):
-    # Update the hover widget (as we did before)
-        self.camera_preview.voice_ctrl._update_ui_state(is_recording)
-        
-        # If recording has stopped, explicitly clear the VoicePage text box
-        if not is_recording:
-            self.voice.text.clear() 
-            self.voice.btn_save.setEnabled(False)
+        pass
 
     def _on_voice_note_clicked(self, item) -> None:
         index = self.trip.notes_list.row(item)

@@ -247,14 +247,30 @@ class ViewModel(QObject):
 
         self.transcriber.ready.connect(self._on_transcriber_ready)
 
+        self.vtt_active = False
+        self._was_session_finalized = False
+
 
     def _set_state(self, new_state: AppStateType) -> None:
         self.state = new_state
         self.state_changed.emit(new_state)
 
+    def start_background_recording(self) -> None:
+        if self.transcriber.is_recording:
+            print("[VIEWMODEL] start_background_recording: already recording, ignoring", file=sys.stderr)
+            return
+        print("[VIEWMODEL] start_background_recording: starting new session", file=sys.stderr)
+        self.transcription_text = ""
+        self.transcription_changed.emit("")
+        self.transcriber.start_recording()
+        self.recording_status_changed.emit(True)
+
+    def open_voice_page(self) -> None:
+        # Push current transcript so the text box is up to date on arrival.
+        self.transcription_changed.emit(self.transcription_text)
+        self._set_state(AppStateType.VOICE_TO_TEXT)
+
     def go_home(self) -> None:
-        if self.state == AppStateType.VOICE_TO_TEXT:
-            self.stop_voice_to_text()
         if self.state == AppStateType.CAMERA_PREVIEW:
             self.camera.kill()
             self._capture_phase = None
@@ -306,8 +322,6 @@ class ViewModel(QObject):
         self._set_state(AppStateType.CLASSIFYING)
         self._classify_timeout.start(self.classification_timeout_ms)
         self.classifier.classify(classify_path)
-        # Volume is started only after classification finishes (in _on_classified) to avoid
-        # GPU memory contention on Jetson — classification gets full GPU, then volume runs.
 
     def retake_captures(self) -> None:
         for p in (self._pending_top_path, self._pending_side_path):
@@ -329,8 +343,6 @@ class ViewModel(QObject):
         self._set_state(AppStateType.CLASSIFYING)
         self.camera.start_preview()
 
- #   def _on_preview_started(self, _path: str) -> None:
-  #      self._set_state(AppStateType.CAMERA_PREVIEW)
 
     def capture_photo(self) -> None:
         """Call when user clicks Capture on the camera preview screen."""
@@ -625,68 +637,59 @@ class ViewModel(QObject):
             return
         self._abort_classification(None)
 
-    def start_voice_to_text(self) -> None:
-        # import sys
-        # print("[VIEWMODEL] start_voice_to_text() called", file=sys.stderr)
-        # self.transcription_text = ""
-        # self.transcription_changed.emit("")
-        
-        # self.transcriber.start_recording()
-        
-        # self._set_state(AppStateType.VOICE_TO_TEXT)
+    def start_voice_to_text(self, silent: bool = False) -> None:
         import sys
+        print("[VIEWMODEL] User-initiated VTT Start requested", file=sys.stderr)
         
-        # Check if we are already in a recording session.
-        # We can check the internal state of the transcriber or simply check
-        # if transcription_text has content while a session is 'active'
-        is_already_active = False
-        try:
-            # Attempt to check the actual service state
-            is_already_active = self.transcriber.is_recording 
-        except AttributeError:
-            # Fallback: if text exists and we haven't hit 'Save', treat as active
-            is_already_active = len(self.transcription_text) > 0
-
-        if is_already_active:
-            print("[VIEWMODEL] Resuming active recording session", file=sys.stderr)
-            self._set_state(AppStateType.VOICE_TO_TEXT)
-            # Re-emit the current text so the UI updates immediately
-            self.transcription_changed.emit(self.transcription_text)
-            return
-
-        print("[VIEWMODEL] Starting BRAND NEW recording session", file=sys.stderr)
+        self.vtt_active = True
+        self._was_session_finalized = False
         self.transcription_text = "" 
         self.transcription_changed.emit("")
         
         self.transcriber.start_recording()
         self.recording_status_changed.emit(True) 
-        self._set_state(AppStateType.VOICE_TO_TEXT)
-        # self._set_state(AppStateType.VOICE_TO_TEXT_LOADING)
-        # self.transcriber.start()
+        
+        if not silent:
+            self._set_state(AppStateType.VOICE_TO_TEXT)
+
 
     def stop_voice_to_text(self) -> None:
         import sys
         print("[VIEWMODEL] stop_voice_to_text() called", file=sys.stderr)
+        self.vtt_active = False #!!!!!
         self.transcriber.stop_recording()
         self.recording_status_changed.emit(False)
 
     def redo_voice_to_text(self) -> None:
-        self.transcriber.kill()
-        self.start_voice_to_text()
+        import sys
+        print("[VIEWMODEL] Redo requested", file=sys.stderr)
+        
+        self.transcriber.stop_recording()
+        self.transcription_text = ""
+        self.transcription_changed.emit("")
+        self.recording_status_changed.emit(False)
+        was_on_vtt = (self.state == AppStateType.VOICE_TO_TEXT)
+        QTimer.singleShot(300, lambda: self.start_voice_to_text(silent=not was_on_vtt))
 
     def save_transcription(self) -> None:
+        self._was_session_finalized = True
         text = self.transcription_text.strip()
         if text:
             self.store.save_voice_note(text, cleaned=text)
 
         self.stop_voice_to_text()
+        self.vtt_active = False
+        self.transcription_text = ""
 
         self.transcription_changed.emit("")
         self.recording_status_changed.emit(False)
         self.go_home()
 
     def delete_transcription(self) -> None:
-        self.stop_voice_to_text()
+        import sys
+        self._was_session_finalized = True
+        self.vtt_active = False
+        self.transcriber.stop_recording()
         self.transcription_text = ""
         self.transcription_changed.emit("")
         self.recording_status_changed.emit(False)
@@ -695,25 +698,25 @@ class ViewModel(QObject):
     def _on_transcription_token(self, chunk: str) -> None:
         import sys
         print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
-        # if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
-        #     self._set_state(AppStateType.VOICE_TO_TEXT)
         self.transcription_text += chunk
         print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
         self.transcription_changed.emit(self.transcription_text)
 
     def _on_transcription_completed(self, final_text: str) -> None:
         import sys
-        print(f"[VIEWMODEL] Received transcription completed signal", file=sys.stderr)
-        print(f"[VIEWMODEL] Final text received: '{final_text}'", file=sys.stderr)
-        print(f"[VIEWMODEL] Final text length: {len(final_text)}", file=sys.stderr)
-        if final_text.strip():
-            self.transcription_text = final_text
-            print(f"[VIEWMODEL] Setting transcription_text and emitting signal", file=sys.stderr)
-            self.transcription_changed.emit(self.transcription_text)
-            if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
-                self._set_state(AppStateType.VOICE_TO_TEXT)
-        else:
-            print("[VIEWMODEL] Final text is empty, not updating", file=sys.stderr)
+        if self._was_session_finalized:
+            return
+        if not final_text or not final_text.strip() or "No audio recorded" in final_text:
+            return
+        
+        print(f"[VIEWMODEL] CLEANUP: Replacing live text with final version", file=sys.stderr)
+        self.transcription_text = final_text
+        self.transcription_changed.emit(self.transcription_text)
+
+
+    def _on_transcription_failed(self, message: str) -> None:
+        print(f"[VIEWMODEL] Transcription error (non-fatal): {message}", file=sys.stderr)
+ 
 
     def _publish_trip(self) -> None:
         rocks = self.store.list_rocks()
