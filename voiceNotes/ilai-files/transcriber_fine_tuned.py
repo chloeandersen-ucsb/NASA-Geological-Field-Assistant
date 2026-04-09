@@ -1,5 +1,5 @@
 import time
-app_start_time = time.time() # Capture the exact moment the script starts
+app_start_time = time.time()
 
 import sounddevice as sd
 import nemo.collections.asr as nemo_asr
@@ -17,18 +17,32 @@ from textblob import TextBlob
 # ------------------------------------------------------------------
 # PART 1: CONFIGURATION
 # ------------------------------------------------------------------
+# ------------------------------------------------------------------
+# PART 1: CONFIGURATION
+# ------------------------------------------------------------------
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_FILE = os.path.join(SCRIPT_DIR, "newest_model.nemo")
-CURRENT_VISUAL_CONTEXT = ["Gneiss"] 
 
-# Audio Tunables
+# This is the path to the bridge file
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "../../"))
+CONTEXT_FILE = os.path.join(PROJECT_ROOT, "ML-classifications", "visual_context.txt")
+
+def get_current_visual_context():
+    try:
+        if os.path.exists(CONTEXT_FILE):
+            with open(CONTEXT_FILE, "r") as f:
+                label = f.read().strip()
+                if label: return [label]
+    except:
+        pass
+    return ["Gneiss"] # Default fallback
+
 SAMPLE_RATE = 16000
 CHUNK_DURATION = 0.5        
-WINDOW_DURATION = 2.5       # Keeps context long enough to hear "nice rock"
+WINDOW_DURATION = 2.5       
 ENERGY_THRESHOLD = 0.001    
 PRINT_SILENCE = True
 
-# Context Helpers
 spell = SpellChecker()
 
 GEOLOGY_TRIGGERS = { 
@@ -40,11 +54,9 @@ GEOLOGY_TRIGGERS = {
 }
 
 def has_geology_context(words, index, window=3):
-    """Checks for geology trigger words nearby."""
     start = max(0, index - window)
     end = min(len(words), index + window + 1)
     nearby_words = words[start:index] + words[index+1:end]
-    
     for w in nearby_words:
         clean_w = w.lower().strip(".,?!")
         if clean_w in GEOLOGY_TRIGGERS:
@@ -53,9 +65,17 @@ def has_geology_context(words, index, window=3):
 
 def multimodal_correction(transcript, visual_keywords):
     if not transcript: return ""
+
+    # --- THE FIX: Break multi-word labels into individual words ---
+    expanded_context = []
+    for phrase in visual_keywords:
+        # Splits "basalt pigeonite" into ["basalt", "pigeonite"]
+        expanded_context.extend(phrase.split())
     
+    # Remove duplicates (e.g., if context was ["basalt", "basalt pigeonite"])
+    expanded_context = list(set(expanded_context))
+
     blob = TextBlob(transcript)
-    # Get tags: [('nice', 'JJ'), ('Gneiss', 'NN'), ('rock', 'NN')]
     blob_tags = blob.tags
     words = transcript.split()
     corrected_words = []
@@ -63,140 +83,103 @@ def multimodal_correction(transcript, visual_keywords):
     for i, word in enumerate(words):
         best_candidate = word
         clean_word = word.lower().strip(".,?!")
-        
-        # Get tags for current and surrounding words
         current_tag = blob_tags[i][1] if i < len(blob_tags) else "XX"
         prev_tag = blob_tags[i-1][1] if i > 0 and i-1 < len(blob_tags) else "XX"
-        next_tag = blob_tags[i+1][1] if i+1 < len(blob_tags) else "XX"
-
-        for visual_context in visual_keywords:
+        
+        # We now loop over the split words ("basalt", "pigeonite") instead of the full phrase
+        for visual_context in expanded_context:
             context_clean = visual_context.lower()
-            
-            # Phonetic match
             sounds_alike = (jellyfish.metaphone(clean_word) == jellyfish.metaphone(context_clean))
             spelling_score = jellyfish.jaro_winkler_similarity(clean_word, context_clean)
             is_match = (sounds_alike or spelling_score > 0.85)
-
+            
             if is_match:
-                # --- NEW REFINED LOGIC ---
-                
-                # 1. If it's a "Nice Gneiss" situation:
-                # If THIS word is an adjective (JJ) AND the NEXT word is a noun (NN) 
-                # that also sounds like Gneiss, keep this one as "nice".
                 if i+1 < len(words):
                     next_word_clean = words[i+1].lower().strip(".,?!")
                     next_sounds_alike = (jellyfish.metaphone(next_word_clean) == jellyfish.metaphone(context_clean))
                     if current_tag.startswith("JJ") and next_sounds_alike:
-                        best_candidate = word # Keep as "nice"
+                        best_candidate = word 
                         break
-
-                # 2. If it is clearly a Noun or has "rock/sample" context, swap to Gneiss
                 if not current_tag.startswith("JJ") or has_geology_context(words, i):
-                    best_candidate = visual_context
+                    # Uses the single word (e.g., "basalt") instead of the whole phrase
+                    best_candidate = visual_context 
                     break
-                
-                # 3. Double Adjective catch: "nice nice rock" -> "nice Gneiss rock"
                 if current_tag.startswith("JJ") and prev_tag.startswith("JJ"):
                     best_candidate = visual_context
                     break
-        
+                    
         corrected_words.append(best_candidate)
         
     return " ".join(corrected_words)
 
 # ------------------------------------------------------------------
-# PART 2: DEVICE & MODEL SETUP
+# PART 2: DEVICE & MODEL SETUP (MAC-SPECIFIC RESTORE)
 # ------------------------------------------------------------------
-if torch.backends.mps.is_available(): device = torch.device("mps")
-elif torch.cuda.is_available(): device = torch.device("cuda")
-else: device = torch.device("cpu")
+# We MUST use map_location here or the Jetson weights will crash the Mac
+device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
+# Mock distributed to prevent the "Redirects" crash on MacOS
+import types
 if not hasattr(torch, "distributed"):
-    import types
     torch.distributed = types.SimpleNamespace()
+torch.distributed.is_initialized = lambda: False
 
-if not hasattr(torch.distributed, "is_initialized"):
-    torch.distributed.is_initialized = lambda: False
-
-DEVICE_INDEX = None
-print("Searching for Sennheiser XS LAV...")
-for i, dev in enumerate(sd.query_devices()):
-    if 'Sennheiser XS LAV USB-C' in dev['name']:
-        DEVICE_INDEX = i
-        break
-if DEVICE_INDEX is None:
-    print("Warning: Sennheiser LAV not found. Using default input.")
-    DEVICE_INDEX = sd.default.device[0]
-
-if not os.path.exists(MODEL_FILE):
-    print(f"ERROR: Could not find {MODEL_FILE}")
-    exit(1)
-
-print(f"Loading local model: {MODEL_FILE}...")
-asr_model = nemo_asr.models.EncDecCTCModelBPE.restore_from(restore_path=MODEL_FILE)
+print(f"Loading fine-tuned model: {MODEL_FILE}...")
+# map_location=device is the ONLY way this works on your MacBook
+asr_model = nemo_asr.models.EncDecCTCModelBPE.restore_from(
+    restore_path=MODEL_FILE, 
+    map_location=device
+)
 asr_model.freeze()
 asr_model = asr_model.to(device)
 asr_model.eval()
-print("Model loaded successfully!")
+print("Fine-tuned model loaded successfully!")
 sys.stdout.flush()
 
 # ------------------------------------------------------------------
-# PART 3: SMART MERGE HELPER
+# PART 3: LIVE INFERENCE LOGIC
 # ------------------------------------------------------------------
 def rms(x):
     return np.sqrt(np.mean(np.square(x.astype(np.float64))))
 
 def smart_merge(final_text, new_chunk):
-    """
-    Intelligently merges a new live chunk into the final text.
-    Handles 'unstable' tails (e.g., 'night' -> 'nice').
-    """
+    # Clean up lingering spaces and handle empty strings
     final_text = final_text.strip()
     new_chunk = new_chunk.strip()
     
     if not final_text: return new_chunk
     if not new_chunk: return final_text
     
-    final_words = final_text.split()
-    new_words = new_chunk.split()
+    # Restrict the search zone to the last 80 characters
+    search_zone = final_text[-80:] if len(final_text) > 80 else final_text
     
-    # 1. Try to find the start of 'new_chunk' inside 'final_text'
-    # We look at the last 6 words of final_text to find overlap
-    lookback = min(len(final_words), 10)
-    search_zone = final_words[-lookback:]
+    # --- RULE 3: The Ghost Tail Filter ---
+    if new_chunk in search_zone:
+        return final_text
     
-    best_overlap_index = -1
+    # Find the Longest Common Substring (The Nucleus)
+    s = difflib.SequenceMatcher(None, search_zone, new_chunk)
+    match = s.find_longest_match(0, len(search_zone), 0, len(new_chunk))
     
-    # Check if the start of new_words exists in search_zone
-    # We require at least 2 words to match to be confident, 
-    # OR 1 word if it's a very short chunk.
-    min_match = 2 if len(new_words) > 1 else 1
-    
-    for i in range(len(search_zone)):
-        # Construct a potential overlap from search_zone[i:]
-        potential_overlap = search_zone[i:]
-        len_overlap = len(potential_overlap)
+    # --- RULE 2: Apply the 4-Character Nucleus Merge ---
+    if match.size >= 4:
+        # 1. Grab the clean nucleus
+        overlap_str = search_zone[match.a : match.a + match.size]
         
-        # Does new_words START with this overlap?
-        if len(new_words) >= len_overlap:
-            if new_words[:len_overlap] == potential_overlap:
-                best_overlap_index = i
-                break
-    
-    # 2. If overlap found, stitch them
-    if best_overlap_index != -1:
-        # Calculate where in the absolute final_words list the match happened
-        absolute_index = (len(final_words) - lookback) + best_overlap_index
+        # 2. Grab everything in the OLD text BEFORE the nucleus
+        absolute_chop = len(final_text) - len(search_zone) + match.a
+        prefix = final_text[:absolute_chop]
         
-        # We assume the new_chunk is the "truth" and overwrite the tail
-        # Take everything BEFORE the overlap from old text
-        prefix = final_words[:absolute_index]
-        return " ".join(prefix + new_words)
-    
-    # 3. If no overlap, just append (fallback)
-    return final_text + " " + new_chunk
-
-
+        # 3. Grab everything in the NEW text AFTER the nucleus
+        # This automatically deletes garbage like the "g" or "t" at the start!
+        suffix = new_chunk[match.b + match.size:]
+        
+        return prefix + overlap_str + suffix
+        
+    else:
+        # No valid nucleus found, just append it normally
+        return final_text + " " + new_chunk
+        
 # ------------------------------------------------------------------
 # PART 4: MAIN LOOP
 # ------------------------------------------------------------------
@@ -204,63 +187,49 @@ audio_q = queue.Queue()
 full_audio_buffer = []
 
 def audio_callback(indata, frames, time_info, status):
-    if status: print(status, file=sys.stderr)
     audio_q.put(indata.copy())
+
+# Check for Sennheiser or default
+DEVICE_INDEX = None
+for i, dev in enumerate(sd.query_devices()):
+    if 'Sennheiser' in dev['name']:
+        DEVICE_INDEX = i
+        break
+if DEVICE_INDEX is None:
+    DEVICE_INDEX = sd.default.device[0]
+
+stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, device=DEVICE_INDEX, callback=audio_callback)
 
 chunk_size = int(SAMPLE_RATE * CHUNK_DURATION)
 window_size = int(SAMPLE_RATE * WINDOW_DURATION)
 rolling_buffer = np.zeros((1, 0), dtype=np.float32)
-
-startup_duration = time.time() - app_start_time
-
-print(f"\n{'='*40}")
-print(f"STARTUP TIME: {startup_duration:.2f} seconds")
-print(f"{'='*40}\n")
-
-print("\nRECORDING... (Ctrl+C to stop)\n")
-stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, device=DEVICE_INDEX, callback=audio_callback)
-
-last_printed_was_silence = False
 final_transcript = ""
-
 recording_active = False
 
 try:
-    stream.start()
     while True:
-    
         import select
-        if select.select([sys.stdin], [], [], 0)[0]:
-            #line = sys.stdin.readline().strip().lower()
+        if select.select([sys.stdin], [], [], 0.01)[0]:
             raw_line = sys.stdin.readline()
-            
-            if not raw_line:
-                break
-                
+            if not raw_line: break
             line = raw_line.strip().lower()
             
             if line == "start":
                 recording_active = True
-                print("\nRECORDING NOW... (Ctrl+C to stop)\n")
-                
-                while not audio_q.empty():
-                    audio_q.get()
                 full_audio_buffer = []
                 rolling_buffer = np.zeros((1,0), dtype=np.float32)
                 final_transcript = ""
-                last_printed_was_silence = False
-                
                 stream.start()
-                
+                print("\nRECORDING NOW... (Fine-tuned Model)\n")
                 sys.stdout.flush()
             elif line == "stop":
                 stream.stop()
                 recording_active = False
                 print("\n\nStopping stream... Preparing final transcript...")
-               # break
-               # ------------------------------------------------------------------
-               # PART 5: FINAL CLEANUP
-               # ------------------------------------------------------------------
+                
+                # ------------------------------------------------------------------
+                # PART 5: FINAL CLEANUP (RESTORED)
+                # ------------------------------------------------------------------
                 if full_audio_buffer:
                     print("Processing full audio buffer for maximum accuracy...")
                     full_audio = np.concatenate(full_audio_buffer, axis=0).astype(np.float32)
@@ -271,6 +240,7 @@ try:
 
                     with torch.no_grad():
                         try:
+                            # The massive single-pass transcription
                             preds = asr_model.transcribe([full_audio])
                             final_raw = preds[0].text if hasattr(preds[0], 'text') else str(preds[0])
                         except:
@@ -280,7 +250,8 @@ try:
                             transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
                             final_raw = transcripts[0].text
 
-                    final_clean_text = multimodal_correction(final_raw, CURRENT_VISUAL_CONTEXT).replace("⁇", "")
+                    # Fetch the live context one last time for the final sweep
+                    final_clean_text = multimodal_correction(final_raw, get_current_visual_context()).replace("⁇", "")
     
                     print("\n" + "="*40)
                     print("FINAL TRANSCRIPT:")
@@ -292,9 +263,7 @@ try:
                     
                 print("STREAMING COMPLETE")
                 sys.stdout.flush()
-               
-               
-                
+
         if recording_active:
             while not audio_q.empty():
                 block = audio_q.get()
@@ -303,19 +272,13 @@ try:
                 full_audio_buffer.append(block_mono.flatten())
 
             if rolling_buffer.shape[1] >= window_size:
-                window_audio = rolling_buffer[:, :window_size]
-                energy = rms(window_audio.flatten())
-                timestamp = datetime.now().strftime("%H:%M:%S")
+                current_visual_context = get_current_visual_context()
 
-                if energy < ENERGY_THRESHOLD:
-                    if PRINT_SILENCE and not last_printed_was_silence:
-                        print(f"[{timestamp}] (silence)")
-                        sys.stdout.flush()
-                        last_printed_was_silence = True
+                window_audio = rolling_buffer[:, :window_size]
+                if rms(window_audio.flatten()) < ENERGY_THRESHOLD:
                     rolling_buffer = rolling_buffer[:, chunk_size:]
                     continue
 
-                # Decode
                 max_val = np.max(np.abs(window_audio))
                 if max_val > 0: window_audio = window_audio / (max_val + 1e-9)
                 tensor_in = torch.from_numpy(window_audio).float().to(device)
@@ -328,38 +291,30 @@ try:
                     transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
                     raw_text = transcripts[0].text if hasattr(transcripts[0], 'text') else str(transcripts[0])
 
-                # Correct
-                corrected_text = multimodal_correction(raw_text, CURRENT_VISUAL_CONTEXT)
-                corrected_text = corrected_text.replace("⁇", "")
-
-                # Merge & Print
+                # 1. Grab the live context from the file
+                live_context = get_current_visual_context()
+                
+                # 2. Feed it into your correction brain
+                corrected_text = multimodal_correction(raw_text, live_context)
+                
+                # --- RULE 1: Destroy the weird question marks ---
+                corrected_text = corrected_text.replace("⁇", "").strip()
+                
                 if corrected_text:
-                    last_printed_was_silence = False
-                
-                    # A. Smart Merge (Handles 'night' -> 'nice' replacement)
+                    # --- RULE 2: Mash overlapping text together ---
                     new_full_transcript = smart_merge(final_transcript, corrected_text)
-                
-                    # B. Determine what is NEW
-                    # If the text got shorter (rewrite), print the whole new chunk? 
-                    # Or just print the difference.
+                    
                     if len(new_full_transcript) > len(final_transcript):
-                        # Simple append case
+                        # Only grab the completely new words to send to the UI
                         new_part = new_full_transcript[len(final_transcript):].strip()
                         if new_part:
+                            timestamp = datetime.now().strftime('%H:%M:%S')
                             print(f"[{timestamp}] {new_part}")
                             sys.stdout.flush()
-                    elif new_full_transcript != final_transcript:
-                        # Replacement case (Text changed but didn't necessarily grow)
-                        # We can't "unprint" in the console easily, so we just print the fix
-                        # For the GUI, this might result in "night nice", but it's better than duplication.
-                        pass 
-                
+                            
                     final_transcript = new_full_transcript
-
                 rolling_buffer = rolling_buffer[:, chunk_size:]
-
         time.sleep(0.01)
 
 except KeyboardInterrupt:
     stream.stop()
-    print("\n\nStopping stream... Preparing final transcript...")

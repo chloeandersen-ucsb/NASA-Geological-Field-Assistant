@@ -76,20 +76,34 @@ class CameraService(QThread):
         self.stop_preview()
         
     def run(self) -> None:
-        # The Jetson CSI hardware pipeline
-        pipeline = (
-            "nvarguscamerasrc ! "
-            "video/x-raw(memory:NVMM), width=1920, height=1080, format=(string)NV12, framerate=(fraction)30/1 ! "
-            "nvvidconv ! video/x-raw, format=(string)BGRx ! "
-            "videoconvert ! video/x-raw, format=(string)BGR ! appsink"
-        )
-        cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+        # --- Hardware Detection ---
+        if connector.is_jetson():
+            # Original Jetson CSI hardware pipeline
+            pipeline = (
+                "nvarguscamerasrc ! "
+                "video/x-raw(memory:NVMM), width=1920, height=1080, format=(string)NV12, framerate=(fraction)30/1 ! "
+                "nvvidconv ! video/x-raw, format=(string)BGRx ! "
+                "videoconvert ! video/x-raw, format=(string)BGR ! appsink"
+            )
+            cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+        else:
+            # MacBook built-in FaceTime camera (Standard index 0)
+            print("[CAMERA] Mac detected: Using default camera index 0", file=sys.stderr)
+            cap = cv2.VideoCapture(0)
         
+        # --- Connection Check ---
         if not cap.isOpened():
-            self.capture_failed.emit("Failed to open CSI camera via OpenCV")
-            return
+            # If standard Mac index 0 is busy, try index 1 (common for external monitors/iPhone)
+            if not connector.is_jetson():
+                cap = cv2.VideoCapture(1)
+            
+            if not cap.isOpened():
+                self.capture_failed.emit("Failed to open camera via OpenCV")
+                return
             
         print("[CAMERA] Native Preview started", file=sys.stderr)
+        
+        # --- Main Loop (Preserved Logic) ---
         while self._run_flag:
             ret, frame = cap.read()
             if not ret:

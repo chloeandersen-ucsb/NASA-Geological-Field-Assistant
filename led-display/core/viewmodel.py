@@ -44,6 +44,7 @@ class RockEntry:
     rock_id: str
     ts: float
     result: ClassificationResult
+    session_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -60,17 +61,45 @@ class Store:
         self.voice_notes_data_dir = voice_notes_data_dir
         os.makedirs(self.base_dir, exist_ok=True)
         self.rocks_path = os.path.join(self.base_dir, "rocks.jsonl")
+        self.voice_path = os.path.join(self.base_dir, "voice_notes.jsonl")
+        
+        # --- NEW: Generate a permanent ID for this specific app launch ---
+        self.session_id = str(uuid.uuid4()) 
+
+    def update_voice_note_rock_id(self, ts: float, rock_id: str) -> None:
+        """Updates an existing voice note to link it to a specific rock."""
+        if not os.path.exists(self.voice_path): return
+        lines = []
+        with open(self.voice_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    rec = json.loads(line)
+                    if rec.get("ts") == ts:
+                        rec["rock_id"] = rock_id
+                    lines.append(rec)
+        with open(self.voice_path, "w", encoding="utf-8") as f:
+            for rec in lines:
+                f.write(json.dumps(rec) + "\n")
+    
+    def delete_all_data(self) -> None:
+        """Empties both the rocks and voice notes database files."""
+        if os.path.exists(self.rocks_path):
+            open(self.rocks_path, 'w').close()
+        if os.path.exists(self.voice_path):
+            open(self.voice_path, 'w').close()
 
     def save_rock(self, result: ClassificationResult) -> RockEntry:
         entry = RockEntry(
             rock_id=str(uuid.uuid4()),
             ts=time.time(),
             result=result,
+            session_id=self.session_id # Attach session ID
         )
         rec = {
             "type": "rock",
             "rock_id": entry.rock_id,
             "ts": entry.ts,
+            "session_id": entry.session_id, # Save to JSONL
             "result": asdict(entry.result),
         }
         with open(self.rocks_path, "a", encoding="utf-8") as f:
@@ -96,7 +125,12 @@ class Store:
                     estimated_volume=r.get("estimated_volume"), estimated_weight=r.get("estimated_weight"),
                     raw=r.get("raw"),
                 )
-                rocks.append(RockEntry(rock_id=rec["rock_id"], ts=rec["ts"], result=result))
+                rocks.append(RockEntry(
+                    rock_id=rec["rock_id"], 
+                    ts=rec["ts"], 
+                    result=result,
+                    session_id=rec.get("session_id") # Read from JSONL
+                ))
         return rocks
 
     def save_voice_note(self, transcript: str, cleaned: Optional[str] = None) -> None:
@@ -107,12 +141,41 @@ class Store:
         filename = f"{now.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4()}.json"
         filepath = os.path.join(date_dir, filename)
         rec = {
-            "ts": ts,
+            "type": "voice",
+            "ts": time.time(),
+            "session_id": getattr(self, "session_id", None),
+            "rock_id": rock_id, # Explicit hard-link to a rock
             "transcript": transcript,
             "cleaned": cleaned or transcript,
         }
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(rec, f, ensure_ascii=False)
+
+    def delete_rock(self, rock_id: str) -> None:
+        if not os.path.exists(self.rocks_path): return
+        lines = []
+        with open(self.rocks_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    rec = json.loads(line)
+                    if rec.get("rock_id") != rock_id:
+                        lines.append(rec)
+        with open(self.rocks_path, "w", encoding="utf-8") as f:
+            for rec in lines:
+                f.write(json.dumps(rec) + "\n")
+
+    def delete_voice_note(self, ts: float) -> None:
+        if not os.path.exists(self.voice_path): return
+        lines = []
+        with open(self.voice_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    rec = json.loads(line)
+                    if rec.get("ts") != ts:
+                        lines.append(rec)
+        with open(self.voice_path, "w", encoding="utf-8") as f:
+            for rec in lines:
+                f.write(json.dumps(rec) + "\n")
 
     def update_rock_volume(self, rock_id: str, volume: Optional[float], weight: Optional[str]) -> None:
         if not os.path.exists(self.rocks_path):
@@ -250,6 +313,15 @@ class ViewModel(QObject):
         self.vtt_active = False
         self._was_session_finalized = False
 
+    def assign_note_to_rock(self, note_ts: float, rock_id: str) -> None:
+        self.store.update_voice_note_rock_id(note_ts, rock_id)
+        self._publish_trip() # Refresh the UI to show it moved!
+    
+    def clear_all_trip_data(self) -> None:
+        """Wipes all trip data and refreshes the UI."""
+        self.store.delete_all_data()
+        self.active_rock_id = None
+        self._publish_trip() # Refreshes the UI to show an empty list!
 
     def _set_state(self, new_state: AppStateType) -> None:
         self.state = new_state
@@ -269,6 +341,20 @@ class ViewModel(QObject):
         # Push current transcript so the text box is up to date on arrival.
         self.transcription_changed.emit(self.transcription_text)
         self._set_state(AppStateType.VOICE_TO_TEXT)
+    def reset_voice_context(self) -> None:
+        """Clears the AI visual context and forces the next recording to be an orphan."""
+        # 1. Force the database to save this as a standalone note
+        self.active_rock_id = "ORPHAN"
+        
+        # 2. Wipe the visual_context.txt file so the transcriber stops forcing rock words
+        project_root = Path(__file__).resolve().parent.parent.parent
+        context_file = project_root / "ML-classifications" / "visual_context.txt"
+        try:
+            with open(context_file, "w") as f:
+                f.write("") 
+            print("[VIEWMODEL] Context explicitly reset by user. Note will be an ORPHAN.")
+        except Exception as e:
+            pass
 
     def go_home(self) -> None:
         if self.state == AppStateType.CAMERA_PREVIEW:
@@ -460,14 +546,18 @@ class ViewModel(QObject):
     def save_classification(self) -> None:
         if self.current_classification:
             entry = self.store.save_rock(self.current_classification)
+            self.active_rock_id = entry.rock_id
             self._classification_saved_rock_id = entry.rock_id
             label = self.current_classification.label
-            #Yestranscriber_fine_tuned.update_visual_context(label)
             
-            context_file = "/data/sage/visual_context.txt"
+            # --- SHARED MAC PATH ---
+            project_root = Path(__file__).resolve().parent.parent.parent
+            context_file = project_root / "ML-classifications" / "visual_context.txt"
+            
             try:
                 with open(context_file, "w") as f:
                     f.write(label)
+                print(f"[VIEWMODEL] Context file updated: {label}")
             except Exception as e:
                 print(f"Warning: Could not save context bridge: {e}")
         self.go_home()
@@ -675,7 +765,8 @@ class ViewModel(QObject):
         self._was_session_finalized = True
         text = self.transcription_text.strip()
         if text:
-            self.store.save_voice_note(text, cleaned=text)
+            # Pass the explicit rock_id so it links permanently!
+            self.store.save_voice_note(text, cleaned=text, rock_id=getattr(self, "active_rock_id", None))
 
         self.stop_voice_to_text()
         self.vtt_active = False
@@ -684,6 +775,29 @@ class ViewModel(QObject):
         self.transcription_changed.emit("")
         self.recording_status_changed.emit(False)
         self.go_home()
+    
+    def make_rock_current(self, entry: RockEntry) -> None:
+        """Sets an old rock as the target for new voice notes and updates the AI transcriber context."""
+        self.active_rock_id = entry.rock_id
+        label = entry.result.label
+        project_root = Path(__file__).resolve().parent.parent.parent
+        context_file = project_root / "ML-classifications" / "visual_context.txt"
+        try:
+            with open(context_file, "w") as f:
+                f.write(label)
+            print(f"[VIEWMODEL] Context explicitly overridden to: {label}")
+        except Exception as e:
+            pass
+
+    def delete_rock_by_id(self, rock_id: str) -> None:
+        self.store.delete_rock(rock_id)
+        if getattr(self, "active_rock_id", None) == rock_id:
+            self.active_rock_id = None
+        self._publish_trip()
+
+    def delete_voice_note_by_ts(self, ts: float) -> None:
+        self.store.delete_voice_note(ts)
+        self._publish_trip()
 
     def delete_transcription(self) -> None:
         import sys
@@ -698,9 +812,21 @@ class ViewModel(QObject):
     def _on_transcription_token(self, chunk: str) -> None:
         import sys
         print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
-        self.transcription_text += chunk
+        
+        # --- DEBUG FIX: Force every new chunk onto its own line ---
+        self.transcription_text += chunk.strip() + "\n"
+        
         print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
         self.transcription_changed.emit(self.transcription_text)
+
+    # def _on_transcription_token(self, chunk: str) -> None:
+    #     import sys
+    #     print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
+    #     # if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
+    #     #     self._set_state(AppStateType.VOICE_TO_TEXT)
+    #     self.transcription_text += chunk
+    #     print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
+    #     self.transcription_changed.emit(self.transcription_text)
 
     def _on_transcription_completed(self, final_text: str) -> None:
         import sys
@@ -717,6 +843,22 @@ class ViewModel(QObject):
     def _on_transcription_failed(self, message: str) -> None:
         print(f"[VIEWMODEL] Transcription error (non-fatal): {message}", file=sys.stderr)
  
+        print(f"[VIEWMODEL] Received transcription completed signal", file=sys.stderr)
+        
+        if self.state == AppStateType.HOME:
+            print("[VIEWMODEL] Ignored late text because session is closed.", file=sys.stderr)
+            return
+            
+        print(f"[VIEWMODEL] Final text received: '{final_text}'", file=sys.stderr)
+        print(f"[VIEWMODEL] Final text length: {len(final_text)}", file=sys.stderr)
+        if final_text.strip():
+            self.transcription_text = final_text
+            print(f"[VIEWMODEL] Setting transcription_text and emitting signal", file=sys.stderr)
+            self.transcription_changed.emit(self.transcription_text)
+            if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
+                self._set_state(AppStateType.VOICE_TO_TEXT)
+        else:
+            print("[VIEWMODEL] Final text is empty, not updating", file=sys.stderr)
 
     def _publish_trip(self) -> None:
         rocks = self.store.list_rocks()
@@ -743,5 +885,7 @@ class ViewModel(QObject):
         self.trip_changed.emit(summary)
 
     def _fail(self, message: str) -> None:
-        self._abort_classification(message)
+        import sys
+        print(f"\n[CRITICAL DEBUG] Failure detected: {message}", file=sys.stderr)
+        # self._abort_classification(message)  <-- Comment this out!
 

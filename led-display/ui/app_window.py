@@ -12,12 +12,12 @@ sys.path.insert(0, str(project_root))
 img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
 
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QStackedWidget, QMessageBox,
     QWidget, QVBoxLayout, QLabel, QPushButton,
-    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout,
+    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QDialog
 )
 
 import connector
@@ -419,6 +419,11 @@ class VoicePage(QWidget):
                 background-color: #f5f6f4;
             }
         """)
+        self.btn_reset = QPushButton("Reset Context")
+        self.btn_reset.setStyleSheet("""
+            QPushButton { background-color: #a88b5c; font-size: 22px; color: white; }
+            QPushButton:hover { background-color: #f5f6f4; color: #344f41; }
+        """)
         self.btn_save = QPushButton("Save")
         self.btn_save.setStyleSheet("""
             QPushButton {
@@ -441,7 +446,7 @@ class VoicePage(QWidget):
                 background-color: #f5f6f4;
             }
         """)
-        for b in [self.btn_start, self.btn_stop, self.btn_redo, self.btn_save, self.btn_delete]:
+        for b in [self.btn_start, self.btn_stop, self.btn_redo, self.btn_save, self.btn_delete, self.btn_reset]:
             b.setMinimumHeight(55)
             # b.setStyleSheet("font-size: 20px;")
             row.addWidget(b)
@@ -459,17 +464,35 @@ class TripLoadPage(QWidget):
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
         layout.addWidget(title)
 
+        # --- NEW: Delete All Button ---
+        self.btn_delete_all = QPushButton("DELETE ALL")
+        self.btn_delete_all.setMinimumHeight(45)
+        self.btn_delete_all.setStyleSheet("""
+            QPushButton {
+                background-color: #cc0000;
+                color: white;
+                font-size: 18px;
+                font-weight: bold;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #ff3333;
+            }
+        """)
+        layout.addWidget(self.btn_delete_all)
+        # ------------------------------
+
         self.lbl_totals = QLabel("Total volume: --   Total weight: --")
         self.lbl_totals.setAlignment(Qt.AlignCenter)
         self.lbl_totals.setStyleSheet("font-size: 16px;")
         layout.addWidget(self.lbl_totals)
 
-        rocks_label = QLabel("Rocks:")
-        rocks_label.setStyleSheet("font-size: 18px; font-weight: 600;")
-        layout.addWidget(rocks_label)
+        timeline_label = QLabel("Timeline:")
+        timeline_label.setStyleSheet("font-size: 18px; font-weight: 600;")
+        layout.addWidget(timeline_label)
         
         self.list = QListWidget()
-        self.list.setStyleSheet("font-size: 14px;")
+        self.list.setStyleSheet("font-size: 16px;")
         layout.addWidget(self.list, stretch=1)
 
         
@@ -484,7 +507,8 @@ class TripLoadPage(QWidget):
         self.btn_back = big_button("Back")
         layout.addWidget(self.btn_back)
         
-        self._voice_notes_data = []
+        self._timeline_data = []
+        self._summary = None
         
 class RockDetailPage(QWidget):
     def __init__(self):
@@ -524,17 +548,32 @@ class RockDetailPage(QWidget):
 
         images_row.addWidget(self.lbl_top, stretch=1)
         images_row.addWidget(self.lbl_side, stretch=1)
-        layout.addLayout(images_row, stretch=3)
+        layout.addLayout(images_row, stretch=2)
 
         self.lbl_info = QLabel("")
         self.lbl_info.setWordWrap(True)
         self.lbl_info.setStyleSheet("font-size: 18px; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
         layout.addWidget(self.lbl_info, stretch=2)
 
+        # --- NEW: Voice Notes Display ---
+        self.lbl_notes_title = QLabel("Associated Voice Notes:")
+        self.lbl_notes_title.setStyleSheet("font-size: 18px; font-weight: 700;")
+        layout.addWidget(self.lbl_notes_title)
+
+        self.notes_text = QTextEdit()
+        self.notes_text.setReadOnly(True)
+        self.notes_text.setStyleSheet("""
+            font-size: 16px;
+            border: 2px solid #cbd2c5;
+            border-radius: 8px;
+            padding: 8px;
+        """)
+        layout.addWidget(self.notes_text, stretch=1)
+
         self.btn_back = big_button("Back")
         layout.addWidget(self.btn_back)
 
-    def set_entry(self, entry) -> None:
+    def set_entry(self, entry, associated_notes=None) -> None:
         dt = datetime.datetime.fromtimestamp(entry.ts) if entry.ts else None
         self.lbl_time.setText(f"{dt.strftime('%Y-%m-%d %H:%M:%S')}" if dt else "Unknown time")
 
@@ -560,6 +599,19 @@ class RockDetailPage(QWidget):
         vol_txt = f"{res.estimated_volume} cm³" if res.estimated_volume is not None else "N/A"
         weight_txt = res.estimated_weight if res.estimated_weight is not None else "N/A"
         self.lbl_info.setText(f"Volume: {vol_txt}\nWeight: {weight_txt}")
+
+        # --- NEW: Populate Voice Notes ---
+        if associated_notes:
+            notes_str = ""
+            for n in associated_notes:
+                ts = n.get("ts", 0)
+                note_dt = datetime.datetime.fromtimestamp(ts) if ts else None
+                time_str = note_dt.strftime("%H:%M:%S") if note_dt else "Unknown"
+                cleaned = n.get("cleaned", n.get("transcript", ""))
+                notes_str += f"[{time_str}] {cleaned}\n\n"
+            self.notes_text.setPlainText(notes_str.strip())
+        else:
+            self.notes_text.setPlainText("No associated voice notes.")
 
 
 class VoiceNoteDetailPage(QWidget):
@@ -694,6 +746,9 @@ class ExpandingVoiceWidget(QWidget):
 class AppWindow(QMainWindow):
     def __init__(self, vm):
         super().__init__()
+
+        import time
+        self.session_start_time = time.time()
         
         self.vm = vm
         self.setWindowTitle("SAGE Jetson UI")
@@ -766,6 +821,68 @@ class AppWindow(QMainWindow):
         
         self._setup_shortcuts()
 
+    def _on_reset_context_clicked(self) -> None:
+        self.vm.reset_voice_context()
+
+    def _start_rock_assignment(self, note_ts):
+        """Kicks off the jiggle animation and waits for a rock click."""
+        self._assigning_note_ts = note_ts
+        self._shake_offset = 0
+        self._shake_direction = 1
+        
+        self._shake_timer = QTimer(self)
+        self._shake_timer.timeout.connect(self._do_shake)
+        self._shake_timer.start(40) # Update the layout every 40ms
+
+    def _do_shake(self):
+        """Bounces the margins of the Rock widgets left and right."""
+        self._shake_offset += self._shake_direction * 2
+        if abs(self._shake_offset) >= 4:
+            self._shake_direction *= -1
+            
+        for i in range(self.trip.list.count()):
+            item_dict = self.trip._timeline_data[i]
+            if item_dict["type"] == "rock":
+                list_item = self.trip.list.item(i)
+                widget = self.trip.list.itemWidget(list_item)
+                if widget:
+                    # Alternating padding creates the "shake"
+                    widget.setContentsMargins(5 + self._shake_offset, 2, 5 - self._shake_offset, 2)
+
+    def _stop_rock_assignment(self):
+        """Stops the timer and resets everything back to normal."""
+        self._assigning_note_ts = None
+        if hasattr(self, "_shake_timer") and self._shake_timer is not None:
+            self._shake_timer.stop()
+            self._shake_timer = None
+            
+        if hasattr(self, "trip") and hasattr(self.trip, "list"):
+            for i in range(self.trip.list.count()):
+                list_item = self.trip.list.item(i)
+                widget = self.trip.list.itemWidget(list_item)
+                if widget:
+                    widget.setContentsMargins(5, 2, 5, 2)
+    
+    def _on_delete_all_clicked(self) -> None:
+        # Create the custom popup
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Delete All Data")
+        msg_box.setText("Are you sure? Clicking CONFIRM will delete data from all your past missions. This data will be irretrievable.")
+        msg_box.setStyleSheet("QLabel { color: #344f41; font-size: 18px; font-weight: normal; } QMessageBox { background-color: #cbd2c5; }")
+        
+        # Add the custom buttons
+        btn_confirm = msg_box.addButton("CONFIRM", QMessageBox.AcceptRole)
+        btn_confirm.setStyleSheet("background-color: #cc0000; color: white; font-weight: bold; padding: 8px;")
+        
+        btn_cancel = msg_box.addButton("CANCEL", QMessageBox.RejectRole)
+        btn_cancel.setStyleSheet("background-color: #95b7dc; color: #385573; font-weight: bold; padding: 8px;")
+        
+        msg_box.exec()
+        
+        # Check which button they clicked
+        if msg_box.clickedButton() == btn_confirm:
+            self.vm.clear_all_trip_data()
+
     def _setup_shortcuts(self) -> None:
         shortcut_f11 = QShortcut(QKeySequence(Qt.Key_F11), self)
         shortcut_f11.activated.connect(self._toggle_fullscreen)
@@ -783,6 +900,42 @@ class AppWindow(QMainWindow):
             entry = summary[index]
             self.rock_detail.set_entry(entry)
             self.stack.setCurrentWidget(self.rock_detail)
+
+    def _on_virtual_key_pressed(self, key: str) -> None:
+        cursor = self.voice.text.textCursor()
+        
+        if key == "⌫":
+            cursor.deletePreviousChar()
+        elif key == "Space":
+            cursor.insertText(" ")
+        elif key == "←":
+            cursor.movePosition(QTextCursor.Left)
+        elif key == "→":
+            cursor.movePosition(QTextCursor.Right)
+        elif key == "↑":
+            cursor.movePosition(QTextCursor.Up)
+        elif key == "↓":
+            cursor.movePosition(QTextCursor.Down)
+        else:
+            cursor.insertText(key)
+            
+        self.voice.text.setTextCursor(cursor)
+        self.voice.text.setFocus()
+        self.vm.transcription_text = self.voice.text.toPlainText()
+        
+        # --- SMART AUTO-SHIFT LOGIC ---
+        # Grab all the text leading up to the cursor's current position
+        text_so_far = self.voice.text.toPlainText()[:cursor.position()]
+        
+        if len(text_so_far) == 0:
+            # If the box is completely empty, capitalize the first letter!
+            self.inline_keyboard.set_shift_state(1)
+        elif len(text_so_far) >= 2 and text_so_far[-2:] in [". ", "? ", "! "]:
+            # If the last two characters were punctuation + space, capitalize!
+            self.inline_keyboard.set_shift_state(1)
+        elif len(text_so_far) >= 1 and text_so_far[-1] == "\n":
+            # If they just went to a new line, capitalize!
+            self.inline_keyboard.set_shift_state(1)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key_F11:
@@ -846,16 +999,38 @@ class AppWindow(QMainWindow):
         self.classified.btn_delete.clicked.connect(self.vm.delete_classification)
 
         self.voice.btn_start.clicked.connect(self.vm.start_voice_to_text)
-        self.voice.btn_stop.clicked.connect(self.vm.stop_voice_to_text)
+        # self.voice.btn_stop.clicked.connect(self.vm.stop_voice_to_text)
+        #self.voice.btn_stop.clicked.connect(self.vm.stop_voice_to_text)
+        self.voice.btn_stop.clicked.connect(self._on_stop_or_edit_clicked)
         self.voice.btn_redo.clicked.connect(self.vm.redo_voice_to_text)
         self.voice.btn_save.clicked.connect(self.vm.save_transcription)
         self.voice.btn_delete.clicked.connect(self.vm.delete_transcription)
+        self.voice.btn_reset.clicked.connect(self._on_reset_context_clicked)
+        
 
         self.trip.btn_back.clicked.connect(self.vm.go_home)
-        self.trip.notes_list.itemClicked.connect(self._on_voice_note_clicked)
-        self.trip.list.itemClicked.connect(self._on_rock_clicked)
+        self.trip.btn_delete_all.clicked.connect(self._on_delete_all_clicked)
+        # --- NEW: Unified Timeline Click ---
+        self.trip.list.itemClicked.connect(self._on_timeline_clicked)
         self.rock_detail.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(self.trip))
         self.voice_note_detail.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(self.trip))
+        
+    def _on_stop_or_edit_clicked(self) -> None:
+        if self.voice.btn_stop.text() == "Stop":
+            self.vm.stop_voice_to_text()
+        else:
+            self.inline_keyboard.show()
+            self.voice.text.setReadOnly(False)
+            self.voice.text.setFocus()
+            self.voice.text.moveCursor(QTextCursor.End)
+            
+            # --- STARTUP CHECK ---
+            text = self.voice.text.toPlainText()
+            # If the text is empty, OR ends in punctuation, start with Shift ON!
+            if not text or (len(text) >= 2 and text[-2:] in [". ", "? ", "! "]):
+                self.inline_keyboard.set_shift_state(1)
+            else:
+                self.inline_keyboard.set_shift_state(0)
 
     def _wire_vm(self) -> None:
         self.vm.state_changed.connect(self._show_state)
@@ -867,6 +1042,19 @@ class AppWindow(QMainWindow):
         self.vm.recording_status_changed.connect(self._on_recording_status_changed)
         self.vm.two_step_capture_message.connect(self.camera_preview.lbl_step.setText)
         self.vm.camera.frame_ready.connect(self._on_camera_frame)
+        
+        self.inline_keyboard = Keyboard()
+        self.inline_keyboard.hide()
+        
+        self.inline_keyboard.btn_close.clicked.connect(self.inline_keyboard.hide)
+        
+        voice_layout = self.voice.layout()
+        if voice_layout:
+            voice_layout.insertWidget(voice_layout.count() - 1, self.inline_keyboard)
+            
+        self.inline_keyboard.hide()
+        
+        self.inline_keyboard.key_pressed.connect(self._on_virtual_key_pressed)
         
     def _on_camera_frame(self, image: QImage) -> None:
         if self.vm.state == AppStateType.CAMERA_PREVIEW:
@@ -888,6 +1076,7 @@ class AppWindow(QMainWindow):
             self.camera_preview.video_label.setPixmap(scaled_pixmap)
 
     def _show_state(self, state: AppStateType) -> None:
+        # 1. Switch the widget on the screen
         mapping = {
             AppStateType.HOME:                  self.home,
             AppStateType.CAMERA_PREVIEW:        self.camera_preview,
@@ -898,22 +1087,47 @@ class AppWindow(QMainWindow):
             AppStateType.VOICE_TO_TEXT:         self.voice,
             AppStateType.TRIP_LOAD:             self.trip,
         }
-        if state in mapping:
-            self.stack.setCurrentWidget(mapping[state])
- 
-        if state == AppStateType.VOICE_TO_TEXT:
-            current_text = self.vm.transcription_text
-            self.voice.text.setPlainText(current_text)
-            self.voice.btn_save.setEnabled(bool(current_text.strip()))
- 
+if state in mapping:
+            # Edge case: If we are in camera preview, don't switch screens just to show VTT
+            if state == AppStateType.VOICE_TO_TEXT and self.stack.currentWidget() == self.camera_preview:
+                pass
+            else:
+                self.stack.setCurrentWidget(mapping[state])
+
+        # 2. Handle state-specific setup and cleanup
+        if state == AppStateType.HOME:
+            # If we return Home, and the mic is off, aggressively factory-reset the Voice module
+            if not getattr(self.vm.transcriber, 'is_recording', False):
+                self.voice.text.clear()
+                self.vm.transcription_text = ""  # Wipes ghost text from memory!
+                
+                # Reset the little camera-preview voice button
+                self.camera_preview.voice_ctrl.trigger_btn.setText("🎤")
+                self.camera_preview.voice_ctrl.trigger_btn.setStyleSheet(
+                    "background-color: #344f41; color: white; border-radius: 25px; font-size: 20px;"
+                )
+
         elif state == AppStateType.CAMERA_PREVIEW:
+            # From HEAD: Updated label text
             self.camera_preview.lbl_step.setText("Capture First View")
             self.vm.start_camera_stream(0, 0, 0, 0)
- 
+
         elif state == AppStateType.CONFIRM_CAPTURES:
             top_path, side_path = self.vm.get_review_image_paths()
             self.capture_review.set_images(top_path, side_path)
 
+        elif state == AppStateType.VOICE_TO_TEXT:
+            # From ilai-macbook branch: Reset UI elements for safety
+            self.inline_keyboard.hide()       
+            self.inline_keyboard.set_shift_state(0)
+            self.voice.btn_stop.setText("Stop")      
+            self.voice.text.setReadOnly(True)
+            
+            # From HEAD: Load text directly from VM using a local variable
+            current_text = self.vm.transcription_text
+            self.voice.text.setPlainText(current_text)
+            self.voice.btn_save.setEnabled(bool(current_text.strip()))
+            
     def _on_classification(self, result: ClassificationResult) -> None:
         has_side = result.side_image_path and os.path.exists(result.side_image_path)
         if has_side:
@@ -987,48 +1201,411 @@ class AppWindow(QMainWindow):
             cursor = self.voice.text.textCursor()
             cursor.movePosition(QTextCursor.MoveOperation.End)
             self.voice.text.setTextCursor(cursor)
+        cursor = self.voice.text.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self.voice.text.setTextCursor(cursor)
+
+        self.voice.btn_save.setEnabled(bool(text.strip()))
+
+    # def _on_transcription_ready(self):
+    #     self.state_changed.emit(AppStateType.VOICE_TO_TEXT)
+
+    
+        self.trip.list.clear()
+        self.trip._timeline_data = []
+        self.trip._summary = summary
+        
+        rocks_sorted = sorted(summary.rocks, key=lambda r: r.ts)
+        
+        # 1. Combine rocks and ONLY orphan voice notes into one unified list
+        combined = []
+        for r in summary.rocks:
+            combined.append({"type": "rock", "ts": r.ts, "data": r})
+            
+        for n in summary.voice_notes:
+            note_ts = n.get("ts", 0)
+            note_session = n.get("session_id")
+            
+            # Find the most recent rock BEFORE this note
+            owning_rock = None
+            for r in reversed(rocks_sorted):
+                if r.ts <= note_ts:
+                    owning_rock = r
+                    break
+                    
+            is_orphan = False
+            if not owning_rock:
+                # Before any rocks were ever taken
+                is_orphan = True
+            elif note_session != owning_rock.session_id:
+                # STRICT BOUNDARY: If they don't share the exact same launch ID, it's an orphan!
+                is_orphan = True
+                
+            if is_orphan:
+                combined.append({"type": "voice", "ts": note_ts, "data": n})
+            
+        # 2. Sort REVERSE chronologically (Newest at the top)
+        combined.sort(key=lambda x: x["ts"], reverse=True)
+        
+        # 3. Populate the UI List
+        for item in combined:
+            ts = item["ts"]
+            dt = datetime.datetime.fromtimestamp(ts) if ts else None
+            time_str = dt.strftime("%Y-%m-%d %H:%M:%S") if dt else "Unknown"
+            
+            if item["type"] == "rock":
+                r = item["data"]
+                label = r.result.label
+                conf = int(r.result.confidence * 100)
+                display_text = f"🪨 [{time_str}] ROCK: {label.upper()} ({conf}%)"
+            else:
+                n = item["data"]
+                cleaned = n.get("cleaned", n.get("transcript", ""))
+                short_text = cleaned[:80] + "..." if len(cleaned) > 80 else cleaned
+                display_text = f"🎤 [{time_str}] NOTE: {short_text}"
+                
+            self.trip.list.addItem(display_text)
+            self.trip._timeline_data.append(item)
+
+        total_vol = f"{summary.total_volume:.2f}" if summary.total_volume else "0.00"
+        total_wt = f"{summary.total_weight:.2f}" if summary.total_weight else "0.00"
+        self.trip.lbl_totals.setText(f"Total volume: {total_vol} cm³   Total weight: {total_wt} kg")
 
     def _on_trip(self, summary: TripSummary) -> None:
+        self._stop_rock_assignment()
         self.trip.list.clear()
-        for r in summary.rocks:
-            label = r.result.label
-            conf = int(r.result.confidence * 100)
-            ts = r.ts
-            if ts:
-                dt = datetime.datetime.fromtimestamp(ts)
-                time_str = dt.strftime("%Y-%m-%d %H:%M")
-            else:
-                time_str = "Unknown"
-            item = f"[{time_str}] {label} ({conf}%)"
-            self.trip.list.addItem(item)
-        self.trip.lbl_totals.setText(
-            f"Total volume: {summary.total_volume:.2f}   Total weight: {summary.total_weight:.2f}"
-        )
+        self.trip._timeline_data = []
+        self.trip._summary = summary
         
-        self.trip.notes_list.clear()
-        self.trip._voice_notes_data = []
-        for note in summary.voice_notes:
-            ts = note.get("ts", 0)
-            if ts:
-                dt = datetime.datetime.fromtimestamp(ts)
-                time_str = dt.strftime("%Y-%m-%d %H:%M")
+        rocks_sorted = sorted(summary.rocks, key=lambda r: r.ts)
+        
+        combined = []
+        for r in summary.rocks:
+            combined.append({"type": "rock", "ts": r.ts, "data": r})
+            
+        for n in summary.voice_notes:
+            note_ts = n.get("ts", 0)
+            note_session = n.get("session_id")
+            explicit_rock_id = n.get("rock_id")
+            
+            owning_rock = None
+            if explicit_rock_id:
+                for r in summary.rocks:
+                    if r.rock_id == explicit_rock_id:
+                        owning_rock = r
+                        break
             else:
-                time_str = "Unknown"
-            cleaned = note.get("cleaned", note.get("transcript", ""))
-            display_text = cleaned[:100] + "..." if len(cleaned) > 100 else cleaned
-            item = f"[{time_str}] {display_text}"
-            self.trip.notes_list.addItem(item)
-            self.trip._voice_notes_data.append(note)
+                for r in reversed(rocks_sorted):
+                    if r.ts <= note_ts:
+                        owning_rock = r
+                        break
+                    
+            is_orphan = False
+            if not owning_rock:
+                is_orphan = True
+            elif explicit_rock_id is None and note_session != getattr(self, "session_start_time", 0) and owning_rock.ts < getattr(self, "session_start_time", 0):
+                is_orphan = True
+                
+            if is_orphan:
+                combined.append({"type": "voice", "ts": note_ts, "data": n})
+            
+        combined.sort(key=lambda x: x["ts"], reverse=True)
+        
+        from PySide6.QtWidgets import QListWidgetItem
+        
+        for item in combined:
+            ts = item["ts"]
+            dt = datetime.datetime.fromtimestamp(ts) if ts else None
+            time_str = dt.strftime("%Y-%m-%d %H:%M:%S") if dt else "Unknown"
+            
+            if item["type"] == "rock":
+                r = item["data"]
+                label = r.result.label
+                conf = int(r.result.confidence * 100)
+                display_text = f"🪨 [{time_str}] ROCK: {label.upper()} ({conf}%)"
+            else:
+                n = item["data"]
+                cleaned = n.get("cleaned", n.get("transcript", ""))
+                short_text = cleaned[:80] + "..." if len(cleaned) > 80 else cleaned
+                display_text = f"🎤 [{time_str}] NOTE: {short_text}"
+                
+            list_item = QListWidgetItem()
+            self.trip.list.addItem(list_item)
+            
+            widget = QWidget()
+            row_layout = QHBoxLayout(widget)
+            row_layout.setContentsMargins(5, 2, 5, 2)
+            
+            # --- FIX: Using a Button designed for native QMenus ---
+            dot_btn = QPushButton("⋮")
+            dot_btn.setFixedSize(30, 30)
+            # We hide the default dropdown arrow using `menu-indicator`
+            dot_btn.setStyleSheet("""
+                QPushButton { font-size: 24px; font-weight: bold; border: none; background: transparent; color: #344f41; }
+                QPushButton::menu-indicator { image: none; width: 0px; }
+            """)
+            
+            self._attach_menu_to_button(dot_btn, item)
+            
+            lbl = QLabel(display_text)
+            lbl.setStyleSheet("font-size: 16px;")
+            lbl.setAttribute(Qt.WA_TransparentForMouseEvents) 
+            
+            # Dots on the Left, Text on the Right
+            row_layout.addWidget(dot_btn)         
+            row_layout.addWidget(lbl, stretch=1)  
+            
+            list_item.setSizeHint(widget.sizeHint())
+            self.trip.list.setItemWidget(list_item, widget)
+            self.trip._timeline_data.append(item)
+
+        total_vol = f"{summary.total_volume:.2f}" if summary.total_volume else "0.00"
+        total_wt = f"{summary.total_weight:.2f}" if summary.total_weight else "0.00"
+        self.trip.lbl_totals.setText(f"Total volume: {total_vol} cm³   Total weight: {total_wt} kg")
+
+    def _attach_menu_to_button(self, button, item_dict):
+        from PySide6.QtWidgets import QMenu, QWidgetAction
+        
+        menu = QMenu(button)
+        menu.setStyleSheet("QMenu { background-color: #cbd2c5; border: 2px solid #344f41; }")
+        
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        if item_dict["type"] == "rock":
+            btn_current = QPushButton("Make current")
+            btn_current.setStyleSheet("""
+                QPushButton { font-size: 18px; color: #344f41; padding: 12px 20px; border: none; text-align: left; } 
+                QPushButton:hover { background-color: #95b7dc; }
+            """)
+            btn_current.clicked.connect(lambda checked=False, d=item_dict["data"], m=menu: [self.vm.make_rock_current(d), m.close()])
+            layout.addWidget(btn_current)
+            
+        # --- NEW: Assignment button for Voice Notes ---
+        if item_dict["type"] == "voice":
+            btn_assign = QPushButton("Add to classification")
+            btn_assign.setStyleSheet("""
+                QPushButton { font-size: 18px; color: #344f41; padding: 12px 20px; border: none; text-align: left; } 
+                QPushButton:hover { background-color: #95b7dc; }
+            """)
+            btn_assign.clicked.connect(lambda checked=False, i=item_dict, m=menu: [self._start_rock_assignment(i["data"].get("ts")), m.close()])
+            layout.addWidget(btn_assign)
+            
+        btn_delete = QPushButton("Delete")
+        btn_delete.setStyleSheet("""
+            QPushButton { font-size: 18px; color: #cc0000; padding: 12px 20px; border: none; text-align: left; font-weight: bold; } 
+            QPushButton:hover { background-color: #95b7dc; }
+        """)
+        btn_delete.clicked.connect(lambda checked=False, i=item_dict, m=menu: [self._delete_timeline_item(i), m.close()])
+        layout.addWidget(btn_delete)
+        
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(container)
+        menu.addAction(action)
+        button.setMenu(menu)
+    
+    def _delete_timeline_item(self, item_dict):
+        if item_dict["type"] == "rock":
+            self.vm.delete_rock_by_id(item_dict["data"].rock_id)
+        else:
+            self.vm.delete_voice_note_by_ts(item_dict["data"].get("ts"))
+
+    def _on_timeline_clicked(self, item) -> None:
+        index = self.trip.list.row(item)
+        if 0 <= index < len(self.trip._timeline_data):
+            item_dict = self.trip._timeline_data[index]
+            
+            # --- NEW: Intercept clicks if we are in assignment mode ---
+            if getattr(self, "_assigning_note_ts", None) is not None:
+                if item_dict["type"] == "rock":
+                    # They clicked a rock target! Link the note.
+                    self.vm.assign_note_to_rock(self._assigning_note_ts, item_dict["data"].rock_id)
+                
+                # Turn off the jiggle regardless of what they clicked
+                self._stop_rock_assignment()
+                return
+            # ----------------------------------------------------------
+            
+            if item_dict["type"] == "rock":
+                entry = item_dict["data"]
+                associated_notes = []
+                rocks_sorted = sorted(self.trip._summary.rocks, key=lambda r: r.ts)
+                
+                next_rock_ts = float('inf')
+                for r in rocks_sorted:
+                    if r.ts > entry.ts:
+                        next_rock_ts = r.ts
+                        break
+                        
+                for n in self.trip._summary.voice_notes:
+                    note_ts = n.get("ts", 0)
+                    explicit_rock_id = n.get("rock_id")
+                    
+                    if explicit_rock_id == entry.rock_id:
+                        associated_notes.append(n)
+                    elif explicit_rock_id is None:
+                        if entry.ts <= note_ts < next_rock_ts:
+                            if n.get("session_id") == entry.session_id:
+                                associated_notes.append(n)
+                                
+                associated_notes.sort(key=lambda x: x.get("ts", 0))
+                
+                self.rock_detail.set_entry(entry, associated_notes)
+                self.stack.setCurrentWidget(self.rock_detail)
+                
+            else:
+                note = item_dict["data"]
+                self.voice_note_detail.set_note(note)
+                self.stack.setCurrentWidget(self.voice_note_detail)
 
     def _on_error(self, message: str) -> None:
         QMessageBox.warning(self, "Error", "Something went wrong. Please press escape to return to home screen.")
     
     def _on_recording_status_changed(self, is_recording: bool):
-        pass
+        # pass
+    # Update the hover widget (as we did before)
+        self.camera_preview.voice_ctrl._update_ui_state(is_recording)
+        
+        if is_recording:
+            self.voice.btn_stop.setText("Stop")
+            self.inline_keyboard.hide()
+            self.voice.text.setReadOnly(True)
+        # If recording has stopped, explicitly clear the VoicePage text box
+        if not is_recording:
+            self.voice.btn_stop.setText("Edit")
+            self.voice.text.clear() 
+            self.voice.btn_save.setEnabled(False)
+            
 
-    def _on_voice_note_clicked(self, item) -> None:
-        index = self.trip.notes_list.row(item)
-        if 0 <= index < len(self.trip._voice_notes_data):
-            note = self.trip._voice_notes_data[index]
-            self.voice_note_detail.set_note(note)
-            self.stack.setCurrentWidget(self.voice_note_detail)
+class Keyboard(QDialog):
+    key_pressed = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumHeight(260)
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(2, 2, 2, 2)
+        main_layout.setSpacing(4)
+        
+        # 0 = lower, 1 = Single shift, 2 = CAPS LOCK
+        self.shift_state = 0
+        self.letter_btns = []
+        
+        rows = [
+            ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "⌫"],
+            ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+            ["A", "S", "D", "F", "G", "H", "J", "K", "L", "'"],
+            ["Z", "X", "C", "V", "B", "N", "M", ",", ".", "!", "?"]
+        ]
+        
+        for row in rows:
+            row_layout = QHBoxLayout()
+            row_layout.setSpacing(4)
+            for key in row:
+                btn = QPushButton(key)
+                btn.setMinimumHeight(45)
+                btn.setMinimumWidth(20)
+                btn.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #e0e0e0; color: black;")
+                
+                if key.isalpha() and len(key) == 1:
+                    self.letter_btns.append(btn)
+                    btn.clicked.connect(lambda checked=False, b=btn: self._on_letter_clicked(b.text()))
+                else:
+                    btn.clicked.connect(lambda checked=False, char=key: self.key_pressed.emit(char))
+                
+                row_layout.addWidget(btn)
+            main_layout.addLayout(row_layout)
+            
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setSpacing(4)
+        
+        self.btn_shift = QPushButton("⇧")
+        self.btn_shift.setMinimumHeight(45)
+        self.btn_shift.setMinimumWidth(40)
+        self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #c0c0c0; color: black;")
+        self.btn_shift.clicked.connect(self._on_shift_clicked)
+        bottom_layout.addWidget(self.btn_shift, stretch=1)
+        
+        self.shift_timer = QTimer(self)
+        self.shift_timer.setSingleShot(True)
+        
+        self.btn_space = QPushButton("Space")
+        self.btn_space.setMinimumHeight(45)
+        self.btn_space.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #e0e0e0; color: black;")
+        self.btn_space.clicked.connect(lambda checked=False: self.key_pressed.emit("Space"))
+        bottom_layout.addWidget(self.btn_space, stretch=3)
+        
+        # Arrow Keys
+        for arrow in ["←", "↑", "↓", "→"]:
+            btn = QPushButton(arrow)
+            btn.setMinimumHeight(45)
+            btn.setMinimumWidth(20)
+            btn.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #c0c0c0; color: black;")
+            btn.clicked.connect(lambda checked=False, char=arrow: self.key_pressed.emit(char))
+            bottom_layout.addWidget(btn)
+            
+        # The Close Button (keeping the name btn_close so our hiding logic still works!)
+        self.btn_close = QPushButton("Close")
+        self.btn_close.setMinimumHeight(45)
+        self.btn_close.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #8c4b4b; color: white;")
+        bottom_layout.addWidget(self.btn_close, stretch=1)
+        
+        main_layout.addLayout(bottom_layout)
+        
+        self._update_keyboard_case()
+        
+    def _on_letter_clicked(self, char):
+        self.key_pressed.emit(char)
+        # iPhone logic: After typing a single shifted letter, instantly revert to lowercase
+        if self.shift_state == 1:
+            self.shift_state = 0
+            self._update_keyboard_case()
+
+    def _on_shift_clicked(self):
+        if self.shift_timer.isActive():
+            # Second click happened within 300ms! Activate Caps Lock!
+            self.shift_timer.stop()
+            self.shift_state = 2
+        else:
+            self.shift_timer.start(300) # Start the 300ms window waiting for a double click
+            # Toggle normal shift
+            if self.shift_state == 0:
+                self.shift_state = 1
+            elif self.shift_state == 1:
+                self.shift_state = 0
+            elif self.shift_state == 2:
+                self.shift_state = 0
+                
+        self._update_keyboard_case()
+
+    def set_shift_state(self, state):
+        # Don't auto-override the user if they specifically turned on Caps Lock
+        if self.shift_state != 2:
+            self.shift_state = state
+            self._update_keyboard_case()
+
+    def _update_keyboard_case(self):
+        is_upper = (self.shift_state > 0)
+        
+        # Flip all the letters A-Z
+        for btn in self.letter_btns:
+            text = btn.text()
+            btn.setText(text.upper() if is_upper else text.lower())
+            
+        # Update Shift Button icon & colors
+        if self.shift_state == 0:
+            self.btn_shift.setText("⇧")
+            self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #c0c0c0; color: black;")
+        elif self.shift_state == 1:
+            self.btn_shift.setText("⬆")
+            self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #ffffff; color: black;")
+        elif self.shift_state == 2:
+            self.btn_shift.setText("⇪") # Caps lock icon
+            self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #4a90e2; color: white;")
+                
+
+
+

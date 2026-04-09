@@ -1,0 +1,23 @@
+2026-04-08 23:35:07 UTC
+macOS-14.5-arm64-arm-64bit
+Ren'Py 8.5.2.26010301
+
+Early init took 1151 ms
+Traceback (most recent call last):
+  File "lib/py3-mac-universal/../../renpy.py", line 304, in <module>
+    main()
+  File "lib/py3-mac-universal/../../renpy.py", line 300, in main
+    renpy.bootstrap.bootstrap(renpy_base)
+  File "renpy/bootstrap.py", line 401, in bootstrap
+    renpy.main.main()
+  File "renpy/main.py", line 394, in main
+    renpy.game.script = renpy.script.Script()
+  File "renpy/script.py", line 169, in __init__
+    self.scan_script_files()
+  File "renpy/script.py", line 338, in scan_script_files
+    self.classify_script_files(
+        renpy.loader.listdirfiles(common=False, game=True), self.script_files, self.module_files
+    )
+  File "renpy/script.py", line 290, in classify_script_files
+    elif fn.endswith(".rpy"):
+KeyboardInterrupt

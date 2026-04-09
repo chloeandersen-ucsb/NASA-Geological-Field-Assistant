@@ -42,8 +42,8 @@ endif
 run:
 	@echo "Platform: $(JETSON_DETECT)"
 	@echo "Data directory: $(SAGE_STORE_DIR)"
-	@cd $(LED_DISPLAY_DIR) && \
-		export SAGE_STORE_DIR=$(SAGE_STORE_DIR) && \
+	@cd "$(LED_DISPLAY_DIR)" && \
+		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
 		export JETSON_PLATFORM=$(IS_JETSON) && \
 		$(PYTHON) main.py
 
@@ -51,8 +51,8 @@ run-mock:
 	@echo "Platform: $(JETSON_DETECT)"
 	@echo "Data directory: $(SAGE_STORE_DIR)"
 	@echo "Mode: Mock services enabled"
-	@cd $(LED_DISPLAY_DIR) && \
-		export SAGE_STORE_DIR=$(SAGE_STORE_DIR) && \
+	@cd "$(LED_DISPLAY_DIR)" && \
+		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
 		export SAGE_USE_MOCKS=1 && \
 		export JETSON_PLATFORM=$(IS_JETSON) && \
 		$(PYTHON) main.py 2>&1
@@ -61,8 +61,8 @@ run-mock-ml:
 	@echo "Platform: $(JETSON_DETECT)"
 	@echo "Data directory: $(SAGE_STORE_DIR)"
 	@echo "Mode: Mock ML, Real voiceNotes"
-	@cd $(LED_DISPLAY_DIR) && \
-		export SAGE_STORE_DIR=$(SAGE_STORE_DIR) && \
+	@cd "$(LED_DISPLAY_DIR)" && \
+		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
 		export SAGE_USE_MOCK_ML=1 && \
 		export JETSON_PLATFORM=$(IS_JETSON) && \
 		$(PYTHON) main.py

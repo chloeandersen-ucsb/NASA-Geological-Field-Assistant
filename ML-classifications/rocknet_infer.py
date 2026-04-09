@@ -1,6 +1,7 @@
 import os
 import json
 import argparse
+import sys
 
 import torch
 import torch.nn as nn
@@ -132,11 +133,11 @@ CLASS_NAMES = [
 
 def load_model(weights_path: str, device: torch.device, temperature: float = 1.0):
     num_classes = len(CLASS_NAMES)
-    if num_classes == 0:
-        raise ValueError("CLASS_NAMES is empty. Please fill in your class labels.")
-
     model = RockNet(num_classes=num_classes).to(device)
+    
+    # This map_location is the secret sauce for moving Jetson weights to Mac
     state_dict = torch.load(weights_path, map_location=device)
+    
     model.load_state_dict(state_dict)
     model.eval()
     model.temperature = temperature
@@ -189,7 +190,8 @@ def write_json(result_dict, json_path: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="RockNet inference on Jetson Orin")
+    #parser = argparse.ArgumentParser(description="RockNet inference on Jetson Orin")
+    parser = argparse.ArgumentParser(description="RockNet inference (Cross-Platform)")
     parser.add_argument(
         "--weights",
         type=str,
@@ -217,7 +219,23 @@ def main():
 
     args = parser.parse_args()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # --- NEW IF-ELSE HARDWARE DETECTION ---
+    import connector 
+    
+    if connector.is_jetson():
+        # Force CUDA for the Orin NX
+        device = torch.device("cuda")
+        print("[ML] Running on Jetson: Using CUDA", file=sys.stderr)
+    else:
+        # Check for Apple Silicon (MPS) or default to CPU
+        if torch.backends.mps.is_available():
+            device = torch.device("mps")
+            print("[ML] Running on Mac: Using Apple Silicon (MPS)", file=sys.stderr)
+        else:
+            device = torch.device("cpu")
+            print("[ML] Running on Mac: Using CPU fallback", file=sys.stderr)
+    # ---------------------------------------
 
     # Load model
     model = load_model(args.weights, device=device, temperature=args.temperature)
