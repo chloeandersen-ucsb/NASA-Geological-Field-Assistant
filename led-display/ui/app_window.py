@@ -1087,7 +1087,7 @@ class AppWindow(QMainWindow):
             AppStateType.VOICE_TO_TEXT:         self.voice,
             AppStateType.TRIP_LOAD:             self.trip,
         }
-if state in mapping:
+        if state in mapping:
             # Edge case: If we are in camera preview, don't switch screens just to show VTT
             if state == AppStateType.VOICE_TO_TEXT and self.stack.currentWidget() == self.camera_preview:
                 pass
