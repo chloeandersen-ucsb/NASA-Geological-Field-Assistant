@@ -368,21 +368,43 @@ class TranscriptionService(ProcessService):
         # self.proc.stateChanged.connect(self._on_state_changed)
         
     def boot_model(self) -> None:
-        """Starts the Python script and blocks until 'Model loaded' is detected"""
+        """Starts the Python script and blocks until 'Model loaded' is detected.
+        Raises RuntimeError if the process exits before the model is ready."""
         if self.proc.state() != QProcess.NotRunning:
             return
-        
+
         from PySide6.QtCore import QEventLoop
         loop = QEventLoop()
-        self.ready.connect(loop.quit)
-        
+        boot_failed = [False]
+
+        def _on_ready():
+            loop.quit()
+
+        def _on_early_exit(exit_code, exit_status):
+            boot_failed[0] = True
+            print(f"[VOICE-TO-TEXT] Process exited unexpectedly during boot (code={exit_code})", file=sys.stderr)
+            loop.quit()
+
+        self.ready.connect(_on_ready)
+        self.proc.finished.connect(_on_early_exit)
+
         cmd = [self.python, str(self.script)]
         print(f"[VOICE-TO-TEXT] Booting model: {' '.join(cmd)}", file=sys.stderr)
-        
+
         self.proc.start(cmd[0], cmd[1:])
-        
+
         loop.exec()
-        print("VOICE-TO-TEXT] Boot complete. Model is in memory.", file=sys.stderr)
+
+        self.ready.disconnect(_on_ready)
+        self.proc.finished.disconnect(_on_early_exit)
+
+        if boot_failed[0]:
+            raise RuntimeError(
+                "Transcription process exited before model was ready. "
+                "Check that newest_model.nemo exists and all dependencies are installed."
+            )
+
+        print("[VOICE-TO-TEXT] Boot complete. Model is in memory.", file=sys.stderr)
 
     def _on_state_changed(self, state):
         if state == QProcess.Running:

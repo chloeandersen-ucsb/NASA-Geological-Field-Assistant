@@ -842,23 +842,6 @@ class ViewModel(QObject):
 
     def _on_transcription_failed(self, message: str) -> None:
         print(f"[VIEWMODEL] Transcription error (non-fatal): {message}", file=sys.stderr)
- 
-        print(f"[VIEWMODEL] Received transcription completed signal", file=sys.stderr)
-        
-        if self.state == AppStateType.HOME:
-            print("[VIEWMODEL] Ignored late text because session is closed.", file=sys.stderr)
-            return
-            
-        print(f"[VIEWMODEL] Final text received: '{final_text}'", file=sys.stderr)
-        print(f"[VIEWMODEL] Final text length: {len(final_text)}", file=sys.stderr)
-        if final_text.strip():
-            self.transcription_text = final_text
-            print(f"[VIEWMODEL] Setting transcription_text and emitting signal", file=sys.stderr)
-            self.transcription_changed.emit(self.transcription_text)
-            if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
-                self._set_state(AppStateType.VOICE_TO_TEXT)
-        else:
-            print("[VIEWMODEL] Final text is empty, not updating", file=sys.stderr)
 
     def _publish_trip(self) -> None:
         rocks = self.store.list_rocks()
