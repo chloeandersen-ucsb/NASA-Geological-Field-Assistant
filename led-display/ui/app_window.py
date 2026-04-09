@@ -17,7 +17,7 @@ from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPain
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QStackedWidget, QMessageBox,
     QWidget, QVBoxLayout, QLabel, QPushButton,
-    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QDialog
+    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout, QDialog
 )
 
 import connector
@@ -1102,8 +1102,8 @@ class AppWindow(QMainWindow):
                 self.vm.transcription_text = ""  # Wipes ghost text from memory!
                 
                 # Reset the little camera-preview voice button
-                self.camera_preview.voice_ctrl.trigger_btn.setText("🎤")
-                self.camera_preview.voice_ctrl.trigger_btn.setStyleSheet(
+                self.camera_preview.mic_ctrl.trigger_btn.setText("🎤")
+                self.camera_preview.mic_ctrl.trigger_btn.setStyleSheet(
                     "background-color: #344f41; color: white; border-radius: 25px; font-size: 20px;"
                 )
 
@@ -1206,70 +1206,6 @@ class AppWindow(QMainWindow):
         self.voice.text.setTextCursor(cursor)
 
         self.voice.btn_save.setEnabled(bool(text.strip()))
-
-    # def _on_transcription_ready(self):
-    #     self.state_changed.emit(AppStateType.VOICE_TO_TEXT)
-
-    
-        self.trip.list.clear()
-        self.trip._timeline_data = []
-        self.trip._summary = summary
-        
-        rocks_sorted = sorted(summary.rocks, key=lambda r: r.ts)
-        
-        # 1. Combine rocks and ONLY orphan voice notes into one unified list
-        combined = []
-        for r in summary.rocks:
-            combined.append({"type": "rock", "ts": r.ts, "data": r})
-            
-        for n in summary.voice_notes:
-            note_ts = n.get("ts", 0)
-            note_session = n.get("session_id")
-            
-            # Find the most recent rock BEFORE this note
-            owning_rock = None
-            for r in reversed(rocks_sorted):
-                if r.ts <= note_ts:
-                    owning_rock = r
-                    break
-                    
-            is_orphan = False
-            if not owning_rock:
-                # Before any rocks were ever taken
-                is_orphan = True
-            elif note_session != owning_rock.session_id:
-                # STRICT BOUNDARY: If they don't share the exact same launch ID, it's an orphan!
-                is_orphan = True
-                
-            if is_orphan:
-                combined.append({"type": "voice", "ts": note_ts, "data": n})
-            
-        # 2. Sort REVERSE chronologically (Newest at the top)
-        combined.sort(key=lambda x: x["ts"], reverse=True)
-        
-        # 3. Populate the UI List
-        for item in combined:
-            ts = item["ts"]
-            dt = datetime.datetime.fromtimestamp(ts) if ts else None
-            time_str = dt.strftime("%Y-%m-%d %H:%M:%S") if dt else "Unknown"
-            
-            if item["type"] == "rock":
-                r = item["data"]
-                label = r.result.label
-                conf = int(r.result.confidence * 100)
-                display_text = f"🪨 [{time_str}] ROCK: {label.upper()} ({conf}%)"
-            else:
-                n = item["data"]
-                cleaned = n.get("cleaned", n.get("transcript", ""))
-                short_text = cleaned[:80] + "..." if len(cleaned) > 80 else cleaned
-                display_text = f"🎤 [{time_str}] NOTE: {short_text}"
-                
-            self.trip.list.addItem(display_text)
-            self.trip._timeline_data.append(item)
-
-        total_vol = f"{summary.total_volume:.2f}" if summary.total_volume else "0.00"
-        total_wt = f"{summary.total_weight:.2f}" if summary.total_weight else "0.00"
-        self.trip.lbl_totals.setText(f"Total volume: {total_vol} cm³   Total weight: {total_wt} kg")
 
     def _on_trip(self, summary: TripSummary) -> None:
         self._stop_rock_assignment()
@@ -1466,7 +1402,7 @@ class AppWindow(QMainWindow):
     def _on_recording_status_changed(self, is_recording: bool):
         # pass
     # Update the hover widget (as we did before)
-        self.camera_preview.voice_ctrl._update_ui_state(is_recording)
+        self.camera_preview.mic_ctrl._update_ui_state(is_recording)
         
         if is_recording:
             self.voice.btn_stop.setText("Stop")

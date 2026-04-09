@@ -13,14 +13,8 @@ from ui.app_window import AppWindow
 
 
 def main() -> int:
-    try:
-        app = QApplication(sys.argv)
-    except Exception as e:
-        print(f"ERROR: Failed to create QApplication: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        return 1
-    
+    # QT_QPA_PLATFORM must be set BEFORE QApplication is constructed,
+    # because Qt reads the platform plugin at construction time.
     try:
         is_jetson = connector.is_jetson()
         if is_jetson:
@@ -29,6 +23,14 @@ def main() -> int:
                 os.environ.setdefault("QT_QPA_PLATFORM", jetson_config["display_backend"])
     except Exception as e:
         print(f"ERROR: Failed during Jetson initialization: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return 1
+
+    try:
+        app = QApplication(sys.argv)
+    except Exception as e:
+        print(f"ERROR: Failed to create QApplication: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc(file=sys.stderr)
         return 1

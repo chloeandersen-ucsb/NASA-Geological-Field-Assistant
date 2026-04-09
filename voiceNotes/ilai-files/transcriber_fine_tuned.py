@@ -116,7 +116,12 @@ def multimodal_correction(transcript, visual_keywords):
 # PART 2: DEVICE & MODEL SETUP (MAC-SPECIFIC RESTORE)
 # ------------------------------------------------------------------
 # We MUST use map_location here or the Jetson weights will crash the Mac
-device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+if torch.cuda.is_available():
+    device = torch.device("cuda:0")
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")
+else:
+    device = torch.device("cpu")
 
 # Mock distributed to prevent the "Redirects" crash on MacOS
 import types

@@ -133,7 +133,7 @@ class Store:
                 ))
         return rocks
 
-    def save_voice_note(self, transcript: str, cleaned: Optional[str] = None) -> None:
+    def save_voice_note(self, transcript: str, cleaned: Optional[str] = None, rock_id: Optional[str] = None) -> None:
         ts = time.time()
         now = datetime.datetime.fromtimestamp(ts)
         date_dir = os.path.join(self.voice_notes_data_dir, now.strftime("%Y%m%d"))
@@ -144,7 +144,7 @@ class Store:
             "type": "voice",
             "ts": time.time(),
             "session_id": getattr(self, "session_id", None),
-            "rock_id": rock_id, # Explicit hard-link to a rock
+            "rock_id": rock_id,
             "transcript": transcript,
             "cleaned": cleaned or transcript,
         }
