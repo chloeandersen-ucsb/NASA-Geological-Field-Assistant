@@ -446,9 +446,15 @@ class VoicePage(QWidget):
                 background-color: #f5f6f4;
             }
         """)
-        for b in [self.btn_start, self.btn_stop, self.btn_redo, self.btn_save, self.btn_delete, self.btn_reset]:
+        
+        self.btn_cancel = QPushButton("Cancel")
+        self.btn_cancel.setStyleSheet("""
+            QPushButton { background-color: #313940; font-size: 22px; color: white; }
+            QPushButton:hover { background-color: #f5f6f4; color: #344f41; }
+        """)
+        
+        for b in [self.btn_start, self.btn_stop, self.btn_redo, self.btn_save, self.btn_delete, self.btn_reset, self.btn_cancel]:
             b.setMinimumHeight(55)
-            # b.setStyleSheet("font-size: 20px;")
             row.addWidget(b)
 
         layout.addLayout(row)
@@ -493,16 +499,8 @@ class TripLoadPage(QWidget):
         
         self.list = QListWidget()
         self.list.setStyleSheet("font-size: 16px;")
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(self.list, stretch=1)
-
-        
-        notes_label = QLabel("Voice Notes:")
-        notes_label.setStyleSheet("font-size: 14px; font-weight: 600;")
-        layout.addWidget(notes_label)
-        
-        self.notes_list = QListWidget()
-        self.notes_list.setStyleSheet("font-size: 14px;")
-        layout.addWidget(self.notes_list, stretch=1)
 
         self.btn_back = big_button("Back")
         layout.addWidget(self.btn_back)
@@ -823,6 +821,35 @@ class AppWindow(QMainWindow):
 
     def _on_reset_context_clicked(self) -> None:
         self.vm.reset_voice_context()
+        self.voice.btn_reset.hide()
+        
+    def _update_voice_buttons(self, mode: str) -> None:
+        """Dynamically hides/shows Voice to Text buttons based on the current phase."""
+        v = self.voice
+        
+        # 1. Hide everything first
+        for b in [v.btn_start, v.btn_stop, v.btn_redo, v.btn_save, v.btn_delete, v.btn_reset, v.btn_cancel]:
+            b.hide()
+            
+        # 2. Show only what belongs in the current phase
+        if mode == "initial":
+            v.btn_start.show()
+            v.btn_cancel.show()
+            # Only show reset if they are currently latched to a specific rock context
+            active_rock = getattr(self.vm, "active_rock_id", None)
+            if active_rock and active_rock != "ORPHAN":
+                v.btn_reset.show()
+                
+        elif mode == "recording":
+            v.btn_stop.setText("Stop")
+            v.btn_stop.show()
+            
+        elif mode == "review":
+            v.btn_stop.setText("Edit")
+            v.btn_stop.show()
+            v.btn_redo.show()
+            v.btn_save.show()
+            v.btn_delete.show()
 
     def _start_rock_assignment(self, note_ts):
         """Kicks off the jiggle animation and waits for a rock click."""
@@ -1006,6 +1033,7 @@ class AppWindow(QMainWindow):
         self.voice.btn_save.clicked.connect(self.vm.save_transcription)
         self.voice.btn_delete.clicked.connect(self.vm.delete_transcription)
         self.voice.btn_reset.clicked.connect(self._on_reset_context_clicked)
+        self.voice.btn_cancel.clicked.connect(self.vm.go_home)
         
 
         self.trip.btn_back.clicked.connect(self.vm.go_home)
@@ -1094,10 +1122,9 @@ class AppWindow(QMainWindow):
             else:
                 self.stack.setCurrentWidget(mapping[state])
 
-        # 2. Handle state-specific setup and cleanup
         if state == AppStateType.HOME:
-            # If we return Home, and the mic is off, aggressively factory-reset the Voice module
-            if not getattr(self.vm.transcriber, 'is_recording', False):
+            # FIX: Check vtt_active instead of the background process state!
+            if not getattr(self.vm, 'vtt_active', False):
                 self.voice.text.clear()
                 self.vm.transcription_text = ""  # Wipes ghost text from memory!
                 
@@ -1117,16 +1144,21 @@ class AppWindow(QMainWindow):
             self.capture_review.set_images(top_path, side_path)
 
         elif state == AppStateType.VOICE_TO_TEXT:
-            # From ilai-macbook branch: Reset UI elements for safety
             self.inline_keyboard.hide()       
             self.inline_keyboard.set_shift_state(0)
-            self.voice.btn_stop.setText("Stop")      
             self.voice.text.setReadOnly(True)
             
-            # From HEAD: Load text directly from VM using a local variable
             current_text = self.vm.transcription_text
             self.voice.text.setPlainText(current_text)
             self.voice.btn_save.setEnabled(bool(current_text.strip()))
+            
+            # --- NEW: Trigger Dynamic Layout ---
+            if getattr(self.vm, 'vtt_active', False):
+                self._update_voice_buttons("recording")
+            elif current_text.strip():
+                self._update_voice_buttons("review")
+            else:
+                self._update_voice_buttons("initial")
             
     def _on_classification(self, result: ClassificationResult) -> None:
         has_side = result.side_image_path and os.path.exists(result.side_image_path)
@@ -1258,12 +1290,15 @@ class AppWindow(QMainWindow):
                 r = item["data"]
                 label = r.result.label
                 conf = int(r.result.confidence * 100)
-                display_text = f"🪨 [{time_str}] ROCK: {label.upper()} ({conf}%)"
+                # Shrunk timestamp, grayed out slightly, removed "ROCK:" and bolded the label
+                display_text = f"🪨 <span style='font-size: 13px; color: #555;'>[{time_str}]</span>&nbsp;&nbsp;<b>{label.upper()}</b> ({conf}%)"
             else:
                 n = item["data"]
                 cleaned = n.get("cleaned", n.get("transcript", ""))
-                short_text = cleaned[:80] + "..." if len(cleaned) > 80 else cleaned
-                display_text = f"🎤 [{time_str}] NOTE: {short_text}"
+                # Cut the preview length slightly shorter to prevent overflow
+                short_text = cleaned[:60] + "..." if len(cleaned) > 60 else cleaned
+                # Shrunk timestamp, grayed out slightly, removed "NOTE:"
+                display_text = f"🎤 <span style='font-size: 13px; color: #555;'>[{time_str}]</span>&nbsp;&nbsp;{short_text}"
                 
             list_item = QListWidgetItem()
             self.trip.list.addItem(list_item)
@@ -1343,10 +1378,90 @@ class AppWindow(QMainWindow):
         button.setMenu(menu)
     
     def _delete_timeline_item(self, item_dict):
-        if item_dict["type"] == "rock":
-            self.vm.delete_rock_by_id(item_dict["data"].rock_id)
-        else:
-            self.vm.delete_voice_note_by_ts(item_dict["data"].get("ts"))
+        if item_dict["type"] == "voice":
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Delete Voice Note")
+            msg_box.setText("Are you sure? Clicking CONFIRM will delete this data permanently.")
+            msg_box.setStyleSheet("QLabel { color: #344f41; font-size: 18px; font-weight: normal; } QMessageBox { background-color: #cbd2c5; }")
+            
+            btn_cancel = msg_box.addButton("CANCEL", QMessageBox.RejectRole)
+            btn_cancel.setStyleSheet("background-color: #95b7dc; color: #385573; font-weight: bold; padding: 8px;")
+            
+            btn_confirm = msg_box.addButton("CONFIRM", QMessageBox.AcceptRole)
+            btn_confirm.setStyleSheet("background-color: #cc0000; color: white; font-weight: bold; padding: 8px;")
+            
+            msg_box.exec()
+            
+            if msg_box.clickedButton() == btn_confirm:
+                self.vm.delete_voice_note_by_ts(item_dict["data"].get("ts"))
+                
+        elif item_dict["type"] == "rock":
+            # --- NEW: Custom Dialog for Vertical Stacking ---
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Delete Classification")
+            dialog.setStyleSheet("QDialog { background-color: #cbd2c5; }")
+            layout = QVBoxLayout(dialog)
+            
+            msg = QLabel("Are you sure? How would you like to delete this rock?")
+            msg.setStyleSheet("color: #344f41; font-size: 18px; font-weight: normal;")
+            msg.setWordWrap(True)
+            layout.addWidget(msg)
+            layout.addSpacing(10)
+            
+            btn_both = QPushButton("DELETE ROCK && ALL NOTES")
+            btn_both.setStyleSheet("background-color: #7e1f23; color: white; font-weight: bold; padding: 15px; font-size: 16px; border-radius: 6px;")
+            
+            btn_only = QPushButton("DELETE ROCK ONLY")
+            btn_only.setStyleSheet("background-color: #cc0000; color: white; font-weight: bold; padding: 15px; font-size: 16px; border-radius: 6px;")
+            
+            btn_cancel = QPushButton("CANCEL")
+            btn_cancel.setStyleSheet("background-color: #95b7dc; color: #385573; font-weight: bold; padding: 15px; font-size: 16px; border-radius: 6px;")
+            
+            layout.addWidget(btn_both)
+            layout.addWidget(btn_only)
+            layout.addWidget(btn_cancel)
+            
+            # Helper function to capture the choice and close the dialog
+            choice = [None]
+            def on_choice(c):
+                choice[0] = c
+                dialog.accept()
+                
+            btn_both.clicked.connect(lambda: on_choice("both"))
+            btn_only.clicked.connect(lambda: on_choice("only"))
+            btn_cancel.clicked.connect(dialog.reject)
+            
+            dialog.exec()
+            
+            if choice[0] == "only":
+                self.vm.delete_rock_by_id(item_dict["data"].rock_id)
+                
+            elif choice[0] == "both":
+                entry = item_dict["data"]
+                associated_ts = []
+                rocks_sorted = sorted(self.trip._summary.rocks, key=lambda r: r.ts)
+                
+                next_rock_ts = float('inf')
+                for r in rocks_sorted:
+                    if r.ts > entry.ts:
+                        next_rock_ts = r.ts
+                        break
+                        
+                for n in self.trip._summary.voice_notes:
+                    note_ts = n.get("ts", 0)
+                    explicit_rock_id = n.get("rock_id")
+                    
+                    if explicit_rock_id == entry.rock_id:
+                        associated_ts.append(note_ts)
+                    elif explicit_rock_id is None:
+                        if entry.ts <= note_ts < next_rock_ts:
+                            if n.get("session_id") == entry.session_id:
+                                associated_ts.append(note_ts)
+                                
+                for ts in associated_ts:
+                    self.vm.store.delete_voice_note(ts)
+                    
+                self.vm.delete_rock_by_id(entry.rock_id)
 
     def _on_timeline_clicked(self, item) -> None:
         index = self.trip.list.row(item)
@@ -1400,19 +1515,23 @@ class AppWindow(QMainWindow):
         QMessageBox.warning(self, "Error", "Something went wrong. Please press escape to return to home screen.")
     
     def _on_recording_status_changed(self, is_recording: bool):
-        # pass
-    # Update the hover widget (as we did before)
         self.camera_preview.mic_ctrl._update_ui_state(is_recording)
         
         if is_recording:
             self.voice.btn_stop.setText("Stop")
             self.inline_keyboard.hide()
             self.voice.text.setReadOnly(True)
-        # If recording has stopped, explicitly clear the VoicePage text box
-        if not is_recording:
+            
+            # If we are actually looking at the voice page, update the layout
+            if self.stack.currentWidget() == self.voice:
+                self._update_voice_buttons("recording")
+        else:
             self.voice.btn_stop.setText("Edit")
-            self.voice.text.clear() 
             self.voice.btn_save.setEnabled(False)
+            
+            # If we are actually looking at the voice page, update the layout
+            if self.stack.currentWidget() == self.voice:
+                self._update_voice_buttons("review")
             
 
 class Keyboard(QDialog):

@@ -68,25 +68,36 @@ class Store:
 
     def update_voice_note_rock_id(self, ts: float, rock_id: str) -> None:
         """Updates an existing voice note to link it to a specific rock."""
-        if not os.path.exists(self.voice_path): return
-        lines = []
-        with open(self.voice_path, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.strip():
-                    rec = json.loads(line)
+        if not os.path.isdir(self.voice_notes_data_dir): return
+        for root, _dirs, files in os.walk(self.voice_notes_data_dir, topdown=True):
+            for f in files:
+                if not f.endswith(".json"): continue
+                path = os.path.join(root, f)
+                try:
+                    with open(path, "r", encoding="utf-8") as fp:
+                        rec = json.load(fp)
+                    # Find the exact file matching this timestamp
                     if rec.get("ts") == ts:
                         rec["rock_id"] = rock_id
-                    lines.append(rec)
-        with open(self.voice_path, "w", encoding="utf-8") as f:
-            for rec in lines:
-                f.write(json.dumps(rec) + "\n")
+                        with open(path, "w", encoding="utf-8") as fp:
+                            json.dump(rec, fp, ensure_ascii=False)
+                        return # Done!
+                except (json.JSONDecodeError, OSError):
+                    continue
     
     def delete_all_data(self) -> None:
         """Empties both the rocks and voice notes database files."""
         if os.path.exists(self.rocks_path):
             open(self.rocks_path, 'w').close()
-        if os.path.exists(self.voice_path):
-            open(self.voice_path, 'w').close()
+            
+        if os.path.isdir(self.voice_notes_data_dir):
+            import shutil
+            for item in os.listdir(self.voice_notes_data_dir):
+                item_path = os.path.join(self.voice_notes_data_dir, item)
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                else:
+                    os.remove(item_path)
 
     def save_rock(self, result: ClassificationResult) -> RockEntry:
         entry = RockEntry(
@@ -165,17 +176,20 @@ class Store:
                 f.write(json.dumps(rec) + "\n")
 
     def delete_voice_note(self, ts: float) -> None:
-        if not os.path.exists(self.voice_path): return
-        lines = []
-        with open(self.voice_path, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.strip():
-                    rec = json.loads(line)
-                    if rec.get("ts") != ts:
-                        lines.append(rec)
-        with open(self.voice_path, "w", encoding="utf-8") as f:
-            for rec in lines:
-                f.write(json.dumps(rec) + "\n")
+        if not os.path.isdir(self.voice_notes_data_dir): return
+        for root, _dirs, files in os.walk(self.voice_notes_data_dir, topdown=True):
+            for f in files:
+                if not f.endswith(".json"): continue
+                path = os.path.join(root, f)
+                try:
+                    with open(path, "r", encoding="utf-8") as fp:
+                        rec = json.load(fp)
+                    # Find the exact file matching this timestamp and delete it
+                    if rec.get("ts") == ts:
+                        os.remove(path)
+                        return # Done!
+                except (json.JSONDecodeError, OSError):
+                    continue
 
     def update_rock_volume(self, rock_id: str, volume: Optional[float], weight: Optional[str]) -> None:
         if not os.path.exists(self.rocks_path):
