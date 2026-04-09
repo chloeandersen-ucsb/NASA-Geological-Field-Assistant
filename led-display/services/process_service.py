@@ -338,7 +338,7 @@ class TranscriptionService(ProcessService):
             return True
         if line.startswith("Searching for ") or line.startswith("Warning: "):
             return True
-        if line.startswith("Loading ") or "Model loaded" in line:
+        if line.startswith("Loading ") or "model loaded" in line.lower():
             return True
         if "Stopping stream" in line or "Processing full audio" in line:
             return True
@@ -485,7 +485,7 @@ class TranscriptionService(ProcessService):
         
         for raw_line in data.splitlines():
             line = raw_line.strip()
-            if "Model loaded successfully!" in line:
+            if "model loaded successfully!" in line.lower():
                 print("[VOICE-TO-TEXT] Model ready detected", file=sys.stderr)
                 self.ready.emit()
                 continue
