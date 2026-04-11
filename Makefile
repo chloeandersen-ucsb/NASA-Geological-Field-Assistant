@@ -1,12 +1,13 @@
 .PHONY: help setup run run-mock run-mock-ml clean check
 
 # Project configuration
-PYTHON := python3
-PROJECT_ROOT := $(shell pwd)
+PROJECT_ROOT := $(CURDIR)
 LED_DISPLAY_DIR := $(PROJECT_ROOT)/led-display
+VENV_PYTHON := $(firstword $(wildcard $(PROJECT_ROOT)/.venv/Scripts/python.exe) $(wildcard $(PROJECT_ROOT)/.venv/bin/python))
+PYTHON ?= $(if $(VENV_PYTHON),$(VENV_PYTHON),python)
 
 # Detect platform
-JETSON_DETECT := $(shell test -f /etc/nv_tegra_release && echo "jetson" || echo "other")
+JETSON_DETECT := $(if $(wildcard /etc/nv_tegra_release),jetson,other)
 IS_JETSON := $(if $(filter jetson,$(JETSON_DETECT)),1,0)
 
 # Data directory configuration
@@ -42,30 +43,19 @@ endif
 run:
 	@echo "Platform: $(JETSON_DETECT)"
 	@echo "Data directory: $(SAGE_STORE_DIR)"
-	@cd "$(LED_DISPLAY_DIR)" && \
-		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
-		export JETSON_PLATFORM=$(IS_JETSON) && \
-		$(PYTHON) main.py
+	@$(PYTHON) -c "import os, subprocess, sys; env=os.environ.copy(); env['SAGE_STORE_DIR']=r'$(SAGE_STORE_DIR)'; env['JETSON_PLATFORM']='$(IS_JETSON)'; subprocess.run([sys.executable, r'$(LED_DISPLAY_DIR)/main.py'], cwd=r'$(LED_DISPLAY_DIR)', env=env, check=True)"
 
 run-mock:
 	@echo "Platform: $(JETSON_DETECT)"
 	@echo "Data directory: $(SAGE_STORE_DIR)"
 	@echo "Mode: Mock services enabled"
-	@cd "$(LED_DISPLAY_DIR)" && \
-		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
-		export SAGE_USE_MOCKS=1 && \
-		export JETSON_PLATFORM=$(IS_JETSON) && \
-		$(PYTHON) main.py 2>&1
+	@$(PYTHON) -c "import os, subprocess, sys; env=os.environ.copy(); env['SAGE_STORE_DIR']=r'$(SAGE_STORE_DIR)'; env['SAGE_USE_MOCKS']='1'; env['JETSON_PLATFORM']='$(IS_JETSON)'; subprocess.run([sys.executable, r'$(LED_DISPLAY_DIR)/main.py'], cwd=r'$(LED_DISPLAY_DIR)', env=env, check=True)"
 
 run-mock-ml:
 	@echo "Platform: $(JETSON_DETECT)"
 	@echo "Data directory: $(SAGE_STORE_DIR)"
 	@echo "Mode: Mock ML, Real voiceNotes"
-	@cd "$(LED_DISPLAY_DIR)" && \
-		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
-		export SAGE_USE_MOCK_ML=1 && \
-		export JETSON_PLATFORM=$(IS_JETSON) && \
-		$(PYTHON) main.py
+	@$(PYTHON) -c "import os, subprocess, sys; env=os.environ.copy(); env['SAGE_STORE_DIR']=r'$(SAGE_STORE_DIR)'; env['SAGE_USE_MOCK_ML']='1'; env['JETSON_PLATFORM']='$(IS_JETSON)'; subprocess.run([sys.executable, r'$(LED_DISPLAY_DIR)/main.py'], cwd=r'$(LED_DISPLAY_DIR)', env=env, check=True)"
 
 check:
 	@echo "Checking SAGE project configuration..."

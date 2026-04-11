@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -270,4 +271,5 @@ def ensure_data_dir() -> Path:
 
 
 def get_python_executable() -> str:
-    return os.environ.get("SAGE_PYTHON", "python3")
+    # Prefer explicit override, then the running interpreter (venv-safe), then a generic fallback.
+    return os.environ.get("SAGE_PYTHON") or sys.executable or "python"

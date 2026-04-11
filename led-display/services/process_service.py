@@ -349,8 +349,11 @@ class TranscriptionService(ProcessService):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.proc.readyReadStandardOutput.connect(self._on_stdout)
-        
-        if os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes"):
+
+        self._is_mock = os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes")
+        self._boot_ready_emitted = False
+
+        if self._is_mock:
             self.python = connector.get_python_executable()
             self.script = connector.get_mock_voice_to_text_script_path()
         else:
@@ -373,35 +376,61 @@ class TranscriptionService(ProcessService):
         if self.proc.state() != QProcess.NotRunning:
             return
 
-        from PySide6.QtCore import QEventLoop
+        from PySide6.QtCore import QEventLoop, QTimer
         loop = QEventLoop()
         boot_failed = [False]
+        boot_reason = ["Unknown startup failure"]
 
         def _on_ready():
             loop.quit()
 
         def _on_early_exit(exit_code, exit_status):
             boot_failed[0] = True
+            boot_reason[0] = f"Process exited during boot (code={exit_code})"
             print(f"[VOICE-TO-TEXT] Process exited unexpectedly during boot (code={exit_code})", file=sys.stderr)
+            loop.quit()
+
+        def _on_process_error(err):
+            boot_failed[0] = True
+            boot_reason[0] = f"Process error during boot ({err})"
+            print(f"[VOICE-TO-TEXT] Process error during boot: {err}", file=sys.stderr)
+            loop.quit()
+
+        timer = QTimer()
+        timer.setSingleShot(True)
+
+        def _on_boot_timeout():
+            boot_failed[0] = True
+            boot_reason[0] = "Timed out waiting for transcription engine readiness"
+            print("[VOICE-TO-TEXT] Boot timeout waiting for readiness", file=sys.stderr)
             loop.quit()
 
         self.ready.connect(_on_ready)
         self.proc.finished.connect(_on_early_exit)
+        self.proc.errorOccurred.connect(_on_process_error)
+        timer.timeout.connect(_on_boot_timeout)
 
+        self._boot_ready_emitted = False
         cmd = [self.python, str(self.script)]
         print(f"[VOICE-TO-TEXT] Booting model: {' '.join(cmd)}", file=sys.stderr)
 
         self.proc.start(cmd[0], cmd[1:])
+        timer.start(15000)
 
         loop.exec()
+        timer.stop()
 
         self.ready.disconnect(_on_ready)
         self.proc.finished.disconnect(_on_early_exit)
+        self.proc.errorOccurred.disconnect(_on_process_error)
+        timer.timeout.disconnect(_on_boot_timeout)
 
         if boot_failed[0]:
+            if self.proc.state() != QProcess.NotRunning:
+                self.proc.kill()
             raise RuntimeError(
-                "Transcription process exited before model was ready. "
-                "Check that newest_model.nemo exists and all dependencies are installed."
+                f"Transcription process failed during boot: {boot_reason[0]}. "
+                "Check Python path and transcription dependencies."
             )
 
         print("[VOICE-TO-TEXT] Boot complete. Model is in memory.", file=sys.stderr)
@@ -485,9 +514,20 @@ class TranscriptionService(ProcessService):
         
         for raw_line in data.splitlines():
             line = raw_line.strip()
-            if "model loaded successfully!" in line.lower():
+            line_lower = line.lower()
+
+            if "model loaded successfully!" in line_lower:
                 print("[VOICE-TO-TEXT] Model ready detected", file=sys.stderr)
-                self.ready.emit()
+                if not self._boot_ready_emitted:
+                    self._boot_ready_emitted = True
+                    self.ready.emit()
+                continue
+
+            if self._is_mock and not self._boot_ready_emitted:
+                if line_lower.startswith("using device:") or "recording now" in line_lower:
+                    print("[VOICE-TO-TEXT] Mock engine startup detected; marking ready", file=sys.stderr)
+                    self._boot_ready_emitted = True
+                    self.ready.emit()
                 continue
 
             if not line:
