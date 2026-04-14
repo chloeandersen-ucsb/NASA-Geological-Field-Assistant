@@ -23,11 +23,28 @@ ENV/
 Thumbs.db
 
 # Project specific
-ML-classifications/camera-pipeline/images
+ML-classifications/scripts/images
 *.log
 rock-volume/outputs/
 *.pt
 voiceNotes/data
+
+# ML training data (large, generated — re-create via data_scripts/)
+ML-classifications/data/raw/
+ML-classifications/data/families/
+ML-classifications/data/subclasses/
+ML-classifications/data/seeds/
+ML-classifications/data/augmented/
+ML-classifications/data/singan_cache/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Kaggle credentials (never commit)
+.kaggle/
+
+manifest.json
 
 # Distribution / packaging
 dist/

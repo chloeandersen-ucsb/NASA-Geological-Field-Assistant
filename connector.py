@@ -130,8 +130,8 @@ def get_voice_to_text_script_path() -> Path:
 
 
 def get_camera_script_path() -> Path:
-    """Get the path to camera capture script. """
-    return get_ml_classifications_dir() / "camera-pipeline" / "capture.py"
+    """Get the path to camera capture script."""
+    return get_ml_classifications_dir() / "scripts" / "capture.py"
 
 def get_mock_camera_script_path() -> Path:
     """Get the path to mock_camera_capture script."""
