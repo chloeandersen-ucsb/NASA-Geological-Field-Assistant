@@ -470,7 +470,23 @@ class TripLoadPage(QWidget):
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
         layout.addWidget(title)
 
-        # --- NEW: Delete All Button ---
+        self.btn_create_new_mission = QPushButton("CREATE NEW MISSION")
+        self.btn_create_new_mission.setMinimumHeight(45)
+        self.btn_create_new_mission.setStyleSheet("""
+            QPushButton {
+                background-color: #344f41;
+                color: white;
+                font-size: 18px;
+                font-weight: bold;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #486454;
+            }
+        """)
+        layout.addWidget(self.btn_create_new_mission)
+
+        # --- Delete All Button ---
         self.btn_delete_all = QPushButton("DELETE ALL")
         self.btn_delete_all.setMinimumHeight(45)
         self.btn_delete_all.setStyleSheet("""
@@ -486,7 +502,6 @@ class TripLoadPage(QWidget):
             }
         """)
         layout.addWidget(self.btn_delete_all)
-        # ------------------------------
 
         self.lbl_totals = QLabel("Total volume: --   Total weight: --")
         self.lbl_totals.setAlignment(Qt.AlignCenter)
@@ -1661,6 +1676,5 @@ class Keyboard(QDialog):
             self.btn_shift.setText("⇪") # Caps lock icon
             self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #4a90e2; color: white;")
                 
-
 
 
