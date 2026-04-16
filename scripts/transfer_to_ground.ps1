@@ -1,8 +1,9 @@
 param(
-    [string]$JetsonHost = "192.168.0.22",
-    [string]$JetsonUser = "jetson",
-    [string]$DestRoot = "C:\Users\Bruce\ground_data",
-    [int]$Port = 22
+    [string]$JetsonHost = "",
+    [string]$JetsonUser = "",
+    [string]$DestRoot = "",
+    [int]$Port = 22,
+    [switch]$SkipConnectionTest
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,6 +18,41 @@ function Require-Command {
 function Ensure-Dir {
     param([string]$Path)
     New-Item -ItemType Directory -Force -Path $Path | Out-Null
+}
+
+function Resolve-ConnectionInfo {
+    if ([string]::IsNullOrWhiteSpace($JetsonUser)) {
+        Set-Variable -Scope Script -Name JetsonUser -Value (Read-Host "Jetson username (run 'whoami' on Jetson)")
+    }
+
+    if ([string]::IsNullOrWhiteSpace($JetsonHost)) {
+        Set-Variable -Scope Script -Name JetsonHost -Value (Read-Host "Jetson IP/hostname (run 'hostname -I' on Jetson)")
+    }
+
+    if ([string]::IsNullOrWhiteSpace($JetsonUser) -or [string]::IsNullOrWhiteSpace($JetsonHost)) {
+        throw "Jetson username and host are required."
+    }
+}
+
+function Resolve-DestinationRoot {
+    if ([string]::IsNullOrWhiteSpace($DestRoot)) {
+        $Downloads = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)) "Downloads"
+        Set-Variable -Scope Script -Name DestRoot -Value (Join-Path $Downloads "sage_ground_data")
+    }
+}
+
+function Resolve-RunRoot {
+    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    Set-Variable -Scope Script -Name RunRoot -Value (Join-Path $DestRoot $timestamp)
+}
+
+function Test-Connection {
+    $target = "${JetsonUser}@${JetsonHost}"
+    Write-Host "[CHECK] Testing SSH to ${target}:${Port}"
+    & ssh -p $Port $target "echo connected"
+    if ($LASTEXITCODE -ne 0) {
+        throw "SSH connectivity test failed for $target on port $Port."
+    }
 }
 
 function Copy-RemoteDir {
@@ -52,12 +88,20 @@ function Copy-RemoteFile {
 }
 
 Require-Command -Name scp
+Require-Command -Name ssh
+Resolve-ConnectionInfo
+Resolve-DestinationRoot
+Resolve-RunRoot
 
-$imagesDir = Join-Path $DestRoot "images"
-$voiceDir = Join-Path $DestRoot "voice_notes"
-$sageRepoDir = Join-Path $DestRoot "sage_repo"
-$sageStoreDir = Join-Path $DestRoot "sage_store"
-$logsDir = Join-Path $DestRoot "logs"
+if (-not $SkipConnectionTest) {
+    Test-Connection
+}
+
+$imagesDir = Join-Path $RunRoot "images"
+$voiceDir = Join-Path $RunRoot "voice_notes"
+$sageRepoDir = Join-Path $RunRoot "sage_repo"
+$sageStoreDir = Join-Path $RunRoot "sage_store"
+$logsDir = Join-Path $RunRoot "logs"
 
 Ensure-Dir -Path $imagesDir
 Ensure-Dir -Path $voiceDir
@@ -71,4 +115,4 @@ Copy-RemoteDir -RemotePath "/home/jetson/CapstoneGit/capstone/led-display/sage_d
 Copy-RemoteDir -RemotePath "/data/sage" -LocalPath $sageStoreDir
 Copy-RemoteFile -RemotePath "/home/jetson/CapstoneGit/capstone/log.txt" -LocalPath (Join-Path $logsDir "log.txt")
 
-Write-Host "Done. Output files pulled to: $DestRoot"
+Write-Host "Done. Output files pulled to: $RunRoot"
