@@ -17,7 +17,7 @@ from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPain
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QStackedWidget, QMessageBox,
     QWidget, QVBoxLayout, QLabel, QPushButton,
-    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout, QDialog
+    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout, QDialog, QFrame
 )
 
 import connector
@@ -216,21 +216,27 @@ class CaptureReviewPage(QWidget):
             self.lbl_side.setText("Side")
 
 
+def _make_divider():
+    line = QFrame()
+    line.setFrameShape(QFrame.HLine)
+    line.setStyleSheet("color: #697d6a;")
+    line.setFixedHeight(1)
+    return line
+
+
 class ClassifiedPage(QWidget):
     def __init__(self, vm):
         super().__init__()
         self.vm = vm
         # Main layout for the whole page
         self.main_layout = QVBoxLayout(self)
-        # self.main_layout.setSpacing(5)
-        # self.main_layout.setContentsMargins(15, 15, 15, 15)
-        self.main_layout.addStretch(1)
-        
+        self.main_layout.setContentsMargins(8, 0, 8, 0)
+        self.main_layout.addSpacing(8)
+
+        # Images
         self.image_container = QWidget()
-        # self.image_container.setFixedSize(600, 900)
         self.image_container.setStyleSheet("background-color: transparent;")
         container_layout = QHBoxLayout(self.image_container)
-        # container_layout.addSpacing(50)
         container_layout.setContentsMargins(0, 0, 0, 0)
         self.lbl_image = QLabel()
         self.lbl_image.setAlignment(Qt.AlignCenter)
@@ -245,56 +251,101 @@ class ClassifiedPage(QWidget):
         container_layout.addWidget(self.lbl_image)
         container_layout.addWidget(self.lbl_side_image)
         self.main_layout.addWidget(self.image_container, 0, Qt.AlignCenter)
-        self.main_layout.addStretch(1)
+        self.main_layout.addSpacing(6)
 
-        # Result Labels
+        # Primary label (rock name)
         self.lbl_label = QLabel("LABEL")
         self.lbl_label.setAlignment(Qt.AlignCenter)
-        self.lbl_label.setStyleSheet("font-size: 28px; font-weight: 700;")
         self.lbl_label.setStyleSheet("font-size: 24px; font-weight: 700; margin-top: 5px;")
-        
 
+        # Confidence + tier badge row
+        self.conf_row = QWidget()
+        conf_row_layout = QHBoxLayout(self.conf_row)
+        conf_row_layout.setContentsMargins(0, 0, 0, 0)
+        conf_row_layout.setSpacing(8)
+        conf_row_layout.setAlignment(Qt.AlignCenter)
         self.lbl_conf = QLabel("Confidence: --")
-        self.lbl_conf.setAlignment(Qt.AlignCenter)
-        self.lbl_conf.setStyleSheet("font-size: 25px; color: #666;") #color = white
+        self.lbl_conf.setStyleSheet("font-size: 20px; color: #666;")
+        self.lbl_tier = QLabel("")
+        self.lbl_tier.setStyleSheet(
+            "font-size: 15px; font-weight: 700; border-radius: 6px; padding: 2px 8px; color: #f5f6f4;"
+        )
+        self.lbl_tier.setVisible(False)
+        conf_row_layout.addWidget(self.lbl_conf)
+        conf_row_layout.addWidget(self.lbl_tier)
 
-        self.lbl_volume = QLabel("Volume = --")
-        self.lbl_volume.setAlignment(Qt.AlignCenter)
-        self.lbl_volume.setStyleSheet("font-size: 20px;")
+        # Section dividers (hidden until content is present)
+        self.div_features = _make_divider()
+        self.div_features.setVisible(False)
+        self.div_volume = _make_divider()
+        self.div_volume.setVisible(False)
+        self.div_notes = _make_divider()
+        self.div_notes.setVisible(False)
 
-        # self.lbl_top2 = QLabel("")
-        # self.lbl_top2.setAlignment(Qt.AlignCenter)
-        # self.lbl_top2.setStyleSheet("font-size: 20px;")
+        # Features widget — 2-column grid: feature name | value (confidence%)
+        self.features_widget = QWidget()
+        self.features_grid = QGridLayout(self.features_widget)
+        self.features_grid.setContentsMargins(4, 4, 4, 4)
+        self.features_grid.setHorizontalSpacing(12)
+        self.features_grid.setVerticalSpacing(4)
+        self.features_grid.setColumnStretch(0, 1)
+        self.features_grid.setColumnStretch(1, 1)
+        self.features_widget.setVisible(False)
 
-        # self.lbl_top3 = QLabel("")
-        # self.lbl_top3.setAlignment(Qt.AlignCenter)
-        # self.lbl_top3.setStyleSheet("font-size: 20px;")
+        # Volume + weight side-by-side row
+        self.vol_weight_row = QWidget()
+        vol_row_layout = QHBoxLayout(self.vol_weight_row)
+        vol_row_layout.setContentsMargins(0, 0, 0, 0)
+        vol_row_layout.setSpacing(4)
+        vol_row_layout.setAlignment(Qt.AlignCenter)
+        self.lbl_volume = QLabel("Vol: --")
+        self.lbl_volume.setStyleSheet("font-size: 17px;")
+        self.lbl_vol_sep = QLabel(" · ")
+        self.lbl_vol_sep.setStyleSheet("font-size: 17px; color: #888;")
+        self.lbl_vol_sep.setVisible(False)
+        self.lbl_extra = QLabel("")
+        self.lbl_extra.setStyleSheet("font-size: 17px;")
+        vol_row_layout.addWidget(self.lbl_volume)
+        vol_row_layout.addWidget(self.lbl_vol_sep)
+        vol_row_layout.addWidget(self.lbl_extra)
 
+        # 2nd / 3rd alternative classifications grid
         self.extra_results_widget = QWidget()
         self.extra_grid = QGridLayout(self.extra_results_widget)
         self.extra_grid.setAlignment(Qt.AlignCenter)
-        # self.extra_grid.setContentsMargins(100, 0, 100, 0) # Adjust margins to control width
-        
-        # Create the sub-labels
         self.lbl_rank2 = QLabel(""); self.lbl_name2 = QLabel(""); self.lbl_perc2 = QLabel("")
         self.lbl_rank3 = QLabel(""); self.lbl_name3 = QLabel(""); self.lbl_perc3 = QLabel("")
-
-        # Style and Add to Grid
-        sub_style = "font-size: 20px;"
-        for i, lbl in enumerate([self.lbl_rank2, self.lbl_name2, self.lbl_perc2, 
-                                 self.lbl_rank3, self.lbl_name3, self.lbl_perc3]):
+        sub_style = "font-size: 17px;"
+        for i, lbl in enumerate([self.lbl_rank2, self.lbl_name2, self.lbl_perc2,
+                                  self.lbl_rank3, self.lbl_name3, self.lbl_perc3]):
             lbl.setStyleSheet(sub_style)
-            # Row 0 for 2nd, Row 1 for 3rd
             row = i // 3
             col = i % 3
             alignment = [Qt.AlignLeft, Qt.AlignCenter, Qt.AlignRight][col]
             self.extra_grid.addWidget(lbl, row, col, alignment)
 
-        self.lbl_extra = QLabel("")
-        self.lbl_extra.setAlignment(Qt.AlignCenter)
-        self.lbl_extra.setStyleSheet("font-size: 20px;")
+        # Geology notes toggle + expandable panel
+        self.btn_geology_notes = QPushButton("Geology Notes \u25be")
+        self.btn_geology_notes.setStyleSheet(
+            "font-size: 17px; background-color: transparent; border: none; color: #555;"
+        )
+        self.btn_geology_notes.setVisible(False)
 
-        self.mic_ctrl = ExpandingVoiceWidget(self.vm, self) 
+        self.geology_panel = QWidget()
+        self.geology_layout = QVBoxLayout(self.geology_panel)
+        self.geology_layout.setContentsMargins(4, 2, 4, 2)
+        self.geology_layout.setSpacing(2)
+        self.geology_panel.setVisible(False)
+
+        def _toggle_geology():
+            visible = not self.geology_panel.isVisible()
+            self.geology_panel.setVisible(visible)
+            self.btn_geology_notes.setText(
+                "Geology Notes \u25b4" if visible else "Geology Notes \u25be"
+            )
+        self.btn_geology_notes.clicked.connect(_toggle_geology)
+
+        self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
 
         self.btn_reclassify = big_button("Reclassify")
         self.btn_reclassify.setStyleSheet("""
@@ -330,17 +381,19 @@ class ClassifiedPage(QWidget):
             }
         """)
 
-        # Assemble main layout
+        # Assemble main layout (geological priority order)
         self.main_layout.addWidget(self.lbl_label)
-        self.main_layout.addWidget(self.lbl_conf)
-        self.main_layout.addSpacing(10)
-        self.main_layout.addWidget(self.lbl_volume)
-        self.main_layout.addWidget(self.lbl_extra)
-        self.main_layout.addSpacing(10)
-
+        self.main_layout.addWidget(self.conf_row, 0, Qt.AlignCenter)
+        self.main_layout.addSpacing(4)
+        self.main_layout.addWidget(self.div_features)
+        self.main_layout.addWidget(self.features_widget)
+        self.main_layout.addWidget(self.div_volume)
+        self.main_layout.addWidget(self.vol_weight_row, 0, Qt.AlignCenter)
         self.main_layout.addWidget(self.extra_results_widget)
-        self.main_layout.addStretch(1)
-        
+        self.main_layout.addSpacing(6)
+        self.main_layout.addWidget(self.div_notes)
+        self.main_layout.addWidget(self.btn_geology_notes, 0, Qt.AlignCenter)
+        self.main_layout.addWidget(self.geology_panel)
 
         self.main_layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
         self.main_layout.addSpacing(15)
@@ -1184,41 +1237,118 @@ class AppWindow(QMainWindow):
         self.classified.lbl_label.setText(result.label.upper())
         self.classified.lbl_conf.setText(f"Confidence: {int(result.confidence * 100)}%")
 
+        # Tier badge
+        tier_colors = {
+            "high":      "#617c32",
+            "medium":    "#a88b5c",
+            "low":       "#c46200",
+            "uncertain": "#888888",
+        }
+        if result.tier and result.tier in tier_colors:
+            bg = tier_colors[result.tier]
+            self.classified.lbl_tier.setText(result.tier.upper())
+            self.classified.lbl_tier.setStyleSheet(
+                f"font-size: 15px; font-weight: 700; border-radius: 6px; "
+                f"padding: 2px 8px; color: #f5f6f4; background-color: {bg};"
+            )
+            self.classified.lbl_tier.setVisible(True)
+        else:
+            self.classified.lbl_tier.setVisible(False)
+
+        # Alternative classifications (2nd / 3rd)
         top3 = None
         if result.raw and isinstance(result.raw, dict):
             top3 = result.raw.get("top3", [])
-        
-        if top3 and len(top3) >= 2:
-            label2 = top3[1].get("label", "")
-            conf2 = float(top3[1].get("confidence", 0.0))
-            if conf2 > 0:
-                self.classified.lbl_rank2.setText("2nd:")
-                self.classified.lbl_name2.setText(top3[1].get("label", "").upper())
-                self.classified.lbl_perc2.setText(f"({int(float(top3[1]['confidence']) * 100)}%)")
-            else:
-                for lbl in [self.classified.lbl_rank2, self.classified.lbl_name2, self.classified.lbl_perc2]: lbl.setText("")
-        else:
-            for lbl in [self.classified.lbl_rank2, self.classified.lbl_name2, self.classified.lbl_perc2]: lbl.setText("")
-        
-        if top3 and len(top3) >= 3:
-            label3 = top3[2].get("label", "")
-            conf3 = float(top3[2].get("confidence", 0.0))
-            if conf3 > 0:
-                self.classified.lbl_rank3.setText("3rd:")
-                self.classified.lbl_name3.setText(top3[2].get("label", "").upper())
-                self.classified.lbl_perc3.setText(f"({int(float(top3[2]['confidence']) * 100)}%)")
-            else:
-                for lbl in [self.classified.lbl_rank3, self.classified.lbl_name3, self.classified.lbl_perc3]: lbl.setText("")
-        else:
-            for lbl in [self.classified.lbl_rank3, self.classified.lbl_name3, self.classified.lbl_perc3]: lbl.setText("")
 
-        extras = []
+        if top3 and len(top3) >= 2 and float(top3[1].get("confidence", 0.0)) > 0:
+            self.classified.lbl_rank2.setText("2nd:")
+            self.classified.lbl_name2.setText(top3[1].get("label", "").upper())
+            self.classified.lbl_perc2.setText(f"({int(float(top3[1]['confidence']) * 100)}%)")
+        else:
+            for lbl in [self.classified.lbl_rank2, self.classified.lbl_name2, self.classified.lbl_perc2]:
+                lbl.setText("")
+
+        if top3 and len(top3) >= 3 and float(top3[2].get("confidence", 0.0)) > 0:
+            self.classified.lbl_rank3.setText("3rd:")
+            self.classified.lbl_name3.setText(top3[2].get("label", "").upper())
+            self.classified.lbl_perc3.setText(f"({int(float(top3[2]['confidence']) * 100)}%)")
+        else:
+            for lbl in [self.classified.lbl_rank3, self.classified.lbl_name3, self.classified.lbl_perc3]:
+                lbl.setText("")
+
+        # Weight label (volume updated separately via _on_volume_display)
         if result.estimated_weight is not None:
-            extras.append(f"Weight: {result.estimated_weight}")
-        self.classified.lbl_extra.setText("   ".join(extras) if extras else "")
+            self.classified.lbl_extra.setText(f"Wt: {result.estimated_weight}")
+            self.classified.lbl_vol_sep.setVisible(True)
+        else:
+            self.classified.lbl_extra.setText("")
+            self.classified.lbl_vol_sep.setVisible(False)
+
+        # Features 2-column grid
+        grid = self.classified.features_grid
+        while grid.count():
+            item = grid.takeAt(0)
+            if item.widget():
+                item.widget().setParent(None)
+        ui_meta = (result.raw or {}).get("ui", {}) if isinstance(result.raw, dict) else {}
+        show_features = (
+            result.features is not None
+            and result.tier not in (None, "uncertain")
+            and ui_meta.get("show_features", True)
+        )
+        if show_features:
+            row = 0
+            for feat_name, feat_data in result.features.items():
+                if not feat_data.get("display", True):
+                    continue
+                if feat_data.get("tier") not in ("high", "medium"):
+                    continue
+                conf_pct = int(feat_data.get("confidence", 0.0) * 100)
+                lbl_name = QLabel(feat_name.replace("_", " "))
+                lbl_name.setStyleSheet("font-size: 15px; color: #555;")
+                lbl_name.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                lbl_val = QLabel(f"{feat_data.get('value', '')}  ({conf_pct}%)")
+                lbl_val.setStyleSheet("font-size: 15px; font-weight: 700;")
+                lbl_val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                grid.addWidget(lbl_name, row, 0)
+                grid.addWidget(lbl_val, row, 1)
+                row += 1
+        features_visible = show_features and grid.rowCount() > 0
+        self.classified.features_widget.setVisible(features_visible)
+        self.classified.div_features.setVisible(features_visible)
+        self.classified.div_volume.setVisible(features_visible)
+
+        # Geology notes panel — two-line format per note
+        for i in reversed(range(self.classified.geology_layout.count())):
+            w = self.classified.geology_layout.itemAt(i).widget()
+            if w:
+                w.setParent(None)
+        geology_notes = result.geology_notes or []
+        for idx, note_data in enumerate(geology_notes):
+            if idx > 0:
+                sep = _make_divider()
+                self.classified.geology_layout.addWidget(sep)
+            feat_display = note_data.get("feature", "").replace("_", " ").upper()
+            lbl_feat = QLabel(feat_display)
+            lbl_feat.setStyleSheet(
+                "font-size: 13px; font-weight: 700; color: #555; margin-top: 4px;"
+            )
+            lbl_note = QLabel(note_data.get("note", ""))
+            lbl_note.setWordWrap(True)
+            lbl_note.setStyleSheet("font-size: 14px; color: #344f41;")
+            self.classified.geology_layout.addWidget(lbl_feat)
+            self.classified.geology_layout.addWidget(lbl_note)
+        has_notes = len(geology_notes) > 0
+        self.classified.btn_geology_notes.setVisible(has_notes)
+        self.classified.div_notes.setVisible(has_notes)
+        self.classified.geology_panel.setVisible(False)
+        if has_notes:
+            self.classified.btn_geology_notes.setText("Geology Notes \u25be")
 
     def _on_volume_display(self, text: str) -> None:
-        self.classified.lbl_volume.setText(text)
+        # Reformat "Volume = X cm³" / "Volume = N/A" → "Vol: X cm³" / "Vol: N/A"
+        display = text.replace("Volume = ", "Vol: ").replace("Volume=", "Vol:")
+        self.classified.lbl_volume.setText(display)
 
     def _on_transcription(self, text: str) -> None:
         if "No audio recorded" in text or "STREAMING COMPLETE" in text:

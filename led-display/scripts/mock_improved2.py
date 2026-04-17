@@ -31,6 +31,9 @@ signal.signal(signal.SIGINT, signal_handler)
 
 def main():
     print("Using device: cpu")
+    print("model loaded successfully!")
+    sys.stdout.flush()
+    time.sleep(0.3)
     print("RECORDING NOW... (Ctrl+C to stop)\n")
     sys.stdout.flush()
     

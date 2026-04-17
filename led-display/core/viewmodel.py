@@ -36,6 +36,9 @@ class ClassificationResult:
     side_image_path: Optional[str] = None
     estimated_volume: Optional[float] = None
     estimated_weight: Optional[Union[float, str]] = None
+    tier: Optional[str] = None
+    features: Optional[dict] = None
+    geology_notes: Optional[list] = None
     raw: Optional[dict] = None
 
 
@@ -542,6 +545,9 @@ class ViewModel(QObject):
             side_image_path=self._last_side_path,
             estimated_volume=estimated_volume,
             estimated_weight=estimated_weight,
+            tier=payload.get("tier"),
+            features=payload.get("features"),
+            geology_notes=payload.get("geology_notes"),
             raw=payload,
         )
         self.current_classification = result

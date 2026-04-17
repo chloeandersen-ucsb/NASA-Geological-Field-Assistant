@@ -140,6 +140,7 @@ asr_model = asr_model.to(device)
 asr_model.eval()
 print("Fine-tuned model loaded successfully!")
 sys.stdout.flush()
+time.sleep(0.3)
 
 # ------------------------------------------------------------------
 # PART 3: LIVE INFERENCE LOGIC

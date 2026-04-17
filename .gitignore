@@ -23,19 +23,19 @@ ENV/
 Thumbs.db
 
 # Project specific
-ML-classifications/scripts/images
 *.log
 rock-volume/outputs/
 *.pt
 voiceNotes/data
 
-# ML training data (large, generated — re-create via data_scripts/)
-ML-classifications/data/raw/
-ML-classifications/data/families/
-ML-classifications/data/subclasses/
-ML-classifications/data/seeds/
-ML-classifications/data/augmented/
-ML-classifications/data/singan_cache/
+# ML training data  / related scripts
+ML-classifications/images_processed
+ML-classifications/images_raw
+ML-classifications/metadata
+ML-classifications/scripts/auto_label.py
+ML-classifications/scripts/crop_image.py
+ML-classifications/scripts/label_tool.py
+.claude
 
 # Jupyter checkpoints
 .ipynb_checkpoints/
@@ -50,3 +50,5 @@ manifest.json
 dist/
 build/
 *.egg-info/
+
+.env
