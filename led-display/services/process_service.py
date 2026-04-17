@@ -163,18 +163,20 @@ class ClassificationService(ProcessService):
             connector.validate_ml_paths()
         
         self._expected_json_path: str | None = None
-    
+        self._killing = False
+
     def classify(self, image_path: str, weights_path: str | None = None) -> None:
         if self.proc.state() != QProcess.NotRunning:
             self.failed.emit("Classifier already running")
             return
-        
+
         weights = weights_path or self.default_weights
-        
+
         base, _ = os.path.splitext(image_path)
         out_json = base + "_prediction.json"
         self._expected_json_path = out_json
-        
+        self._killing = False
+
         cmd = [
             self.python,
             str(self.rocknet_script),
@@ -184,7 +186,14 @@ class ClassificationService(ProcessService):
         ]
         self.proc.start(cmd[0], cmd[1:])
     
+    def kill(self) -> None:
+        self._killing = True
+        super().kill()
+
     def _on_finished(self, exit_code: int, _status) -> None:
+        if self._killing:
+            self._killing = False
+            return
         err = bytes(self.proc.readAllStandardError()).decode("utf-8", errors="ignore").strip()
         if exit_code != 0:
             self.failed.emit(err or f"Classification failed (exit {exit_code})")
@@ -249,6 +258,8 @@ class ClassificationService(ProcessService):
         self.finished.emit(payload)
     
     def _on_error(self, _err) -> None:
+        if self._killing:
+            return
         self.failed.emit("Classifier process error")
 
 

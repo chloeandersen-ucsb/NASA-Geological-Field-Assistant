@@ -14,6 +14,7 @@ import uuid
 from PySide6.QtCore import QObject, Signal, QTimer
 
 from services.process_service import CameraService, ClassificationService, TranscriptionService, VolumeService
+import connector
 #from voiceNotes.ilai_files import transcriber_fine_tuned
 
 
@@ -310,7 +311,8 @@ class ViewModel(QObject):
         self._classify_payload: Optional[dict] = None
         self._classification_applied = False
 
-        self.classification_timeout_ms = 20_000
+        # Jetson needs extra time for CUDA init + model load (can take 60-90s on first run)
+        self.classification_timeout_ms = 120_000 if connector.is_jetson() else 20_000
         self._classify_timeout = QTimer(self)
         self._classify_timeout.setSingleShot(True)
         self._classify_timeout.timeout.connect(self._on_classify_timeout)
@@ -888,7 +890,6 @@ class ViewModel(QObject):
         self.trip_changed.emit(summary)
 
     def _fail(self, message: str) -> None:
-        import sys
         print(f"\n[CRITICAL DEBUG] Failure detected: {message}", file=sys.stderr)
-        # self._abort_classification(message)  <-- Comment this out!
+        self._abort_classification(message)
 

@@ -536,7 +536,7 @@ def load_checkpoint(
     device: torch.device,
     strict: bool = True,
 ) -> tuple[RockNetV2, dict]:
-    payload    = torch.load(str(path), map_location=device)
+    payload    = torch.load(str(path), map_location=device, weights_only=False)
     model      = RockNetV2().to(device)
     state_dict = payload.get("state_dict", payload)
     model.load_state_dict(state_dict, strict=strict)
