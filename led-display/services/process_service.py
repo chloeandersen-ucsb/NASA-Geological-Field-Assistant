@@ -162,7 +162,6 @@ class ClassificationService(ProcessService):
             
             connector.validate_ml_paths()
         
-        self.temperature = 1.0
         self._expected_json_path: str | None = None
     
     def classify(self, image_path: str, weights_path: str | None = None) -> None:
@@ -181,7 +180,6 @@ class ClassificationService(ProcessService):
             str(self.rocknet_script),
             "--weights", str(weights),
             "--image", image_path,
-            "--temperature", str(self.temperature),
             "--output-json", out_json,
         ]
         self.proc.start(cmd[0], cmd[1:])
