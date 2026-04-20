@@ -366,7 +366,6 @@ class VoicePage(QWidget):
         
         title = QLabel("Voice to Text")
         title.setAlignment(Qt.AlignCenter)
-        # title.setStyleSheet("font-size: 22px; font-weight: 600;")
         title.setStyleSheet("""
             font-size: 22px;
             font-weight: bold;
@@ -375,6 +374,13 @@ class VoicePage(QWidget):
             padding: 8px;
         """)
         layout.addWidget(title)
+
+        # --- NEW: The Context Label ---
+        self.lbl_context = QLabel("Context: None")
+        self.lbl_context.setAlignment(Qt.AlignCenter)
+        self.lbl_context.setStyleSheet("font-size: 14px; color: #697d6a; font-style: italic; margin-top: 2px; margin-bottom: 5px;")
+        layout.addWidget(self.lbl_context)
+        # ------------------------------
 
         self.text = QTextEdit()
         self.text.setStyleSheet("""
@@ -1030,9 +1036,27 @@ class AppWindow(QMainWindow):
         
         self._setup_shortcuts()
 
+    def _update_vtt_context_label(self) -> None:
+        project_root = Path(__file__).resolve().parent.parent.parent
+        context_file = project_root / "ML-classifications" / "visual_context.txt"
+        
+        context_words = ""
+        if context_file.exists():
+            try:
+                with open(context_file, "r") as f:
+                    context_words = f.read().strip()
+            except Exception:
+                pass
+                
+        if context_words:
+            self.voice.lbl_context.setText(f"Context: {context_words}")
+        else:
+            self.voice.lbl_context.setText("Context: None")
+    
     def _on_reset_context_clicked(self) -> None:
         self.vm.reset_voice_context()
         self.voice.btn_reset.hide()
+        self._update_vtt_context_label()
 
     def _on_force_summary_clicked(self) -> None:
         entry = getattr(self.rock_detail, "_current_rock_entry", None)
@@ -1400,6 +1424,8 @@ class AppWindow(QMainWindow):
             self.inline_keyboard.hide()       
             self.inline_keyboard.set_shift_state(0)
             self.voice.text.setReadOnly(True)
+            
+            self._update_vtt_context_label()
             
             current_text = self.vm.transcription_text
             self.voice.text.setPlainText(current_text)

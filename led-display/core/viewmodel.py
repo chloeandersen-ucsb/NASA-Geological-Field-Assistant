@@ -84,7 +84,7 @@ class RockSummaryWorker(QThread):
 
     def run(self) -> None:
         try:
-            script_path = Path(__file__).resolve().parent.parent / "scripts" / "rock_summary.py"
+            script_path = Path(__file__).resolve().parent.parent / "services" / "rock_summary.py"
             spec = importlib.util.spec_from_file_location("rock_summary_runtime", script_path)
             if spec is None or spec.loader is None:
                 raise RuntimeError("Unable to load rock summarizer module")
@@ -101,7 +101,15 @@ class RockSummaryWorker(QThread):
             if self.isInterruptionRequested():
                 return
             self.summary_ready.emit(self._rock_id, summary)
+            
         except Exception as e:
+            # --- NEW: FORCE THE TERMINAL TO SHOW US THE REAL CRASH ---
+            import sys
+            import traceback
+            print(f"\n[CRITICAL AI ERROR] {type(e).__name__}: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            # ---------------------------------------------------------
+            
             if self.isInterruptionRequested():
                 return
             self.summary_failed.emit(self._rock_id, str(e))
@@ -706,6 +714,8 @@ class ViewModel(QObject):
         self._rock_summary_cache: dict[str, tuple[str, str]] = {}
         self._rock_summary_pending_request: Optional[tuple[str, str]] = None
         self._rock_summary_worker: Optional[RockSummaryWorker] = None
+        
+        self._clear_active_rock_context()
 
     def _clear_active_rock_context(self) -> None:
         self.active_rock_id = None
