@@ -33,3 +33,4 @@ voiceNotes/data
 dist/
 build/
 *.egg-info/
+*.gguf

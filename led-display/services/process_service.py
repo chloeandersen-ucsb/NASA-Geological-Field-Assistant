@@ -5,6 +5,7 @@ import os
 import re
 import signal
 import sys
+import tempfile
 from pathlib import Path
 
 import cv2
@@ -618,10 +619,75 @@ class TranscriptionService(ProcessService):
     
     # def _on_error(self, _err) -> None:
     #     self.failed.emit("Transcription process error")
-    def _on_error(self, _err) -> None:
-        if getattr(self, "_user_stopped", False):
-            # User stopped process intentionally; ignore the error
-            print("[VOICE-TO-TEXT] Ignored process error after user stop", file=sys.stderr)
-            return
-        self.failed.emit("Transcription process error")
 
+
+class RockSummaryService(ProcessService):
+    finished = Signal(dict)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.python = connector.get_python_executable()
+        self.script = project_root / "led-display" / "scripts" / "rock_summary.py"
+        self._input_json_path: str | None = None
+        self._output_json_path: str | None = None
+
+    def summarize(self, rock_id: str, label: str, notes: list[str], estimated_volume=None, estimated_weight=None) -> None:
+        if self.proc.state() != QProcess.NotRunning:
+            self.kill()
+
+        input_file = tempfile.NamedTemporaryFile(prefix="rock_summary_", suffix=".json", delete=False)
+        output_file = tempfile.NamedTemporaryFile(prefix="rock_summary_out_", suffix=".json", delete=False)
+        input_file.close()
+        output_file.close()
+
+        self._input_json_path = input_file.name
+        self._output_json_path = output_file.name
+
+        payload = {
+            "rock_id": rock_id,
+            "label": label,
+            "notes": notes,
+            "estimated_volume": estimated_volume,
+            "estimated_weight": estimated_weight,
+        }
+        with open(self._input_json_path, "w", encoding="utf-8") as fp:
+            json.dump(payload, fp, ensure_ascii=False)
+
+        cmd = [
+            self.python,
+            str(self.script),
+            "--input-json", self._input_json_path,
+            "--output-json", self._output_json_path,
+        ]
+        self.proc.start(cmd[0], cmd[1:])
+
+    def _cleanup_temp_files(self) -> None:
+        for path in (self._input_json_path, self._output_json_path):
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+        self._input_json_path = None
+        self._output_json_path = None
+
+    def _on_finished(self, exit_code: int, _status) -> None:
+        err = bytes(self.proc.readAllStandardError()).decode("utf-8", errors="ignore").strip()
+        try:
+            if exit_code != 0:
+                self.failed.emit(err or f"Rock summary failed (exit {exit_code})")
+                return
+            if not self._output_json_path or not os.path.exists(self._output_json_path):
+                self.failed.emit("Rock summary output JSON not found")
+                return
+            with open(self._output_json_path, "r", encoding="utf-8") as fp:
+                payload = json.load(fp)
+            self.finished.emit(payload)
+        except Exception as e:
+            self.failed.emit(f"Failed to read rock summary output: {e}")
+        finally:
+            self._cleanup_temp_files()
+
+    def _on_error(self, _err) -> None:
+        self._cleanup_temp_files()
+        self.failed.emit("Rock summary process error")

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import html
 import os
 import sys
 import datetime
@@ -12,7 +13,7 @@ sys.path.insert(0, str(project_root))
 img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
 
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal, QPoint
 from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QStackedWidget, QMessageBox,
@@ -21,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 import connector
-from core.viewmodel import AppStateType, ClassificationResult, TripSummary
+from core.viewmodel import AppStateType, ClassificationResult, MissionSummary, TripSummary
 
 
 def big_button(text: str) -> QPushButton:
@@ -464,13 +465,30 @@ class TripLoadPage(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
+        layout.setSpacing(10)
 
         title = QLabel("Trip & Notes")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
         layout.addWidget(title)
 
-        # --- NEW: Delete All Button ---
+        self.btn_create_new_mission = QPushButton("CREATE NEW MISSION")
+        self.btn_create_new_mission.setMinimumHeight(45)
+        self.btn_create_new_mission.setStyleSheet("""
+            QPushButton {
+                background-color: #344f41;
+                color: white;
+                font-size: 18px;
+                font-weight: bold;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #486454;
+            }
+        """)
+        layout.addWidget(self.btn_create_new_mission)
+
+        # --- Delete All Button ---
         self.btn_delete_all = QPushButton("DELETE ALL")
         self.btn_delete_all.setMinimumHeight(45)
         self.btn_delete_all.setStyleSheet("""
@@ -486,16 +504,15 @@ class TripLoadPage(QWidget):
             }
         """)
         layout.addWidget(self.btn_delete_all)
-        # ------------------------------
 
-        self.lbl_totals = QLabel("Total volume: --   Total weight: --")
-        self.lbl_totals.setAlignment(Qt.AlignCenter)
-        self.lbl_totals.setStyleSheet("font-size: 16px;")
-        layout.addWidget(self.lbl_totals)
+        self.lbl_current_mission = QLabel("Current mission: --")
+        self.lbl_current_mission.setAlignment(Qt.AlignCenter)
+        self.lbl_current_mission.setStyleSheet("font-size: 16px;")
+        layout.addWidget(self.lbl_current_mission)
 
-        timeline_label = QLabel("Timeline:")
-        timeline_label.setStyleSheet("font-size: 18px; font-weight: 600;")
-        layout.addWidget(timeline_label)
+        missions_label = QLabel("Missions:")
+        missions_label.setStyleSheet("font-size: 18px; font-weight: 600;")
+        layout.addWidget(missions_label)
         
         self.list = QListWidget()
         self.list.setStyleSheet("font-size: 16px;")
@@ -505,8 +522,115 @@ class TripLoadPage(QWidget):
         self.btn_back = big_button("Back")
         layout.addWidget(self.btn_back)
         
+        self._missions_data = []
+        self._summary = None
+
+
+class MissionDetailPage(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        self.lbl_title = QLabel("Mission")
+        self.lbl_title.setAlignment(Qt.AlignCenter)
+        self.lbl_title.setStyleSheet("font-size: 22px; font-weight: 700;")
+        layout.addWidget(self.lbl_title)
+
+        self.lbl_status = QLabel("")
+        self.lbl_status.setAlignment(Qt.AlignCenter)
+        self.lbl_status.setStyleSheet("font-size: 16px;")
+        layout.addWidget(self.lbl_status)
+
+        self.lbl_totals = QLabel("Total volume: --   Total weight: --")
+        self.lbl_totals.setAlignment(Qt.AlignCenter)
+        self.lbl_totals.setStyleSheet("font-size: 16px;")
+        layout.addWidget(self.lbl_totals)
+
+        items_label = QLabel("Mission Items:")
+        items_label.setStyleSheet("font-size: 18px; font-weight: 600;")
+        layout.addWidget(items_label)
+
+        self.list = QListWidget()
+        self.list.setStyleSheet("font-size: 16px;")
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        layout.addWidget(self.list, stretch=1)
+
+        self.btn_back = big_button("Back")
+        layout.addWidget(self.btn_back)
+
         self._timeline_data = []
         self._summary = None
+
+
+class MissionCreatePage(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
+
+        title = QLabel("Create New Mission")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 24px; font-weight: 700;")
+        layout.addWidget(title)
+
+        prompt = QLabel("Type a name for the mission:")
+        prompt.setStyleSheet("font-size: 18px; font-weight: 600;")
+        layout.addWidget(prompt)
+
+        self.lbl_recording_status = QLabel("Recording... speak the mission name")
+        self.lbl_recording_status.setAlignment(Qt.AlignCenter)
+        self.lbl_recording_status.setStyleSheet("font-size: 16px; color: #7e1f23; font-weight: 700;")
+        layout.addWidget(self.lbl_recording_status)
+
+        self.text = QTextEdit()
+        self.text.setFixedHeight(80)
+        self.text.setStyleSheet("""
+            font-size: 20px;
+            border: 2px solid #697d6a;
+            border-radius: 8px;
+            padding: 10px;
+            background-color: #f5f6f4;
+            color: #344f41;
+        """)
+        layout.addWidget(self.text)
+
+        self.btn_create = QPushButton("CREATE MISSION")
+        self.btn_create.setMinimumHeight(55)
+        self.btn_create.setStyleSheet("""
+            QPushButton {
+                background-color: #344f41;
+                font-size: 20px;
+                color: white;
+                font-weight: bold;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #486454;
+            }
+            QPushButton:disabled {
+                background-color: #8d9a92;
+                color: #dce2dd;
+            }
+        """)
+        layout.addWidget(self.btn_create)
+
+        self.btn_cancel = QPushButton("Cancel")
+        self.btn_cancel.setMinimumHeight(55)
+        self.btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #95b7dc;
+                font-size: 20px;
+                color: #385573;
+                font-weight: bold;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #b8d2ea;
+            }
+        """)
+        layout.addWidget(self.btn_cancel)
         
 class RockDetailPage(QWidget):
     def __init__(self):
@@ -534,13 +658,11 @@ class RockDetailPage(QWidget):
         images_row.setSpacing(10)
         self.lbl_top = QLabel()
         self.lbl_top.setAlignment(Qt.AlignCenter)
-        # self.lbl_top.setMinimumSize(260, 200)
         self.lbl_top.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.lbl_top.setStyleSheet("background-color: #222; border: 3px solid #344f41; border-radius: 6px;")
 
         self.lbl_side = QLabel()
         self.lbl_side.setAlignment(Qt.AlignCenter)
-        # self.lbl_side.setMinimumSize(260, 200)
         self.lbl_side.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.lbl_side.setStyleSheet("background-color: #222; border: 3px solid #344f41; border-radius: 6px;")
 
@@ -553,7 +675,36 @@ class RockDetailPage(QWidget):
         self.lbl_info.setStyleSheet("font-size: 18px; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
         layout.addWidget(self.lbl_info, stretch=2)
 
-        # --- NEW: Voice Notes Display ---
+        # --- NEW: Summary Header with Re-Summarize Button ---
+        summary_header_layout = QHBoxLayout()
+        self.lbl_summary_title = QLabel("AI Summary:")
+        self.lbl_summary_title.setStyleSheet("font-size: 18px; font-weight: 700;")
+        
+        self.btn_force_summary = QPushButton("RE-SUMMARIZE")
+        self.btn_force_summary.setFixedSize(140, 30)
+        self.btn_force_summary.setStyleSheet("""
+            QPushButton { background-color: #95b7dc; color: #385573; font-weight: bold; border-radius: 6px; font-size: 14px; }
+            QPushButton:hover { background-color: #b8d2ea; }
+        """)
+        
+        summary_header_layout.addWidget(self.lbl_summary_title)
+        summary_header_layout.addStretch(1)
+        summary_header_layout.addWidget(self.btn_force_summary)
+        layout.addLayout(summary_header_layout)
+        # ----------------------------------------------------
+
+        self.summary_text = QTextEdit()
+        self.summary_text.setReadOnly(True)
+        self.summary_text.setFixedHeight(140)
+        self.summary_text.setStyleSheet("""
+            font-size: 16px;
+            border: 2px solid #697d6a;
+            border-radius: 8px;
+            padding: 8px;
+            background-color: #eef2eb;
+        """)
+        layout.addWidget(self.summary_text)
+
         self.lbl_notes_title = QLabel("Associated Voice Notes:")
         self.lbl_notes_title.setStyleSheet("font-size: 18px; font-weight: 700;")
         layout.addWidget(self.lbl_notes_title)
@@ -570,8 +721,57 @@ class RockDetailPage(QWidget):
 
         self.btn_back = big_button("Back")
         layout.addWidget(self.btn_back)
+        self._current_rock_id = None
 
-    def set_entry(self, entry, associated_notes=None) -> None:
+    def _format_ai_summary_html(self, summary: str) -> str:
+        lines = [line.strip() for line in str(summary or "").splitlines() if line.strip()]
+        if not lines:
+            return ""
+
+        known_labels = {
+            "geological field notes",
+            "rock type",
+            "metadata",
+            "physical description",
+            "interpretation",
+            "geological interpretation",
+            "scientific significance",
+            "uncertainty",
+            "follow-up",
+            "follow up",
+        }
+        formatted_blocks: list[str] = []
+        for line in lines:
+            if line.startswith("- "):
+                # Added a <div> wrapper here to force the new line!
+                formatted_blocks.append(f"<div style='margin-top:4px;'>&nbsp;&nbsp;&bull; {html.escape(line[2:].strip())}</div>")
+                continue
+            if ":" in line:
+                label, value = line.split(":", 1)
+                clean_label = label.strip()
+                clean_value = value.strip()
+                if clean_label.lower() in known_labels:
+                    if clean_value:
+                        formatted_blocks.append(
+                            f"<div style='margin-top:8px;'><b>{html.escape(clean_label)}:</b><br>{html.escape(clean_value)}</div>"
+                        )
+                    else:
+                        formatted_blocks.append(
+                            f"<div style='margin-top:8px;'><b>{html.escape(clean_label)}:</b></div>"
+                        )
+                else:
+                    formatted_blocks.append(
+                        f"<div style='margin-top:6px;'><b>{html.escape(clean_label)}:</b> {html.escape(clean_value)}</div>"
+                    )
+            else:
+                formatted_blocks.append(f"<div style='margin-top:6px;'>{html.escape(line)}</div>")
+        return "".join(formatted_blocks)
+
+    def set_entry(self, entry, associated_notes=None, ai_summary: str = "Generating AI summary...") -> None:
+        self._current_rock_id = entry.rock_id
+        self._current_rock_entry = entry                  # Save for the button
+        self._current_associated_notes = associated_notes # Save for the button
+
         dt = datetime.datetime.fromtimestamp(entry.ts) if entry.ts else None
         self.lbl_time.setText(f"{dt.strftime('%Y-%m-%d %H:%M:%S')}" if dt else "Unknown time")
 
@@ -597,6 +797,7 @@ class RockDetailPage(QWidget):
         vol_txt = f"{res.estimated_volume} cm³" if res.estimated_volume is not None else "N/A"
         weight_txt = res.estimated_weight if res.estimated_weight is not None else "N/A"
         self.lbl_info.setText(f"Volume: {vol_txt}\nWeight: {weight_txt}")
+        self.summary_text.setHtml(self._format_ai_summary_html(ai_summary))
 
         # --- NEW: Populate Voice Notes ---
         if associated_notes:
@@ -610,6 +811,10 @@ class RockDetailPage(QWidget):
             self.notes_text.setPlainText(notes_str.strip())
         else:
             self.notes_text.setPlainText("No associated voice notes.")
+
+    def set_ai_summary(self, rock_id: str, summary: str) -> None:
+        if self._current_rock_id == rock_id:
+            self.summary_text.setHtml(self._format_ai_summary_html(summary))
 
 
 class VoiceNoteDetailPage(QWidget):
@@ -773,8 +978,12 @@ class AppWindow(QMainWindow):
         self.voice_loading = VoiceLoadingPage()
         self.voice = VoicePage()
         self.trip = TripLoadPage()
+        self.mission_detail = MissionDetailPage()
+        self.mission_create = MissionCreatePage()
         self.rock_detail = RockDetailPage()
         self.voice_note_detail = VoiceNoteDetailPage()
+        self._selected_mission_id = None
+        self._mission_name_typing_mode = False
 
         self.stack.addWidget(self.home)
         self.stack.addWidget(self.loading)
@@ -784,6 +993,8 @@ class AppWindow(QMainWindow):
         self.stack.addWidget(self.voice_loading)
         self.stack.addWidget(self.voice)
         self.stack.addWidget(self.trip)
+        self.stack.addWidget(self.mission_detail)
+        self.stack.addWidget(self.mission_create)
         self.stack.addWidget(self.rock_detail)
         self.stack.addWidget(self.voice_note_detail)
 
@@ -822,7 +1033,16 @@ class AppWindow(QMainWindow):
     def _on_reset_context_clicked(self) -> None:
         self.vm.reset_voice_context()
         self.voice.btn_reset.hide()
-        
+
+    def _on_force_summary_clicked(self) -> None:
+        entry = getattr(self.rock_detail, "_current_rock_entry", None)
+        notes = getattr(self.rock_detail, "_current_associated_notes", None)
+        if entry and notes:
+            # Show a loading message
+            self.rock_detail.summary_text.setHtml(self.rock_detail._format_ai_summary_html("Generating AI summary..."))
+            # Force the ViewModel to bypass the cache
+            self.vm.request_rock_summary(entry, notes, force=True)    
+   
     def _update_voice_buttons(self, mode: str) -> None:
         """Dynamically hides/shows Voice to Text buttons based on the current phase."""
         v = self.voice
@@ -867,11 +1087,11 @@ class AppWindow(QMainWindow):
         if abs(self._shake_offset) >= 4:
             self._shake_direction *= -1
             
-        for i in range(self.trip.list.count()):
-            item_dict = self.trip._timeline_data[i]
+        for i in range(self.mission_detail.list.count()):
+            item_dict = self.mission_detail._timeline_data[i]
             if item_dict["type"] == "rock":
-                list_item = self.trip.list.item(i)
-                widget = self.trip.list.itemWidget(list_item)
+                list_item = self.mission_detail.list.item(i)
+                widget = self.mission_detail.list.itemWidget(list_item)
                 if widget:
                     # Alternating padding creates the "shake"
                     widget.setContentsMargins(5 + self._shake_offset, 2, 5 - self._shake_offset, 2)
@@ -883,10 +1103,10 @@ class AppWindow(QMainWindow):
             self._shake_timer.stop()
             self._shake_timer = None
             
-        if hasattr(self, "trip") and hasattr(self.trip, "list"):
-            for i in range(self.trip.list.count()):
-                list_item = self.trip.list.item(i)
-                widget = self.trip.list.itemWidget(list_item)
+        if hasattr(self, "mission_detail") and hasattr(self.mission_detail, "list"):
+            for i in range(self.mission_detail.list.count()):
+                list_item = self.mission_detail.list.item(i)
+                widget = self.mission_detail.list.itemWidget(list_item)
                 if widget:
                     widget.setContentsMargins(5, 2, 5, 2)
     
@@ -920,17 +1140,8 @@ class AppWindow(QMainWindow):
         shortcut_quit = QShortcut(QKeySequence("Ctrl+C"), self)
         shortcut_quit.activated.connect(self._quit_application)
         
-    def _on_rock_clicked(self, item) -> None:
-        index = self.trip.list.row(item)
-        summary = self.vm.store.list_rocks()
-        if 0 <= index < len(summary):
-            entry = summary[index]
-            self.rock_detail.set_entry(entry)
-            self.stack.setCurrentWidget(self.rock_detail)
-
-    def _on_virtual_key_pressed(self, key: str) -> None:
-        cursor = self.voice.text.textCursor()
-        
+    def _apply_virtual_key_to_text_edit(self, editor: QTextEdit, key: str) -> None:
+        cursor = editor.textCursor()
         if key == "⌫":
             cursor.deletePreviousChar()
         elif key == "Space":
@@ -945,24 +1156,37 @@ class AppWindow(QMainWindow):
             cursor.movePosition(QTextCursor.Down)
         else:
             cursor.insertText(key)
-            
-        self.voice.text.setTextCursor(cursor)
-        self.voice.text.setFocus()
-        self.vm.transcription_text = self.voice.text.toPlainText()
-        
-        # --- SMART AUTO-SHIFT LOGIC ---
-        # Grab all the text leading up to the cursor's current position
-        text_so_far = self.voice.text.toPlainText()[:cursor.position()]
-        
+        editor.setTextCursor(cursor)
+        editor.setFocus()
+
+    def _sync_keyboard_shift(self, editor: QTextEdit, keyboard) -> None:
+        cursor = editor.textCursor()
+        text_so_far = editor.toPlainText()[:cursor.position()]
+
         if len(text_so_far) == 0:
-            # If the box is completely empty, capitalize the first letter!
-            self.inline_keyboard.set_shift_state(1)
+            keyboard.set_shift_state(1)
         elif len(text_so_far) >= 2 and text_so_far[-2:] in [". ", "? ", "! "]:
-            # If the last two characters were punctuation + space, capitalize!
-            self.inline_keyboard.set_shift_state(1)
+            keyboard.set_shift_state(1)
         elif len(text_so_far) >= 1 and text_so_far[-1] == "\n":
-            # If they just went to a new line, capitalize!
-            self.inline_keyboard.set_shift_state(1)
+            keyboard.set_shift_state(1)
+        else:
+            keyboard.set_shift_state(0)
+
+    def _on_virtual_key_pressed(self, key: str) -> None:
+        self._apply_virtual_key_to_text_edit(self.voice.text, key)
+        self.vm.transcription_text = self.voice.text.toPlainText()
+        self._sync_keyboard_shift(self.voice.text, self.inline_keyboard)
+
+    def _on_mission_key_pressed(self, key: str) -> None:
+        if not self._mission_name_typing_mode:
+            self._mission_name_typing_mode = True
+            self.vm.stop_mission_name_recording(abort=True)
+        self._apply_virtual_key_to_text_edit(self.mission_create.text, key)
+        self._sync_keyboard_shift(self.mission_create.text, self.mission_keyboard)
+        self._update_mission_create_button()
+
+    def _update_mission_create_button(self) -> None:
+        self.mission_create.btn_create.setEnabled(bool(self.mission_create.text.toPlainText().strip()))
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key_F11:
@@ -1037,11 +1261,19 @@ class AppWindow(QMainWindow):
         
 
         self.trip.btn_back.clicked.connect(self.vm.go_home)
+        self.trip.btn_create_new_mission.clicked.connect(self._open_create_mission_page)
         self.trip.btn_delete_all.clicked.connect(self._on_delete_all_clicked)
-        # --- NEW: Unified Timeline Click ---
-        self.trip.list.itemClicked.connect(self._on_timeline_clicked)
-        self.rock_detail.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(self.trip))
-        self.voice_note_detail.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(self.trip))
+        self.trip.list.itemClicked.connect(self._on_mission_clicked)
+
+        self.mission_detail.btn_back.clicked.connect(self._show_trip_home)
+        self.mission_detail.list.itemClicked.connect(self._on_timeline_clicked)
+
+        self.mission_create.btn_create.clicked.connect(self._on_create_mission_clicked)
+        self.mission_create.btn_cancel.clicked.connect(self._show_trip_home)
+
+        self.rock_detail.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(self.mission_detail))
+        self.rock_detail.btn_force_summary.clicked.connect(self._on_force_summary_clicked)
+        self.voice_note_detail.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(self.mission_detail))
         
     def _on_stop_or_edit_clicked(self) -> None:
         if self.voice.btn_stop.text() == "Stop":
@@ -1065,9 +1297,12 @@ class AppWindow(QMainWindow):
         self.vm.classification_changed.connect(self._on_classification)
         self.vm.volume_display_changed.connect(self._on_volume_display)
         self.vm.transcription_changed.connect(self._on_transcription)
+        self.vm.mission_name_transcription_changed.connect(self._on_mission_name_transcription)
+        self.vm.rock_summary_changed.connect(self._on_rock_summary_changed)
         self.vm.trip_changed.connect(self._on_trip)
         self.vm.error.connect(self._on_error)
         self.vm.recording_status_changed.connect(self._on_recording_status_changed)
+        self.vm.mission_name_recording_status_changed.connect(self._on_mission_name_recording_status_changed)
         self.vm.two_step_capture_message.connect(self.camera_preview.lbl_step.setText)
         self.vm.camera.frame_ready.connect(self._on_camera_frame)
         
@@ -1083,6 +1318,16 @@ class AppWindow(QMainWindow):
         self.inline_keyboard.hide()
         
         self.inline_keyboard.key_pressed.connect(self._on_virtual_key_pressed)
+
+        self.mission_keyboard = Keyboard()
+        self.mission_keyboard.hide()
+        self.mission_keyboard.btn_close.clicked.connect(self._show_trip_home)
+        mission_layout = self.mission_create.layout()
+        if mission_layout:
+            mission_layout.addWidget(self.mission_keyboard)
+        self.mission_keyboard.key_pressed.connect(self._on_mission_key_pressed)
+        self.mission_create.text.textChanged.connect(self._update_mission_create_button)
+        self._update_mission_create_button()
         
     def _on_camera_frame(self, image: QImage) -> None:
         if self.vm.state == AppStateType.CAMERA_PREVIEW:
@@ -1123,6 +1368,8 @@ class AppWindow(QMainWindow):
                 self.stack.setCurrentWidget(mapping[state])
 
         if state == AppStateType.HOME:
+            self.vm.stop_mission_name_recording(abort=True)
+            self.mission_keyboard.hide()
             # FIX: Check vtt_active instead of the background process state!
             if not getattr(self.vm, 'vtt_active', False):
                 self.voice.text.clear()
@@ -1135,15 +1382,21 @@ class AppWindow(QMainWindow):
                 )
 
         elif state == AppStateType.CAMERA_PREVIEW:
+            self.vm.stop_mission_name_recording(abort=True)
+            self.mission_keyboard.hide()
             # From HEAD: Updated label text
             self.camera_preview.lbl_step.setText("Capture First View")
             self.vm.start_camera_stream(0, 0, 0, 0)
 
         elif state == AppStateType.CONFIRM_CAPTURES:
+            self.vm.stop_mission_name_recording(abort=True)
+            self.mission_keyboard.hide()
             top_path, side_path = self.vm.get_review_image_paths()
             self.capture_review.set_images(top_path, side_path)
 
         elif state == AppStateType.VOICE_TO_TEXT:
+            self.vm.stop_mission_name_recording(abort=True)
+            self.mission_keyboard.hide()
             self.inline_keyboard.hide()       
             self.inline_keyboard.set_shift_state(0)
             self.voice.text.setReadOnly(True)
@@ -1159,6 +1412,9 @@ class AppWindow(QMainWindow):
                 self._update_voice_buttons("review")
             else:
                 self._update_voice_buttons("initial")
+
+        elif state == AppStateType.TRIP_LOAD:
+            self._show_trip_home()
             
     def _on_classification(self, result: ClassificationResult) -> None:
         has_side = result.side_image_path and os.path.exists(result.side_image_path)
@@ -1239,144 +1495,325 @@ class AppWindow(QMainWindow):
 
         self.voice.btn_save.setEnabled(bool(text.strip()))
 
-    def _on_trip(self, summary: TripSummary) -> None:
+    def _on_mission_name_transcription(self, text: str) -> None:
+        if self._mission_name_typing_mode:
+            return
+        if "No audio recorded" in text or "STREAMING COMPLETE" in text:
+            return
+        self.mission_create.text.setPlainText(text)
+        cursor = self.mission_create.text.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self.mission_create.text.setTextCursor(cursor)
+        self._update_mission_create_button()
+
+    def _on_rock_summary_changed(self, rock_id: str, summary: str) -> None:
+        self.rock_detail.set_ai_summary(rock_id, summary)
+
+    def _format_trip_totals(self, total_volume: float, total_weight: float) -> str:
+        total_vol = f"{total_volume:.2f}" if total_volume else "0.00"
+        total_wt = f"{total_weight:.2f}" if total_weight else "0.00"
+        return f"Total volume: {total_vol} cm³   Total weight: {total_wt} kg"
+
+    def _find_mission_summary(self, mission_id: str) -> MissionSummary | None:
+        summary = getattr(self.trip, "_summary", None)
+        if not summary:
+            return None
+        for mission_summary in summary.missions:
+            if mission_summary.mission.mission_id == mission_id:
+                return mission_summary
+        return None
+
+    def _show_trip_home(self) -> None:
+        self.vm.stop_mission_name_recording(abort=True)
+        self.mission_keyboard.hide()
+        self.stack.setCurrentWidget(self.trip)
+
+    def _open_create_mission_page(self) -> None:
         self._stop_rock_assignment()
-        self.trip.list.clear()
-        self.trip._timeline_data = []
-        self.trip._summary = summary
-        
-        rocks_sorted = sorted(summary.rocks, key=lambda r: r.ts)
-        
-        combined = []
-        for r in summary.rocks:
-            combined.append({"type": "rock", "ts": r.ts, "data": r})
-            
-        for n in summary.voice_notes:
-            note_ts = n.get("ts", 0)
-            note_session = n.get("session_id")
-            explicit_rock_id = n.get("rock_id")
-            
+        self.vm.stop_mission_name_recording(abort=True)
+        self._mission_name_typing_mode = False
+        self.mission_create.text.clear()
+        self.mission_create.lbl_recording_status.setText("Recording... speak the mission name")
+        self.mission_create.text.setFocus()
+        self.mission_keyboard.show()
+        self.mission_keyboard.set_shift_state(1)
+        self._update_mission_create_button()
+        self.stack.setCurrentWidget(self.mission_create)
+        self.vm.start_mission_name_recording()
+
+    def _open_mission_detail(self, mission_summary: MissionSummary) -> None:
+        self._selected_mission_id = mission_summary.mission.mission_id
+        self._render_mission_detail(mission_summary)
+        self.stack.setCurrentWidget(self.mission_detail)
+
+    def _build_mission_timeline_items(self, mission_summary: MissionSummary) -> list[dict]:
+        rocks_sorted = sorted(mission_summary.rocks, key=lambda r: r.ts)
+        combined = [{"type": "rock", "ts": r.ts, "data": r} for r in mission_summary.rocks]
+
+        for note in mission_summary.voice_notes:
+            note_ts = note.get("ts", 0)
+            explicit_rock_id = note.get("rock_id")
+
             owning_rock = None
             if explicit_rock_id:
-                for r in summary.rocks:
-                    if r.rock_id == explicit_rock_id:
-                        owning_rock = r
+                for rock in mission_summary.rocks:
+                    if rock.rock_id == explicit_rock_id:
+                        owning_rock = rock
                         break
             else:
-                for r in reversed(rocks_sorted):
-                    if r.ts <= note_ts:
-                        owning_rock = r
+                for rock in reversed(rocks_sorted):
+                    if rock.ts <= note_ts:
+                        owning_rock = rock
                         break
-                    
-            is_orphan = False
+
             if not owning_rock:
-                is_orphan = True
-            elif explicit_rock_id is None and note_session != getattr(self, "session_start_time", 0) and owning_rock.ts < getattr(self, "session_start_time", 0):
-                is_orphan = True
-                
-            if is_orphan:
-                combined.append({"type": "voice", "ts": note_ts, "data": n})
-            
-        combined.sort(key=lambda x: x["ts"], reverse=True)
-        
+                combined.append({"type": "voice", "ts": note_ts, "data": note})
+
+        combined.sort(key=lambda item: item["ts"], reverse=True)
+        return combined
+
+    def _render_mission_detail(self, mission_summary: MissionSummary) -> None:
         from PySide6.QtWidgets import QListWidgetItem
-        
+
+        self.mission_detail._summary = mission_summary
+        self.mission_detail._timeline_data = []
+        self.mission_detail.list.clear()
+        self.mission_detail.lbl_title.setText(mission_summary.mission.name)
+        if mission_summary.mission.mission_id == getattr(self.vm, "active_mission_id", None):
+            self.mission_detail.lbl_status.setText("Current mission")
+        else:
+            self.mission_detail.lbl_status.setText("")
+        self.mission_detail.lbl_totals.setText(
+            self._format_trip_totals(mission_summary.total_volume, mission_summary.total_weight)
+        )
+
+        combined = self._build_mission_timeline_items(mission_summary)
+
         for item in combined:
             ts = item["ts"]
             dt = datetime.datetime.fromtimestamp(ts) if ts else None
             time_str = dt.strftime("%Y-%m-%d %H:%M:%S") if dt else "Unknown"
-            
+
             if item["type"] == "rock":
-                r = item["data"]
-                label = r.result.label
-                conf = int(r.result.confidence * 100)
-                # Shrunk timestamp, grayed out slightly, removed "ROCK:" and bolded the label
+                rock = item["data"]
+                label = rock.result.label
+                conf = int(rock.result.confidence * 100)
                 display_text = f"🪨 <span style='font-size: 13px; color: #555;'>[{time_str}]</span>&nbsp;&nbsp;<b>{label.upper()}</b> ({conf}%)"
             else:
-                n = item["data"]
-                cleaned = n.get("cleaned", n.get("transcript", ""))
-                # Cut the preview length slightly shorter to prevent overflow
+                note = item["data"]
+                cleaned = note.get("cleaned", note.get("transcript", ""))
                 short_text = cleaned[:60] + "..." if len(cleaned) > 60 else cleaned
-                # Shrunk timestamp, grayed out slightly, removed "NOTE:"
                 display_text = f"🎤 <span style='font-size: 13px; color: #555;'>[{time_str}]</span>&nbsp;&nbsp;{short_text}"
-                
+
             list_item = QListWidgetItem()
-            self.trip.list.addItem(list_item)
-            
+            self.mission_detail.list.addItem(list_item)
+
             widget = QWidget()
             row_layout = QHBoxLayout(widget)
             row_layout.setContentsMargins(5, 2, 5, 2)
-            
-            # --- FIX: Using a Button designed for native QMenus ---
+
+            lbl = QLabel(display_text)
+            lbl.setStyleSheet("font-size: 16px;")
+            lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+
             dot_btn = QPushButton("⋮")
             dot_btn.setFixedSize(30, 30)
-            # We hide the default dropdown arrow using `menu-indicator`
             dot_btn.setStyleSheet("""
                 QPushButton { font-size: 24px; font-weight: bold; border: none; background: transparent; color: #344f41; }
                 QPushButton::menu-indicator { image: none; width: 0px; }
             """)
-            
-            self._attach_menu_to_button(dot_btn, item)
-            
+            self._attach_timeline_menu_to_button(dot_btn, item)
+
+            row_layout.addWidget(lbl, stretch=1)
+            row_layout.addWidget(dot_btn)
+
+            list_item.setSizeHint(widget.sizeHint())
+            self.mission_detail.list.setItemWidget(list_item, widget)
+            self.mission_detail._timeline_data.append(item)
+
+    def _on_trip(self, summary: TripSummary) -> None:
+        self._stop_rock_assignment()
+        self.trip.list.clear()
+        self.trip._summary = summary
+        self.trip._missions_data = summary.missions
+
+        from PySide6.QtWidgets import QListWidgetItem
+
+        current_mission_name = "--"
+        for mission_summary in summary.missions:
+            if mission_summary.mission.mission_id == summary.current_mission_id:
+                current_mission_name = mission_summary.mission.name
+                break
+        self.trip.lbl_current_mission.setText(f"Current mission: {current_mission_name}")
+
+        for mission_summary in summary.missions:
+            dt = datetime.datetime.fromtimestamp(mission_summary.mission.updated_ts)
+            time_str = dt.strftime("%Y-%m-%d %H:%M")
+            item_count = len(self._build_mission_timeline_items(mission_summary))
+            badge = "  • CURRENT" if mission_summary.mission.mission_id == summary.current_mission_id else ""
+            display_text = (
+                f"<b>{mission_summary.mission.name}</b>{badge}<br>"
+                f"<span style='font-size: 13px; color: #555;'>Updated {time_str}   Items: {item_count}</span>"
+            )
+
+            list_item = QListWidgetItem()
+            self.trip.list.addItem(list_item)
+
+            widget = QWidget()
+            row_layout = QHBoxLayout(widget)
+            row_layout.setContentsMargins(5, 2, 5, 2)
+
             lbl = QLabel(display_text)
             lbl.setStyleSheet("font-size: 16px;")
-            lbl.setAttribute(Qt.WA_TransparentForMouseEvents) 
-            
-            # Dots on the Left, Text on the Right
-            row_layout.addWidget(dot_btn)         
-            row_layout.addWidget(lbl, stretch=1)  
-            
+            lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+
+            dot_btn = QPushButton("⋮")
+            dot_btn.setFixedSize(30, 30)
+            dot_btn.setStyleSheet("""
+                QPushButton { font-size: 24px; font-weight: bold; border: none; background: transparent; color: #344f41; }
+                QPushButton::menu-indicator { image: none; width: 0px; }
+            """)
+            self._attach_mission_menu_to_button(dot_btn, mission_summary)
+
+            row_layout.addWidget(lbl, stretch=1)
+            row_layout.addWidget(dot_btn)
+
             list_item.setSizeHint(widget.sizeHint())
             self.trip.list.setItemWidget(list_item, widget)
-            self.trip._timeline_data.append(item)
-
-        total_vol = f"{summary.total_volume:.2f}" if summary.total_volume else "0.00"
-        total_wt = f"{summary.total_weight:.2f}" if summary.total_weight else "0.00"
-        self.trip.lbl_totals.setText(f"Total volume: {total_vol} cm³   Total weight: {total_wt} kg")
-
-    def _attach_menu_to_button(self, button, item_dict):
-        from PySide6.QtWidgets import QMenu, QWidgetAction
         
+        if self._selected_mission_id:
+            selected_summary = self._find_mission_summary(self._selected_mission_id)
+            if selected_summary:
+                self._render_mission_detail(selected_summary)
+            elif self.stack.currentWidget() in {self.mission_detail, self.rock_detail, self.voice_note_detail}:
+                self._selected_mission_id = None
+                self._show_trip_home()
+
+    def _attach_mission_menu_to_button(self, button, mission_summary: MissionSummary):
+        from PySide6.QtWidgets import QMenu, QWidgetAction
+
         menu = QMenu(button)
         menu.setStyleSheet("QMenu { background-color: #cbd2c5; border: 2px solid #344f41; }")
-        
+
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        
+
+        btn_current = QPushButton("MAKE CURRENT MISSION")
+        btn_current.setStyleSheet("""
+            QPushButton { font-size: 18px; color: #344f41; padding: 12px 20px; border: none; text-align: left; }
+            QPushButton:hover { background-color: #95b7dc; }
+        """)
+        btn_current.clicked.connect(
+            lambda checked=False, mission_id=mission_summary.mission.mission_id, m=menu: [self.vm.make_mission_current(mission_id), m.close()]
+        )
+        layout.addWidget(btn_current)
+
+        btn_delete = QPushButton("DELETE MISSION")
+        btn_delete.setStyleSheet("""
+            QPushButton { font-size: 18px; color: #cc0000; padding: 12px 20px; border: none; text-align: left; font-weight: bold; }
+            QPushButton:hover { background-color: #95b7dc; }
+        """)
+        btn_delete.clicked.connect(
+            lambda checked=False, mission_id=mission_summary.mission.mission_id, mission_name=mission_summary.mission.name, m=menu:
+                [self._delete_mission(mission_id, mission_name), m.close()]
+        )
+        layout.addWidget(btn_delete)
+
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(container)
+        menu.addAction(action)
+        button.clicked.connect(lambda checked=False, b=button, m=menu: self._show_bounded_menu(b, m))
+
+    def _attach_timeline_menu_to_button(self, button, item_dict):
+        from PySide6.QtWidgets import QMenu, QWidgetAction
+
+        menu = QMenu(button)
+        menu.setStyleSheet("QMenu { background-color: #cbd2c5; border: 2px solid #344f41; }")
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
         if item_dict["type"] == "rock":
             btn_current = QPushButton("Make current")
             btn_current.setStyleSheet("""
-                QPushButton { font-size: 18px; color: #344f41; padding: 12px 20px; border: none; text-align: left; } 
+                QPushButton { font-size: 18px; color: #344f41; padding: 12px 20px; border: none; text-align: left; }
                 QPushButton:hover { background-color: #95b7dc; }
             """)
             btn_current.clicked.connect(lambda checked=False, d=item_dict["data"], m=menu: [self.vm.make_rock_current(d), m.close()])
             layout.addWidget(btn_current)
-            
-        # --- NEW: Assignment button for Voice Notes ---
+
         if item_dict["type"] == "voice":
             btn_assign = QPushButton("Add to classification")
             btn_assign.setStyleSheet("""
-                QPushButton { font-size: 18px; color: #344f41; padding: 12px 20px; border: none; text-align: left; } 
+                QPushButton { font-size: 18px; color: #344f41; padding: 12px 20px; border: none; text-align: left; }
                 QPushButton:hover { background-color: #95b7dc; }
             """)
             btn_assign.clicked.connect(lambda checked=False, i=item_dict, m=menu: [self._start_rock_assignment(i["data"].get("ts")), m.close()])
             layout.addWidget(btn_assign)
-            
+
         btn_delete = QPushButton("Delete")
         btn_delete.setStyleSheet("""
-            QPushButton { font-size: 18px; color: #cc0000; padding: 12px 20px; border: none; text-align: left; font-weight: bold; } 
+            QPushButton { font-size: 18px; color: #cc0000; padding: 12px 20px; border: none; text-align: left; font-weight: bold; }
             QPushButton:hover { background-color: #95b7dc; }
         """)
         btn_delete.clicked.connect(lambda checked=False, i=item_dict, m=menu: [self._delete_timeline_item(i), m.close()])
         layout.addWidget(btn_delete)
-        
+
         action = QWidgetAction(menu)
         action.setDefaultWidget(container)
         menu.addAction(action)
-        button.setMenu(menu)
-    
+        button.clicked.connect(lambda checked=False, b=button, m=menu: self._show_bounded_menu(b, m))
+
+    def _show_bounded_menu(self, button: QPushButton, menu) -> None:
+        menu.ensurePolished()
+        menu_size = menu.sizeHint()
+
+        preferred_pos = button.mapToGlobal(button.rect().bottomRight())
+        screen = QApplication.screenAt(preferred_pos)
+        if screen is None:
+            screen = button.screen() or QApplication.primaryScreen()
+        available = screen.availableGeometry() if screen else self.geometry()
+
+        x = preferred_pos.x() - menu_size.width()
+        y = preferred_pos.y()
+
+        if x < available.left():
+            x = min(
+                button.mapToGlobal(button.rect().topLeft()).x(),
+                available.right() - menu_size.width()
+            )
+        if x + menu_size.width() > available.right():
+            x = available.right() - menu_size.width()
+
+        if y + menu_size.height() > available.bottom():
+            y = button.mapToGlobal(button.rect().topLeft()).y() - menu_size.height()
+        if y < available.top():
+            y = available.top()
+
+        menu.popup(QPoint(x, y))
+
+    def _delete_mission(self, mission_id: str, mission_name: str) -> None:
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Delete Mission")
+        msg_box.setText(f'Are you sure? Clicking CONFIRM will delete the mission "{mission_name}" and all of its items permanently.')
+        msg_box.setStyleSheet("QLabel { color: #344f41; font-size: 18px; font-weight: normal; } QMessageBox { background-color: #cbd2c5; }")
+
+        btn_cancel = msg_box.addButton("CANCEL", QMessageBox.RejectRole)
+        btn_cancel.setStyleSheet("background-color: #95b7dc; color: #385573; font-weight: bold; padding: 8px;")
+
+        btn_confirm = msg_box.addButton("CONFIRM", QMessageBox.AcceptRole)
+        btn_confirm.setStyleSheet("background-color: #cc0000; color: white; font-weight: bold; padding: 8px;")
+
+        msg_box.exec()
+        if msg_box.clickedButton() == btn_confirm:
+            if mission_id == self._selected_mission_id:
+                self._selected_mission_id = None
+            self.vm.delete_mission(mission_id)
+
     def _delete_timeline_item(self, item_dict):
         if item_dict["type"] == "voice":
             msg_box = QMessageBox(self)
@@ -1396,7 +1833,6 @@ class AppWindow(QMainWindow):
                 self.vm.delete_voice_note_by_ts(item_dict["data"].get("ts"))
                 
         elif item_dict["type"] == "rock":
-            # --- NEW: Custom Dialog for Vertical Stacking ---
             dialog = QDialog(self)
             dialog.setWindowTitle("Delete Classification")
             dialog.setStyleSheet("QDialog { background-color: #cbd2c5; }")
@@ -1439,7 +1875,8 @@ class AppWindow(QMainWindow):
             elif choice[0] == "both":
                 entry = item_dict["data"]
                 associated_ts = []
-                rocks_sorted = sorted(self.trip._summary.rocks, key=lambda r: r.ts)
+                mission_summary = self.mission_detail._summary
+                rocks_sorted = sorted(mission_summary.rocks, key=lambda r: r.ts)
                 
                 next_rock_ts = float('inf')
                 for r in rocks_sorted:
@@ -1447,7 +1884,7 @@ class AppWindow(QMainWindow):
                         next_rock_ts = r.ts
                         break
                         
-                for n in self.trip._summary.voice_notes:
+                for n in mission_summary.voice_notes:
                     note_ts = n.get("ts", 0)
                     explicit_rock_id = n.get("rock_id")
                     
@@ -1457,32 +1894,33 @@ class AppWindow(QMainWindow):
                         if entry.ts <= note_ts < next_rock_ts:
                             if n.get("session_id") == entry.session_id:
                                 associated_ts.append(note_ts)
-                                
+                
                 for ts in associated_ts:
                     self.vm.store.delete_voice_note(ts)
                     
                 self.vm.delete_rock_by_id(entry.rock_id)
 
-    def _on_timeline_clicked(self, item) -> None:
+    def _on_mission_clicked(self, item) -> None:
         index = self.trip.list.row(item)
-        if 0 <= index < len(self.trip._timeline_data):
-            item_dict = self.trip._timeline_data[index]
+        if 0 <= index < len(self.trip._missions_data):
+            self._open_mission_detail(self.trip._missions_data[index])
+
+    def _on_timeline_clicked(self, item) -> None:
+        index = self.mission_detail.list.row(item)
+        if 0 <= index < len(self.mission_detail._timeline_data):
+            item_dict = self.mission_detail._timeline_data[index]
             
-            # --- NEW: Intercept clicks if we are in assignment mode ---
             if getattr(self, "_assigning_note_ts", None) is not None:
                 if item_dict["type"] == "rock":
-                    # They clicked a rock target! Link the note.
                     self.vm.assign_note_to_rock(self._assigning_note_ts, item_dict["data"].rock_id)
-                
-                # Turn off the jiggle regardless of what they clicked
                 self._stop_rock_assignment()
                 return
-            # ----------------------------------------------------------
             
             if item_dict["type"] == "rock":
                 entry = item_dict["data"]
                 associated_notes = []
-                rocks_sorted = sorted(self.trip._summary.rocks, key=lambda r: r.ts)
+                mission_summary = self.mission_detail._summary
+                rocks_sorted = sorted(mission_summary.rocks, key=lambda r: r.ts)
                 
                 next_rock_ts = float('inf')
                 for r in rocks_sorted:
@@ -1490,7 +1928,7 @@ class AppWindow(QMainWindow):
                         next_rock_ts = r.ts
                         break
                         
-                for n in self.trip._summary.voice_notes:
+                for n in mission_summary.voice_notes:
                     note_ts = n.get("ts", 0)
                     explicit_rock_id = n.get("rock_id")
                     
@@ -1500,16 +1938,37 @@ class AppWindow(QMainWindow):
                         if entry.ts <= note_ts < next_rock_ts:
                             if n.get("session_id") == entry.session_id:
                                 associated_notes.append(n)
-                                
-                associated_notes.sort(key=lambda x: x.get("ts", 0))
                 
-                self.rock_detail.set_entry(entry, associated_notes)
+                associated_notes.sort(key=lambda x: x.get("ts", 0))
+
+                initial_summary = "Generating AI summary..." if associated_notes else "No associated recordings to summarize yet."
+                self.rock_detail.set_entry(entry, associated_notes, ai_summary=initial_summary)
+                self.vm.request_rock_summary(entry, associated_notes)
                 self.stack.setCurrentWidget(self.rock_detail)
                 
             else:
                 note = item_dict["data"]
                 self.voice_note_detail.set_note(note)
                 self.stack.setCurrentWidget(self.voice_note_detail)
+
+    def _on_create_mission_clicked(self) -> None:
+        self.vm.stop_mission_name_recording(abort=True)
+        name = " ".join(self.mission_create.text.toPlainText().strip().split())
+        if not name:
+            return
+        try:
+            mission = self.vm.create_mission(name)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Name Taken", str(exc))
+            return
+        self.mission_create.text.clear()
+        self.mission_keyboard.hide()
+        self._mission_name_typing_mode = False
+        mission_summary = self._find_mission_summary(mission.mission_id)
+        if mission_summary:
+            self._open_mission_detail(mission_summary)
+        else:
+            self._show_trip_home()
 
     def _on_error(self, message: str) -> None:
         QMessageBox.warning(self, "Error", "Something went wrong. Please press escape to return to home screen.")
@@ -1532,6 +1991,14 @@ class AppWindow(QMainWindow):
             # If we are actually looking at the voice page, update the layout
             if self.stack.currentWidget() == self.voice:
                 self._update_voice_buttons("review")
+
+    def _on_mission_name_recording_status_changed(self, is_recording: bool):
+        if is_recording:
+            self.mission_create.lbl_recording_status.setText("Recording... speak the mission name")
+        elif self._mission_name_typing_mode:
+            self.mission_create.lbl_recording_status.setText("Typing mode")
+        else:
+            self.mission_create.lbl_recording_status.setText("Recording stopped")
             
 
 class Keyboard(QDialog):
@@ -1661,6 +2128,3 @@ class Keyboard(QDialog):
             self.btn_shift.setText("⇪") # Caps lock icon
             self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #4a90e2; color: white;")
                 
-
-
-
