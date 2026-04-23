@@ -35,3 +35,4 @@ build/
 *.egg-info/
 *.gguf
 led-display/models/
+led-display/models/
