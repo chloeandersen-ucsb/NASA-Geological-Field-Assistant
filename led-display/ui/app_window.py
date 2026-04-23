@@ -697,19 +697,22 @@ class RockDetailPage(QWidget):
         summary_header_layout.addStretch(1)
         summary_header_layout.addWidget(self.btn_force_summary)
         layout.addLayout(summary_header_layout)
-        # ----------------------------------------------------
 
+        # --- SUMMARY TABLE SETUP ---
         self.summary_text = QTextEdit()
         self.summary_text.setReadOnly(True)
-        self.summary_text.setFixedHeight(140)
+        self.summary_text.setMinimumHeight(180)
         self.summary_text.setStyleSheet("""
-            font-size: 16px;
-            border: 2px solid #697d6a;
-            border-radius: 8px;
-            padding: 8px;
-            background-color: #eef2eb;
+            QTextEdit {
+                font-size: 16px;
+                border: 2px solid #697d6a;
+                border-radius: 8px;
+                background-color: #eef2eb;
+                padding: 4px;
+            }
         """)
         layout.addWidget(self.summary_text)
+        # ---------------------------
 
         self.lbl_notes_title = QLabel("Associated Voice Notes:")
         self.lbl_notes_title.setStyleSheet("font-size: 18px; font-weight: 700;")
@@ -729,49 +732,46 @@ class RockDetailPage(QWidget):
         layout.addWidget(self.btn_back)
         self._current_rock_id = None
 
-    def _format_ai_summary_html(self, summary: str) -> str:
-        lines = [line.strip() for line in str(summary or "").splitlines() if line.strip()]
-        if not lines:
-            return ""
+    def _parse_summary_to_table_data(self, summary: str) -> list[tuple[str, str]]:
+        """Parses the bulleted AI string into Key/Value pairs."""
+        if not summary or "Generating AI summary" in summary or "unavailable" in summary:
+            return [("Status", summary or "No data")]
 
-        known_labels = {
-            "geological field notes",
-            "rock type",
-            "metadata",
-            "physical description",
-            "interpretation",
-            "geological interpretation",
-            "scientific significance",
-            "uncertainty",
-            "follow-up",
-            "follow up",
-        }
-        formatted_blocks: list[str] = []
+        parsed_data = []
+        lines = [line.strip() for line in str(summary).splitlines() if line.strip()]
+        
         for line in lines:
+            # Strip the leading bullet point if the AI included it
             if line.startswith("- "):
-                # Added a <div> wrapper here to force the new line!
-                formatted_blocks.append(f"<div style='margin-top:4px;'>&nbsp;&nbsp;&bull; {html.escape(line[2:].strip())}</div>")
-                continue
+                line = line[2:]
+                
+            # Split exactly at the first colon
             if ":" in line:
-                label, value = line.split(":", 1)
-                clean_label = label.strip()
-                clean_value = value.strip()
-                if clean_label.lower() in known_labels:
-                    if clean_value:
-                        formatted_blocks.append(
-                            f"<div style='margin-top:8px;'><b>{html.escape(clean_label)}:</b><br>{html.escape(clean_value)}</div>"
-                        )
-                    else:
-                        formatted_blocks.append(
-                            f"<div style='margin-top:8px;'><b>{html.escape(clean_label)}:</b></div>"
-                        )
-                else:
-                    formatted_blocks.append(
-                        f"<div style='margin-top:6px;'><b>{html.escape(clean_label)}:</b> {html.escape(clean_value)}</div>"
-                    )
+                key, value = line.split(":", 1)
+                parsed_data.append((key.strip(), value.strip()))
             else:
-                formatted_blocks.append(f"<div style='margin-top:6px;'>{html.escape(line)}</div>")
-        return "".join(formatted_blocks)
+                # Catch-all just in case the AI writes a weird sentence
+                parsed_data.append(("Note", line.strip()))
+                
+        return parsed_data
+
+    def _populate_table(self, data: list[tuple[str, str]]) -> None:
+        """Builds a strict HTML grid table for flawless word wrapping."""
+        # Use 'table_html' so we don't shadow the imported 'html' module!
+        table_html = '<table width="100%" border="1" cellspacing="0" cellpadding="8" bordercolor="#cbd2c5">'
+        
+        for key, value in data:
+            table_html += '<tr>'
+            # Left Column (35% width, bold, top-aligned)
+            table_html += f'<td width="35%" valign="top"><b>{html.escape(key)}:</b></td>'
+            # Right Column (65% width, normal text, top-aligned)
+            table_html += f'<td width="65%" valign="top">{html.escape(value)}</td>'
+            table_html += '</tr>'
+            
+        table_html += '</table>'
+        
+        # Inject the HTML table into the text widget
+        self.summary_text.setHtml(table_html)
 
     def set_entry(self, entry, associated_notes=None, ai_summary: str = "Generating AI summary...") -> None:
         self._current_rock_id = entry.rock_id
@@ -803,9 +803,13 @@ class RockDetailPage(QWidget):
         vol_txt = f"{res.estimated_volume} cm³" if res.estimated_volume is not None else "N/A"
         weight_txt = res.estimated_weight if res.estimated_weight is not None else "N/A"
         self.lbl_info.setText(f"Volume: {vol_txt}\nWeight: {weight_txt}")
-        self.summary_text.setHtml(self._format_ai_summary_html(ai_summary))
+        
+        # --- NEW: Parse and populate the table instead of HTML ---
+        table_data = self._parse_summary_to_table_data(ai_summary)
+        self._populate_table(table_data)
+        # ---------------------------------------------------------
 
-        # --- NEW: Populate Voice Notes ---
+        # --- Populate Voice Notes ---
         if associated_notes:
             notes_str = ""
             for n in associated_notes:
@@ -820,7 +824,8 @@ class RockDetailPage(QWidget):
 
     def set_ai_summary(self, rock_id: str, summary: str) -> None:
         if self._current_rock_id == rock_id:
-            self.summary_text.setHtml(self._format_ai_summary_html(summary))
+            table_data = self._parse_summary_to_table_data(summary)
+            self._populate_table(table_data)
 
 
 class VoiceNoteDetailPage(QWidget):
