@@ -1344,30 +1344,30 @@ class ViewModel(QObject):
         self.recording_status_changed.emit(False)
         self.go_home()
 
-    def _on_transcription_token(self, chunk: str) -> None:
-        import sys
-        print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
-
-        if self._transcription_target == "mission":
-            if not self._mission_name_accept_transcript:
-                return
-            self.mission_name_text += chunk.strip() + "\n"
-            self.mission_name_transcription_changed.emit(self.mission_name_text)
-            return
-
-        self.transcription_text += chunk.strip() + "\n"
-
-        print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
-        self.transcription_changed.emit(self.transcription_text)
-
     # def _on_transcription_token(self, chunk: str) -> None:
     #     import sys
     #     print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
-    #     # if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
-    #     #     self._set_state(AppStateType.VOICE_TO_TEXT)
-    #     self.transcription_text += chunk
+
+    #     if self._transcription_target == "mission":
+    #         if not self._mission_name_accept_transcript:
+    #             return
+    #         self.mission_name_text += chunk.strip() + "\n"
+    #         self.mission_name_transcription_changed.emit(self.mission_name_text)
+    #         return
+
+    #     self.transcription_text += chunk.strip() + "\n"
+
     #     print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
     #     self.transcription_changed.emit(self.transcription_text)
+
+    def _on_transcription_token(self, chunk: str) -> None:
+        import sys
+        print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
+        # if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
+        #     self._set_state(AppStateType.VOICE_TO_TEXT)
+        self.transcription_text += chunk
+        print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
+        self.transcription_changed.emit(self.transcription_text)
 
     def _on_transcription_completed(self, final_text: str) -> None:
         import sys

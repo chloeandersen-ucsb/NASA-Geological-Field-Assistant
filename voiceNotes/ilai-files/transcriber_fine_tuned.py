@@ -46,12 +46,14 @@ PRINT_SILENCE = True
 spell = SpellChecker()
 
 GEOLOGY_TRIGGERS = { 
-    "rock", "stone", "sample", "specimen", "mineral", "crystal",
-    "sediment", "magma", "lava", "ash", "outcrop", "formation",
-    "granite", "basalt", "gneiss", "schist", 
-    "luster", "grain", "fine-grained", "coarse", "foliated",
-    "vesicular", "porous", "crystalline", "volcanic",
+    "rock", "sample", "specimen", "mineral", "crystal", "crystals",
+    "sediment", "lava", "ash", "crater",
+    "granite", "basalt", "gneiss", "schist", "olivine", "magnesium", "underground",
+    "luster", "fine-grained", "coarse", "foliated",
+    "vesicular", "porous", "crystalline", "volcanic", "space"
 }
+
+spell.word_frequency.load_words(list(GEOLOGY_TRIGGERS))
 
 def has_geology_context(words, index, window=3):
     start = max(0, index - window)
@@ -66,50 +68,71 @@ def has_geology_context(words, index, window=3):
 def multimodal_correction(transcript, visual_keywords):
     if not transcript: return ""
 
-    # --- THE FIX: Break multi-word labels into individual words ---
-    expanded_context = []
+    # 1. MASTER TARGET LIST
+    targets = []
     for phrase in visual_keywords:
-        # Splits "basalt pigeonite" into ["basalt", "pigeonite"]
-        expanded_context.extend(phrase.split())
-    
-    # Remove duplicates (e.g., if context was ["basalt", "basalt pigeonite"])
-    expanded_context = list(set(expanded_context))
+        targets.append(phrase.lower())
+        targets.extend(phrase.lower().split())
+    targets.extend(list(GEOLOGY_TRIGGERS))
+    targets = list(set(targets))
 
-    blob = TextBlob(transcript)
-    blob_tags = blob.tags
-    words = transcript.split()
+    # --- THE SAFE STUTTER & GARBAGE FILTER ---
+    raw_words = transcript.split()
+    words = []
+    for w in raw_words:
+        clean = w.lower().strip(".,?!")
+        # Kill consecutive model stutters (e.g., "magnesium magnesium")
+        if words and clean == words[-1].lower().strip(".,?!"):
+            continue
+        # Kill stray consonants (allow only a, i, o)
+        if len(clean) == 1 and clean not in ["a", "i", "o"]:
+            continue
+        words.append(w)
+
     corrected_words = []
-    
-    for i, word in enumerate(words):
-        best_candidate = word
-        clean_word = word.lower().strip(".,?!")
-        current_tag = blob_tags[i][1] if i < len(blob_tags) else "XX"
-        prev_tag = blob_tags[i-1][1] if i > 0 and i-1 < len(blob_tags) else "XX"
-        
-        # We now loop over the split words ("basalt", "pigeonite") instead of the full phrase
-        for visual_context in expanded_context:
-            context_clean = visual_context.lower()
-            sounds_alike = (jellyfish.metaphone(clean_word) == jellyfish.metaphone(context_clean))
-            spelling_score = jellyfish.jaro_winkler_similarity(clean_word, context_clean)
-            is_match = (sounds_alike or spelling_score > 0.85)
-            
-            if is_match:
-                if i+1 < len(words):
-                    next_word_clean = words[i+1].lower().strip(".,?!")
-                    next_sounds_alike = (jellyfish.metaphone(next_word_clean) == jellyfish.metaphone(context_clean))
-                    if current_tag.startswith("JJ") and next_sounds_alike:
-                        best_candidate = word 
-                        break
-                if not current_tag.startswith("JJ") or has_geology_context(words, i):
-                    # Uses the single word (e.g., "basalt") instead of the whole phrase
-                    best_candidate = visual_context 
-                    break
-                if current_tag.startswith("JJ") and prev_tag.startswith("JJ"):
-                    best_candidate = visual_context
-                    break
+    skip_next = 0
+
+    for i in range(len(words)):
+        if skip_next > 0:
+            skip_next -= 1
+            continue
+
+        best_match = None
+        max_skip = 0
+
+        # 2. SLIDING N-GRAM WINDOW
+        for window_size in [3, 2, 1]:
+            if i + window_size <= len(words):
+                chunk = "".join(words[i:i+window_size]).lower().strip(".,?!")
+                
+                for target in targets:
+                    target_squished = target.replace(" ", "")
+                    spelling_score = jellyfish.jaro_winkler_similarity(chunk, target_squished)
+                    sounds_alike = (jellyfish.metaphone(chunk) == jellyfish.metaphone(target_squished))
                     
-        corrected_words.append(best_candidate)
-        
+                    # Safe threshold! No more "outcrop" hallucinations.
+                    threshold = 0.88 if len(target_squished) <= 4 else 0.78
+                    
+                    if sounds_alike or spelling_score > threshold:
+                        best_match = target
+                        max_skip = window_size - 1
+                        break
+                
+                if best_match:
+                    break
+
+        if best_match:
+            corrected_words.append(best_match)
+            skip_next = max_skip
+        else:
+            # 3. SPELLCHECKER FALLBACK
+            clean_w = words[i].lower().strip(".,?!")
+            if clean_w and clean_w not in spell:
+                corrected = spell.correction(clean_w)
+                corrected_words.append(corrected if corrected else words[i])
+            else:
+                corrected_words.append(words[i])
+            
     return " ".join(corrected_words)
 
 # ------------------------------------------------------------------
@@ -148,42 +171,45 @@ def rms(x):
     return np.sqrt(np.mean(np.square(x.astype(np.float64))))
 
 def smart_merge(final_text, new_chunk):
-    # Clean up lingering spaces and handle empty strings
+    """Now returns a TUPLE: (full_merged_text, entirely_new_suffix)"""
     final_text = final_text.strip()
     new_chunk = new_chunk.strip()
     
-    if not final_text: return new_chunk
-    if not new_chunk: return final_text
+    if not final_text: return new_chunk, new_chunk
+    if not new_chunk: return final_text, ""
+
+    old_words = final_text.split()
+    new_words = new_chunk.split()
+
+    # --- 1. THE STUTTER KILLER ---
+    # Instantly drop exact duplicate words passing between chunks
+    if old_words and new_words and old_words[-1].lower() == new_words[0].lower():
+        new_words = new_words[1:]
+        if not new_words: return final_text, ""
+
+    # --- 2. LIST-BASED SEQUENCE MATCHER ---
+    # Grab the last 15 words to search for the overlap
+    search_window = old_words[-15:]
     
-    # Restrict the search zone to the last 80 characters
-    search_zone = final_text[-80:] if len(final_text) > 80 else final_text
+    # difflib works on lists of strings! It will find the longest sequence of identical words.
+    s = difflib.SequenceMatcher(None, [w.lower() for w in search_window], [w.lower() for w in new_words])
+    match = s.find_longest_match(0, len(search_window), 0, len(new_words))
     
-    # --- RULE 3: The Ghost Tail Filter ---
-    if new_chunk in search_zone:
-        return final_text
-    
-    # Find the Longest Common Substring (The Nucleus)
-    s = difflib.SequenceMatcher(None, search_zone, new_chunk)
-    match = s.find_longest_match(0, len(search_zone), 0, len(new_chunk))
-    
-    # --- RULE 2: Apply the 4-Character Nucleus Merge ---
-    if match.size >= 4:
-        # 1. Grab the clean nucleus
-        overlap_str = search_zone[match.a : match.a + match.size]
+    # If we find an overlap of at least 2 words (or 1 word if the new audio chunk is tiny)
+    if match.size >= 2 or (match.size == 1 and len(new_words) <= 3):
+        absolute_chop_idx = len(old_words) - len(search_window) + match.a
         
-        # 2. Grab everything in the OLD text BEFORE the nucleus
-        absolute_chop = len(final_text) - len(search_zone) + match.a
-        prefix = final_text[:absolute_chop]
+        # Splicing: Old text up to the match + the ENTIRE new chunk starting from the match
+        merged_words = old_words[:absolute_chop_idx] + new_words[match.b:]
+        merged_text = " ".join(merged_words)
         
-        # 3. Grab everything in the NEW text AFTER the nucleus
-        # This automatically deletes garbage like the "g" or "t" at the start!
-        suffix = new_chunk[match.b + match.size:]
-        
-        return prefix + overlap_str + suffix
-        
+        # Return only the genuinely new text to print to the screen
+        new_suffix = " ".join(new_words[match.b + match.size:])
+        return merged_text, new_suffix
     else:
-        # No valid nucleus found, just append it normally
-        return final_text + " " + new_chunk
+        # PANIC PROTOCOL: Stream moves safely forward without repeating massive blocks
+        safe_append = " ".join(new_words[-1:])
+        return final_text + " " + safe_append, safe_append
         
 # ------------------------------------------------------------------
 # PART 4: MAIN LOOP
@@ -296,6 +322,14 @@ try:
                     transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
                     raw_text = transcripts[0].text if hasattr(transcripts[0], 'text') else str(transcripts[0])
 
+                # --- NEW: THE UNSTABLE TAIL DROP ---
+                # The last word in a rolling window is almost always physically chopped in half.
+                # We drop it here. In the next 0.5s loop, it will be fully inside the window and transcribe perfectly.
+                raw_words = raw_text.split()
+                if len(raw_words) > 2:
+                    raw_text = " ".join(raw_words[:-2])
+                # -----------------------------------
+
                 # 1. Grab the live context from the file
                 live_context = get_current_visual_context()
                 
@@ -306,16 +340,13 @@ try:
                 corrected_text = corrected_text.replace("⁇", "").strip()
                 
                 if corrected_text:
-                    # --- RULE 2: Mash overlapping text together ---
-                    new_full_transcript = smart_merge(final_transcript, corrected_text)
+                    # Unpack the tuple!
+                    new_full_transcript, new_part = smart_merge(final_transcript, corrected_text)
                     
-                    if len(new_full_transcript) > len(final_transcript):
-                        # Only grab the completely new words to send to the UI
-                        new_part = new_full_transcript[len(final_transcript):].strip()
-                        if new_part:
-                            timestamp = datetime.now().strftime('%H:%M:%S')
-                            print(f"[{timestamp}] {new_part}")
-                            sys.stdout.flush()
+                    if new_part:
+                        timestamp = datetime.now().strftime('%H:%M:%S')
+                        print(f"[{timestamp}] {new_part}")
+                        sys.stdout.flush()
                             
                     final_transcript = new_full_transcript
                 rolling_buffer = rolling_buffer[:, chunk_size:]
