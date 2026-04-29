@@ -50,7 +50,7 @@ GEOLOGY_TRIGGERS = {
     "sediment", "lava", "ash", "crater",
     "granite", "basalt", "gneiss", "schist", "olivine", "magnesium", "underground",
     "luster", "fine-grained", "coarse", "foliated",
-    "vesicular", "porous", "crystalline", "volcanic", "space"
+    "vesicular", "porous", "crystalline", "volcanic", "space", "piece"
 }
 
 spell.word_frequency.load_words(list(GEOLOGY_TRIGGERS))
@@ -164,6 +164,22 @@ asr_model.eval()
 print("Fine-tuned model loaded successfully!")
 sys.stdout.flush()
 
+# --- NEW: BOOT THE LOCAL LLM ---
+from llama_cpp import Llama
+
+print("Loading Phi-3 LLM for post-processing...")
+# Adjust the model_path to wherever you keep your .gguf files
+LLM_MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "Phi-3-mini-4k-instruct-q4.gguf")
+
+try:
+    # n_gpu_layers=-1 offloads it to the Jetson's GPU for maximum speed
+    llm = Llama(model_path=LLM_MODEL_PATH, n_ctx=512, n_gpu_layers=-1, verbose=False)
+    print("LLM loaded successfully!")
+except Exception as e:
+    print(f"Warning: Could not load LLM. Falling back to standard correction. Error: {e}")
+    llm = None
+sys.stdout.flush()
+
 # ------------------------------------------------------------------
 # PART 3: LIVE INFERENCE LOGIC
 # ------------------------------------------------------------------
@@ -259,7 +275,7 @@ try:
                 print("\n\nStopping stream... Preparing final transcript...")
                 
                 # ------------------------------------------------------------------
-                # PART 5: FINAL CLEANUP (RESTORED)
+                # PART 5: FINAL CLEANUP (LLM-POWERED)
                 # ------------------------------------------------------------------
                 if full_audio_buffer:
                     print("Processing full audio buffer for maximum accuracy...")
@@ -271,7 +287,7 @@ try:
 
                     with torch.no_grad():
                         try:
-                            # The massive single-pass transcription
+                            # 1. Get the massive single-pass transcription from NeMo
                             preds = asr_model.transcribe([full_audio])
                             final_raw = preds[0].text if hasattr(preds[0], 'text') else str(preds[0])
                         except:
@@ -281,8 +297,40 @@ try:
                             transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
                             final_raw = transcripts[0].text
 
-                    # Fetch the live context one last time for the final sweep
-                    final_clean_text = multimodal_correction(final_raw, get_current_visual_context()).replace("⁇", "")
+                    # 2. LLM Post-Processing Layer
+                    llm_corrected_text = final_raw
+                    visual_context = get_current_visual_context()[0]
+                    
+                    if llm and final_raw.strip():
+                        print("Running LLM spellcheck...")
+                        
+                        # Phi-3 strict User-Block Prompt
+                        prompt = f"""<|user|>
+You are a robotic text formatter. Your ONLY job is to add capitalization and punctuation.
+You must output the EXACT same words in the EXACT same order. 
+DO NOT delete words. DO NOT add words. DO NOT fix grammar. 
+If a word is a clear phonetic typo of a geology term related to "{visual_context}", you may correct its spelling.
+
+Example Raw: i found this dark piece magnesium underground crater need record much
+Example Fixed: I found this dark piece of magnesium underground a crater. I need to record more.
+
+Raw ASR: {final_raw}
+Fixed ASR:<|end|>
+<|assistant|>"""
+
+                        response = llm(
+                            prompt, 
+                            max_tokens=150, 
+                            stop=["<|end|>", "\n"], 
+                            temperature=0.1 # Low temperature so it doesn't get "creative"
+                        )
+                        
+                        llm_output = response["choices"][0]["text"].strip()
+                        if llm_output:
+                            llm_corrected_text = llm_output
+
+                    # 3. Final Jaro-Winkler Dictionary Sweep
+                    final_clean_text = multimodal_correction(llm_corrected_text, get_current_visual_context()).replace("⁇", "")
     
                     print("\n" + "="*40)
                     print("FINAL TRANSCRIPT:")
