@@ -17,9 +17,6 @@ from textblob import TextBlob
 # ------------------------------------------------------------------
 # PART 1: CONFIGURATION
 # ------------------------------------------------------------------
-# ------------------------------------------------------------------
-# PART 1: CONFIGURATION
-# ------------------------------------------------------------------
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_FILE = os.path.join(SCRIPT_DIR, "newest_model.nemo")
 
@@ -164,12 +161,12 @@ asr_model.eval()
 print("Fine-tuned model loaded successfully!")
 sys.stdout.flush()
 
-# --- NEW: BOOT THE LOCAL LLM ---
+# --- NEW: BOOT THE HEAVIER LLM ---
 from llama_cpp import Llama
 
-print("Loading Phi-3 LLM for post-processing...")
-# Adjust the model_path to wherever you keep your .gguf files
-LLM_MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "Phi-3-mini-4k-instruct-q4.gguf")
+print("Loading Llama-3 8B LLM for post-processing...")
+# Ensure you have downloaded a Llama-3 8B quantized model (like Q4_K_M)
+LLM_MODEL_PATH = os.path.join(PROJECT_ROOT, "led-display", "models", "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf")
 
 try:
     # n_gpu_layers=-1 offloads it to the Jetson's GPU for maximum speed
@@ -275,7 +272,7 @@ try:
                 print("\n\nStopping stream... Preparing final transcript...")
                 
                 # ------------------------------------------------------------------
-                # PART 5: FINAL CLEANUP (LLM-POWERED)
+                # PART 5: FINAL CLEANUP (DICTIONARY FIRST, LLM LAST)
                 # ------------------------------------------------------------------
                 if full_audio_buffer:
                     print("Processing full audio buffer for maximum accuracy...")
@@ -297,40 +294,39 @@ try:
                             transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
                             final_raw = transcripts[0].text
 
-                    # 2. LLM Post-Processing Layer
-                    llm_corrected_text = final_raw
-                    visual_context = get_current_visual_context()[0]
+                    visual_context = get_current_visual_context()
+
+                    # 2. RUN THE DICTIONARY SWEEP FIRST!
+                    # Fix the geology terms while it's all still raw, lowercase ASR text
+                    dictionary_cleaned_text = multimodal_correction(final_raw, visual_context).replace("⁇", "")
                     
-                    if llm and final_raw.strip():
-                        print("Running LLM spellcheck...")
+                    # 3. LLM Post-Processing Layer (Formatting ONLY)
+                    final_clean_text = dictionary_cleaned_text
+                    
+                    if llm and dictionary_cleaned_text.strip():
+                        print("Running LLM formatting...")
                         
-                        # Phi-3 strict User-Block Prompt
-                        prompt = f"""<|user|>
+                        # Perfect Llama-3 Few-Shot Template
+                        prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
 You are a robotic text formatter. Your ONLY job is to add capitalization and punctuation.
 You must output the EXACT same words in the EXACT same order. 
-DO NOT delete words. DO NOT add words. DO NOT fix grammar. 
-If a word is a clear phonetic typo of a geology term related to "{visual_context}", you may correct its spelling.
-
-Example Raw: i found this dark piece magnesium underground crater need record much
-Example Fixed: I found this dark piece of magnesium underground a crater. I need to record more.
-
-Raw ASR: {final_raw}
-Fixed ASR:<|end|>
-<|assistant|>"""
+DO NOT delete words. DO NOT add words. DO NOT fix grammar. Output ONLY the formatted text.<|eot_id|><|start_header_id|>user<|end_header_id|>
+Raw ASR: i found this dark piece magnesium underground crater need record much<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+I found this dark piece magnesium underground crater. Need record much.<|eot_id|><|start_header_id|>user<|end_header_id|>
+Raw ASR: {dictionary_cleaned_text}<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
 
                         response = llm(
                             prompt, 
-                            max_tokens=150, 
-                            stop=["<|end|>", "\n"], 
-                            temperature=0.1 # Low temperature so it doesn't get "creative"
+                            max_tokens=200, 
+                            stop=["<|eot_id|>"], # REMOVED the \n stop token!
+                            temperature=0.1 
                         )
                         
                         llm_output = response["choices"][0]["text"].strip()
+                        
+                        # Only accept the LLM text if it isn't completely empty
                         if llm_output:
-                            llm_corrected_text = llm_output
-
-                    # 3. Final Jaro-Winkler Dictionary Sweep
-                    final_clean_text = multimodal_correction(llm_corrected_text, get_current_visual_context()).replace("⁇", "")
+                            final_clean_text = llm_output
     
                     print("\n" + "="*40)
                     print("FINAL TRANSCRIPT:")
