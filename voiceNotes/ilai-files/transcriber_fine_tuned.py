@@ -10,6 +10,7 @@ import torch
 import os
 import difflib
 import jellyfish 
+import argparse 
 from datetime import datetime
 from spellchecker import SpellChecker
 from textblob import TextBlob
@@ -17,6 +18,11 @@ from textblob import TextBlob
 # ------------------------------------------------------------------
 # PART 1: CONFIGURATION
 # ------------------------------------------------------------------
+parser = argparse.ArgumentParser(description="Live ASR Transcriber")
+parser.add_argument("--use-base", action="store_true", help="Use base fastconformer model instead of local fine-tuned model")
+parser.add_argument("--raw-asr", action="store_true", help="Disable dictionary correction (preserve LLM formatting)")
+args = parser.parse_args()
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_FILE = os.path.join(SCRIPT_DIR, "newest_model.nemo")
 
@@ -42,27 +48,8 @@ PRINT_SILENCE = True
 
 spell = SpellChecker()
 
-GEOLOGY_TRIGGERS = { 
-    "rock", "sample", "specimen", "mineral", "crystal", "crystals",
-    "sediment", "lava", "ash", "crater",
-    "granite", "basalt", "gneiss", "schist", "olivine", "magnesium", "underground",
-    "luster", "fine-grained", "coarse", "foliated",
-    "vesicular", "porous", "crystalline", "volcanic", "space", "piece"
-}
-
-spell.word_frequency.load_words(list(GEOLOGY_TRIGGERS))
-
-def has_geology_context(words, index, window=3):
-    start = max(0, index - window)
-    end = min(len(words), index + window + 1)
-    nearby_words = words[start:index] + words[index+1:end]
-    for w in nearby_words:
-        clean_w = w.lower().strip(".,?!")
-        if clean_w in GEOLOGY_TRIGGERS:
-            return True
-    return False
-
 def multimodal_correction(transcript, visual_keywords):
+    if args.raw_asr: return transcript
     if not transcript: return ""
 
     # 1. MASTER TARGET LIST
@@ -70,7 +57,10 @@ def multimodal_correction(transcript, visual_keywords):
     for phrase in visual_keywords:
         targets.append(phrase.lower())
         targets.extend(phrase.lower().split())
-    targets.extend(list(GEOLOGY_TRIGGERS))
+    
+    if targets:
+        spell.word_frequency.load_words(targets)
+        
     targets = list(set(targets))
 
     # --- THE SAFE STUTTER & GARBAGE FILTER ---
@@ -149,16 +139,25 @@ if not hasattr(torch, "distributed"):
     torch.distributed = types.SimpleNamespace()
 torch.distributed.is_initialized = lambda: False
 
-print(f"Loading fine-tuned model: {MODEL_FILE}...")
-# map_location=device is the ONLY way this works on your MacBook
-asr_model = nemo_asr.models.EncDecCTCModelBPE.restore_from(
-    restore_path=MODEL_FILE, 
-    map_location=device
-)
+if args.use_base:
+    print("Loading base model: stt_en_fastconformer_ctc_large...")
+    asr_model = nemo_asr.models.EncDecCTCModelBPE.from_pretrained(
+        model_name="stt_en_fastconformer_ctc_large",
+        map_location=device
+    )
+    print("Base model loaded successfully!")
+else:
+    print(f"Loading fine-tuned model: {MODEL_FILE}...")
+    # map_location=device is the ONLY way this works on your MacBook
+    asr_model = nemo_asr.models.EncDecCTCModelBPE.restore_from(
+        restore_path=MODEL_FILE, 
+        map_location=device
+    )
+    print("Fine-tuned model loaded successfully!")
+
 asr_model.freeze()
 asr_model = asr_model.to(device)
 asr_model.eval()
-print("Fine-tuned model loaded successfully!")
 sys.stdout.flush()
 
 # --- NEW: BOOT THE HEAVIER LLM ---
@@ -283,16 +282,40 @@ try:
                     full_len = torch.tensor([full_signal.shape[1]], dtype=torch.int64, device=device)
 
                     with torch.no_grad():
-                        try:
-                            # 1. Get the massive single-pass transcription from NeMo
-                            preds = asr_model.transcribe([full_audio])
-                            final_raw = preds[0].text if hasattr(preds[0], 'text') else str(preds[0])
-                        except:
-                            logits = asr_model.forward(input_signal=full_signal, input_signal_length=full_len)
-                            if isinstance(logits, tuple): logits = logits[0]
-                            pred_tokens = logits.argmax(dim=-1)
-                            transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
-                            final_raw = transcripts[0].text
+                        # Always get logits to extract confidence alternatives
+                        logits = asr_model.forward(input_signal=full_signal, input_signal_length=full_len)
+                        if isinstance(logits, tuple): logits = logits[0]
+                        pred_tokens = logits.argmax(dim=-1)
+                        transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
+                        final_raw = transcripts[0].text if hasattr(transcripts[0], 'text') else str(transcripts[0])
+                        
+                        # Extract low confidence alternatives
+                        probs = torch.softmax(logits, dim=-1)
+                        top_probs, top_indices = torch.topk(probs, k=4, dim=-1)
+                        vocab = asr_model.decoder.vocabulary
+                        
+                        ambiguous_notes = []
+                        for t in range(logits.shape[1]):
+                            top_prob = top_probs[0, t, 0].item()
+                            top_idx = top_indices[0, t, 0].item()
+                            
+                            # If it's not a blank token and confidence is low
+                            if top_idx < len(vocab) and top_prob < 0.85:
+                                alts = []
+                                for k in range(4):
+                                    idx = top_indices[0, t, k].item()
+                                    prob = top_probs[0, t, k].item()
+                                    # Only include plausible alternative tokens
+                                    if idx < len(vocab) and prob > 0.01:
+                                        token = vocab[idx].replace(' ', '') # Clean subword marker
+                                        if token:
+                                            alts.append(token)
+                                if len(alts) > 1:
+                                    ambiguous_notes.append(f"[{'/'.join(alts)}]")
+                        
+                        confidence_hint = ""
+                        if ambiguous_notes:
+                            confidence_hint = "The ASR model was unsure about some sounds. Here are the top alternatives it considered for the ambiguous parts (in chronological order): " + " ".join(ambiguous_notes)
 
                     visual_context = get_current_visual_context()
 
@@ -300,17 +323,30 @@ try:
                     # Fix the geology terms while it's all still raw, lowercase ASR text
                     dictionary_cleaned_text = multimodal_correction(final_raw, visual_context).replace("⁇", "")
                     
-                    # 3. LLM Post-Processing Layer (Formatting ONLY)
+                    # 3. LLM Post-Processing Layer (Formatting + Confidence Check)
                     final_clean_text = dictionary_cleaned_text
                     
                     if llm and dictionary_cleaned_text.strip():
                         print("Running LLM formatting...")
-                        
-                        # Perfect Llama-3 Few-Shot Template
-                        prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+                        if confidence_hint:
+                            print("Passing confidence notes to LLM...")
+                            context_str = ", ".join(visual_context)
+                            system_prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+You are an expert geology assistant and robotic text formatter. Your job is to format the text with capitalization and punctuation.
+Visual Context: {context_str}
+{confidence_hint}
+
+If the ASR text contains errors, use the visual context and the phonetic alternatives to choose the best geological words. Do NOT completely rewrite the sentence. Keep it as close to the original as possible, just fixing errors and formatting.
+CRITICAL: Do NOT output conversational text, explanations, or introductions like "Here is the formatted text". Output ONLY the final transcript."""
+                        else:
+                            system_prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
 You are a robotic text formatter. Your ONLY job is to add capitalization and punctuation.
 You must output the EXACT same words in the EXACT same order. 
-DO NOT delete words. DO NOT add words. DO NOT fix grammar. Output ONLY the formatted text.<|eot_id|><|start_header_id|>user<|end_header_id|>
+DO NOT delete words. DO NOT add words. DO NOT fix grammar. 
+CRITICAL: Do NOT output conversational text, explanations, or introductions like "Here is the formatted text". Output ONLY the formatted text."""
+
+                        # Perfect Llama-3 Few-Shot Template
+                        prompt = f"""{system_prompt}<|eot_id|><|start_header_id|>user<|end_header_id|>
 Raw ASR: i found this dark piece magnesium underground crater need record much<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 I found this dark piece magnesium underground crater. Need record much.<|eot_id|><|start_header_id|>user<|end_header_id|>
 Raw ASR: {dictionary_cleaned_text}<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
@@ -319,10 +355,20 @@ Raw ASR: {dictionary_cleaned_text}<|eot_id|><|start_header_id|>assistant<|end_he
                             prompt, 
                             max_tokens=200, 
                             stop=["<|eot_id|>"], # REMOVED the \n stop token!
-                            temperature=0.1 
+                            temperature=0.1 if not confidence_hint else 0.2
                         )
                         
                         llm_output = response["choices"][0]["text"].strip()
+                        
+                        # Strip conversational filler if LLM ignores instructions
+                        if "Here is the formatted text:" in llm_output:
+                            llm_output = llm_output.split("Here is the formatted text:")[-1].strip()
+                        elif "Here is the corrected text:" in llm_output:
+                            llm_output = llm_output.split("Here is the corrected text:")[-1].strip()
+                        elif llm_output.startswith("Here"):
+                            lines = llm_output.split('\n')
+                            if len(lines) > 1:
+                                llm_output = '\n'.join(lines[1:]).strip()
                         
                         # Only accept the LLM text if it isn't completely empty
                         if llm_output:

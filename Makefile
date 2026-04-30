@@ -1,4 +1,4 @@
-.PHONY: help setup run run-mock run-mock-ml clean check
+.PHONY: help setup run run-raw run-base run-base-raw run-mock run-mock-ml clean check
 
 # Project configuration
 PYTHON := python3
@@ -44,6 +44,37 @@ run:
 	@echo "Data directory: $(SAGE_STORE_DIR)"
 	@cd "$(LED_DISPLAY_DIR)" && \
 		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
+		export JETSON_PLATFORM=$(IS_JETSON) && \
+		$(PYTHON) main.py
+
+run-raw:
+	@echo "Platform: $(JETSON_DETECT)"
+	@echo "Data directory: $(SAGE_STORE_DIR)"
+	@echo "Mode: Fine-tuned model (RAW ASR - No Post-Processing)"
+	@cd "$(LED_DISPLAY_DIR)" && \
+		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
+		export SAGE_RAW_ASR=1 && \
+		export JETSON_PLATFORM=$(IS_JETSON) && \
+		$(PYTHON) main.py
+
+run-base:
+	@echo "Platform: $(JETSON_DETECT)"
+	@echo "Data directory: $(SAGE_STORE_DIR)"
+	@echo "Mode: Base NeMo model"
+	@cd "$(LED_DISPLAY_DIR)" && \
+		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
+		export SAGE_USE_BASE_MODEL=1 && \
+		export JETSON_PLATFORM=$(IS_JETSON) && \
+		$(PYTHON) main.py
+
+run-base-raw:
+	@echo "Platform: $(JETSON_DETECT)"
+	@echo "Data directory: $(SAGE_STORE_DIR)"
+	@echo "Mode: Base NeMo model (RAW ASR - No Post-Processing)"
+	@cd "$(LED_DISPLAY_DIR)" && \
+		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
+		export SAGE_USE_BASE_MODEL=1 && \
+		export SAGE_RAW_ASR=1 && \
 		export JETSON_PLATFORM=$(IS_JETSON) && \
 		$(PYTHON) main.py
 

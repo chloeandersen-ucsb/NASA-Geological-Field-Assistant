@@ -110,12 +110,16 @@ def _build_report_prompt(payload: dict, notes: list[str]) -> str:
     
     return (
         f"=== METADATA ===\n{chr(10).join(metadata)}\n\n"
-        f"=== FIELD NOTES ===\n{joined_notes}\n\n"
-        "Read the data above, then extract the facts to fill out EXACTLY this blank template. Keep descriptions brief. Do not write any other paragraphs:\n\n"
+        f"=== FIELD AUDIO TRANSCRIPTS ===\n{joined_notes}\n\n"
+        "=== INSTRUCTIONS ===\n"
+        "Synthesize the metadata and transcripts above into a concise field report. "
+        "You must output ONLY the following template. If information for a specific category is missing from the data, write 'Not specified'. Keep descriptions brief and objective.\n\n"
         "- Color & Appearance: \n"
+        "- Mineralogy & Composition: \n"
         "- Texture & Structure: \n"
+        "- Weathering & Alteration: \n"
         "- Dimensions & Weight: \n"
-        "- Field Context & Notes: "
+        "- Field Context & Sampling Notes: "
     )
 
 
@@ -167,8 +171,11 @@ def _clean_generated_summary(text: str) -> str:
     summary = re.sub(r"^```[a-zA-Z]*\n", "", text.strip())
     summary = re.sub(r"\n```$", "", summary)
     
-    # More forgiving Regex: allow spaces before the hyphen, or no hyphen at all
-    match = re.search(r"(?i)(Color & Appearance|Texture & Structure|Dimensions & Weight|Field Context):", summary)
+    # Updated Regex to match the new, expanded prompt categories
+    match = re.search(
+        r"(?i)(Color & Appearance|Mineralogy & Composition|Texture & Structure|Weathering & Alteration|Dimensions & Weight|Field Context & Sampling Notes):", 
+        summary
+    )
     
     if match:
         # Start from the beginning of the line where the first category appears
