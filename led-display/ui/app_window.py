@@ -1159,10 +1159,10 @@ class AppWindow(QMainWindow):
         entry = getattr(self.rock_detail, "_current_rock_entry", None)
         notes = getattr(self.rock_detail, "_current_associated_notes", None)
         if entry and notes:
-            # Show a loading message
-            self.rock_detail.summary_text.setHtml(self.rock_detail._format_ai_summary_html("Generating AI summary..."))
-            # Force the ViewModel to bypass the cache
-            self.vm.request_rock_summary(entry, notes, force=True)    
+            table_data = self.rock_detail._parse_summary_to_table_data("Generating AI summary...")
+            self.rock_detail._populate_table(table_data)
+            
+            self.vm.request_rock_summary(entry, notes, force=True)   
    
     def _update_voice_buttons(self, mode: str) -> None:
         """Dynamically hides/shows Voice to Text buttons based on the current phase."""
