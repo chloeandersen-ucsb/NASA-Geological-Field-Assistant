@@ -21,6 +21,13 @@ from PySide6.QtWidgets import (
     QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout, QDialog
 )
 
+import importlib.util, pathlib
+_nav_path = pathlib.Path(__file__).parent / "joystick_navigator.py"
+_spec = importlib.util.spec_from_file_location("joystick_navigator", _nav_path)
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+JoystickNavigator = _mod.JoystickNavigator
+
 import connector
 from core.viewmodel import AppStateType, ClassificationResult, MissionSummary, TripSummary
 
@@ -1017,6 +1024,9 @@ class AppWindow(QMainWindow):
         self._wire_ui()
         self._wire_vm()
 
+        self.joystick = JoystickNavigator(self, bus=1)
+        self.joystick.start()
+
         self._show_state(AppStateType.HOME)
 
         is_jetson = connector.is_jetson()
@@ -1260,6 +1270,7 @@ class AppWindow(QMainWindow):
             self.setFixedSize(sim_w, sim_h)
 
     def _quit_application(self) -> None:
+        self.joystick.stop()
         self.close()
 
     def _wire_ui(self) -> None:
