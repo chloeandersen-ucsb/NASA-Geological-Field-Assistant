@@ -242,7 +242,7 @@ def confidence_tier(conf: float) -> str:
     return "uncertain"
 
 
-IMG_SIZE = 448
+IMG_SIZE = 640
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD  = [0.229, 0.224, 0.225]
 
@@ -308,7 +308,7 @@ class FamilyHead(nn.Module):
 
 # Multi head rock classification model 
 class RockNetV2(nn.Module):
-    FEAT_DIM    = 512
+    FEAT_DIM    = 512   # GeM(256ch) + GramPool(out_dim=256) = 512
     NUM_PRIMARY = len(FAMILY_NAMES)   # 4
 
     def __init__(self):
@@ -367,7 +367,7 @@ class RockNetV2(nn.Module):
         fused = self.fuse_ln(fused.permute(0, 2, 3, 1)).permute(0, 3, 1, 2).contiguous()
         fused = self.fuse_act(fused)
 
-        return torch.cat([self.gem(fused), self.gram(fused)], dim=1)  # (B, 512)
+        return torch.cat([self.gem(fused), self.gram(fused)], dim=1)  # (B, 640)
 
     def forward(self, x: torch.Tensor) -> dict:
         feat          = self.extract_features(x)

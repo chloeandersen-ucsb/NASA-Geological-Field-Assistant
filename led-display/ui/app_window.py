@@ -1,23 +1,22 @@
 from __future__ import annotations
 import os
 import sys
+import time
 import datetime
 from pathlib import Path
-from PySide6.QtGui import QPixmap
-from PySide6.QtGui import QFont
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QPixmap, QImage
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
-img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
+img_path = project_root / "led-display" / "ui" / "sage-logo-wcbg.png"
 
 
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor, QTextCursor
+from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QStackedWidget, QMessageBox,
     QWidget, QVBoxLayout, QLabel, QPushButton,
-    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout, QDialog, QFrame
+    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QDialog, QFrame,
 )
 
 import connector
@@ -48,8 +47,6 @@ class HomePage(QWidget):
         logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
 
-        # font = QFont("Arial", 18)
-        # font.setBold(True)
         self.btn_classify = big_button("Classify Rock")
         self.btn_voice = big_button("Voice to Text")
         self.btn_trip = big_button(" View Trip Notes")
@@ -64,7 +61,6 @@ class HomePage(QWidget):
         layout.addWidget(self.btn_classify)
         layout.addWidget(self.btn_voice)
         layout.addWidget(self.btn_trip)
-        # layout.addStretch(1)
         layout.addSpacing(60)
         layout.addWidget(self.btn_quit)
 
@@ -134,8 +130,6 @@ class CameraPreviewPage(QWidget):
         self.btn_cancel = QPushButton("Cancel")
         self.btn_cancel.setMinimumHeight(50)
         self.btn_capture.setMinimumHeight(50)
-        #self.btn_cancel.setStyleSheet("font-size: 18px;")
-        
         self.btn_cancel.setStyleSheet("""
             background-color: #7e1f23;
             font-size: 22px;
@@ -228,179 +222,149 @@ class ClassifiedPage(QWidget):
     def __init__(self, vm):
         super().__init__()
         self.vm = vm
-        # Main layout for the whole page
-        self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(8, 0, 8, 0)
-        self.main_layout.addSpacing(8)
 
-        # Images
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # ── Scrollable content ───────────────────────────────────────────────
+        from PySide6.QtWidgets import QScrollArea
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setFocusPolicy(Qt.NoFocus)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setStyleSheet("QScrollBar:vertical { width: 6px; }")
+
+        content = QWidget()
+        self.main_layout = QVBoxLayout(content)
+        self.main_layout.setContentsMargins(16, 14, 16, 8)
+        self.main_layout.setSpacing(6)
+        scroll.setWidget(content)
+        outer.addWidget(scroll, stretch=1)
+
+        # ── Images (compact thumbnails for reference) ────────────────────────
         self.image_container = QWidget()
         self.image_container.setStyleSheet("background-color: transparent;")
-        container_layout = QHBoxLayout(self.image_container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
+        img_layout = QHBoxLayout(self.image_container)
+        img_layout.setContentsMargins(0, 0, 0, 4)
+        img_layout.setSpacing(10)
         self.lbl_image = QLabel()
         self.lbl_image.setAlignment(Qt.AlignCenter)
         self.lbl_image.setStyleSheet("background-color: transparent; border: none;")
-        self.lbl_image.setFixedSize(200, 150)
+        self.lbl_image.setFixedSize(130, 98)
         self.lbl_image.setScaledContents(True)
         self.lbl_side_image = QLabel()
         self.lbl_side_image.setAlignment(Qt.AlignCenter)
         self.lbl_side_image.setStyleSheet("background-color: transparent; border: none;")
-        self.lbl_side_image.setFixedSize(200, 150)
+        self.lbl_side_image.setFixedSize(130, 98)
         self.lbl_side_image.setScaledContents(True)
-        container_layout.addWidget(self.lbl_image)
-        container_layout.addWidget(self.lbl_side_image)
-        self.main_layout.addWidget(self.image_container, 0, Qt.AlignCenter)
-        self.main_layout.addSpacing(6)
+        img_layout.addStretch()
+        img_layout.addWidget(self.lbl_image)
+        img_layout.addWidget(self.lbl_side_image)
+        img_layout.addStretch()
+        self.main_layout.addWidget(self.image_container)
 
-        # Primary label (rock name)
-        self.lbl_label = QLabel("LABEL")
-        self.lbl_label.setAlignment(Qt.AlignCenter)
-        self.lbl_label.setStyleSheet("font-size: 24px; font-weight: 700; margin-top: 5px;")
+        # ── Line 1: Rock name (large, left) + Volume (right) ─────────────────
+        name_vol_row = QHBoxLayout()
+        name_vol_row.setContentsMargins(0, 6, 0, 0)
+        name_vol_row.setSpacing(8)
+        self.lbl_label = QLabel("—")
+        self.lbl_label.setStyleSheet("font-size: 32px; font-weight: 700;")
+        self.lbl_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.lbl_volume = QLabel("")
+        self.lbl_volume.setStyleSheet("font-size: 17px; color: #555;")
+        self.lbl_volume.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        name_vol_row.addWidget(self.lbl_label)
+        name_vol_row.addWidget(self.lbl_volume)
+        self.main_layout.addLayout(name_vol_row)
 
-        # Confidence + tier badge row
-        self.conf_row = QWidget()
-        conf_row_layout = QHBoxLayout(self.conf_row)
-        conf_row_layout.setContentsMargins(0, 0, 0, 0)
-        conf_row_layout.setSpacing(8)
-        conf_row_layout.setAlignment(Qt.AlignCenter)
-        self.lbl_conf = QLabel("Confidence: --")
-        self.lbl_conf.setStyleSheet("font-size: 20px; color: #666;")
+        # ── Line 2: Confidence + tier badge + weight ──────────────────────────
+        conf_wt_row = QHBoxLayout()
+        conf_wt_row.setContentsMargins(0, 0, 0, 4)
+        conf_wt_row.setSpacing(8)
+        self.lbl_conf = QLabel("—")
+        self.lbl_conf.setStyleSheet("font-size: 18px; color: #555;")
         self.lbl_tier = QLabel("")
         self.lbl_tier.setStyleSheet(
-            "font-size: 15px; font-weight: 700; border-radius: 6px; padding: 2px 8px; color: #f5f6f4;"
+            "font-size: 17px; font-weight: 700; border-radius: 5px; padding: 2px 10px; color: #f5f6f4;"
         )
         self.lbl_tier.setVisible(False)
-        conf_row_layout.addWidget(self.lbl_conf)
-        conf_row_layout.addWidget(self.lbl_tier)
-
-        # Section dividers (hidden until content is present)
-        self.div_features = _make_divider()
-        self.div_features.setVisible(False)
-        self.div_volume = _make_divider()
-        self.div_volume.setVisible(False)
-        self.div_notes = _make_divider()
-        self.div_notes.setVisible(False)
-
-        # Features widget — 2-column grid: feature name | value (confidence%)
-        self.features_widget = QWidget()
-        self.features_grid = QGridLayout(self.features_widget)
-        self.features_grid.setContentsMargins(4, 4, 4, 4)
-        self.features_grid.setHorizontalSpacing(12)
-        self.features_grid.setVerticalSpacing(4)
-        self.features_grid.setColumnStretch(0, 1)
-        self.features_grid.setColumnStretch(1, 1)
-        self.features_widget.setVisible(False)
-
-        # Volume + weight side-by-side row
-        self.vol_weight_row = QWidget()
-        vol_row_layout = QHBoxLayout(self.vol_weight_row)
-        vol_row_layout.setContentsMargins(0, 0, 0, 0)
-        vol_row_layout.setSpacing(4)
-        vol_row_layout.setAlignment(Qt.AlignCenter)
-        self.lbl_volume = QLabel("Vol: --")
-        self.lbl_volume.setStyleSheet("font-size: 17px;")
-        self.lbl_vol_sep = QLabel(" · ")
-        self.lbl_vol_sep.setStyleSheet("font-size: 17px; color: #888;")
-        self.lbl_vol_sep.setVisible(False)
         self.lbl_extra = QLabel("")
-        self.lbl_extra.setStyleSheet("font-size: 17px;")
-        vol_row_layout.addWidget(self.lbl_volume)
-        vol_row_layout.addWidget(self.lbl_vol_sep)
-        vol_row_layout.addWidget(self.lbl_extra)
+        self.lbl_extra.setStyleSheet("font-size: 16px; color: #777;")
+        conf_wt_row.addWidget(self.lbl_conf)
+        conf_wt_row.addWidget(self.lbl_tier)
+        conf_wt_row.addStretch()
+        conf_wt_row.addWidget(self.lbl_extra)
+        self.main_layout.addLayout(conf_wt_row)
 
-        # 2nd / 3rd alternative classifications grid
-        self.extra_results_widget = QWidget()
-        self.extra_grid = QGridLayout(self.extra_results_widget)
-        self.extra_grid.setAlignment(Qt.AlignCenter)
-        self.lbl_rank2 = QLabel(""); self.lbl_name2 = QLabel(""); self.lbl_perc2 = QLabel("")
-        self.lbl_rank3 = QLabel(""); self.lbl_name3 = QLabel(""); self.lbl_perc3 = QLabel("")
-        sub_style = "font-size: 17px;"
-        for i, lbl in enumerate([self.lbl_rank2, self.lbl_name2, self.lbl_perc2,
-                                  self.lbl_rank3, self.lbl_name3, self.lbl_perc3]):
-            lbl.setStyleSheet(sub_style)
-            row = i // 3
-            col = i % 3
-            alignment = [Qt.AlignLeft, Qt.AlignCenter, Qt.AlignRight][col]
-            self.extra_grid.addWidget(lbl, row, col, alignment)
+        # ── Divider ───────────────────────────────────────────────────────────
+        self.main_layout.addSpacing(12)
+        self.main_layout.addWidget(_make_divider())
 
-        # Geology notes toggle + expandable panel
-        self.btn_geology_notes = QPushButton("Geology Notes \u25be")
-        self.btn_geology_notes.setStyleSheet(
-            "font-size: 17px; background-color: transparent; border: none; color: #555;"
-        )
-        self.btn_geology_notes.setVisible(False)
+        # ── Features + geology notes (rebuilt on each classification) ─────────
+        self.features_section = QWidget()
+        self.features_layout = QVBoxLayout(self.features_section)
+        self.features_layout.setContentsMargins(0, 4, 0, 0)
+        self.features_layout.setSpacing(3)
+        self.main_layout.addWidget(self.features_section)
 
-        self.geology_panel = QWidget()
-        self.geology_layout = QVBoxLayout(self.geology_panel)
-        self.geology_layout.setContentsMargins(4, 2, 4, 2)
-        self.geology_layout.setSpacing(2)
-        self.geology_panel.setVisible(False)
+        # ── Alternative classifications (selectable override) ─────────────────
+        self.div_alts = _make_divider()
+        self.div_alts.setVisible(False)
+        self.main_layout.addWidget(self.div_alts)
 
-        def _toggle_geology():
-            visible = not self.geology_panel.isVisible()
-            self.geology_panel.setVisible(visible)
-            self.btn_geology_notes.setText(
-                "Geology Notes \u25b4" if visible else "Geology Notes \u25be"
-            )
-        self.btn_geology_notes.clicked.connect(_toggle_geology)
+        self.alt_row = QWidget()
+        alt_outer = QHBoxLayout(self.alt_row)
+        alt_outer.setContentsMargins(0, 6, 0, 4)
+        alt_outer.setSpacing(8)
+        lbl_also = QLabel("Alternatively:")
+        lbl_also.setStyleSheet("font-size: 16px; color: #697d6a; font-weight: 700;")
+        self.alt_buttons_layout = QHBoxLayout()
+        self.alt_buttons_layout.setSpacing(6)
+        alt_outer.addWidget(lbl_also)
+        alt_outer.addLayout(self.alt_buttons_layout)
+        alt_outer.addStretch()
+        self.alt_row.setVisible(False)
+        self.main_layout.addWidget(self.alt_row)
+        self.main_layout.addStretch(1)
+
+        # ── Fixed buttons pinned at bottom ────────────────────────────────────
+        btn_area = QWidget()
+        btn_area.setStyleSheet("border-top: 1px solid #697d6a;")
+        btn_vbox = QVBoxLayout(btn_area)
+        btn_vbox.setContentsMargins(12, 10, 12, 10)
+        btn_vbox.setSpacing(8)
 
         self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
 
         self.btn_reclassify = big_button("Reclassify")
         self.btn_reclassify.setStyleSheet("""
-            QPushButton {
-                background-color: #95b7dc;
-                font-size: 22px;
-                color: #385573;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
+            QPushButton { background-color: #95b7dc; font-size: 20px; color: #385573; }
+            QPushButton:hover { background-color: #b8d4ec; }
         """)
-        self.btn_save = big_button("Save Classification")
+        self.btn_save = big_button("Save")
         self.btn_save.setStyleSheet("""
-            QPushButton {
-                background-color: #617c32;
-                font-size: 22px;
-                color: #f5f6f4;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
+            QPushButton { background-color: #617c32; font-size: 20px; color: #f5f6f4; }
+            QPushButton:hover { background-color: #7a9a3e; }
         """)
         self.btn_delete = big_button("Delete")
         self.btn_delete.setStyleSheet("""
-            QPushButton {
-                background-color: #313940;
-                font-size: 22px;
-                color: #f5f6f4;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
+            QPushButton { background-color: #313940; font-size: 20px; color: #f5f6f4; }
+            QPushButton:hover { background-color: #424d56; }
         """)
 
-        # Assemble main layout (geological priority order)
-        self.main_layout.addWidget(self.lbl_label)
-        self.main_layout.addWidget(self.conf_row, 0, Qt.AlignCenter)
-        self.main_layout.addSpacing(4)
-        self.main_layout.addWidget(self.div_features)
-        self.main_layout.addWidget(self.features_widget)
-        self.main_layout.addWidget(self.div_volume)
-        self.main_layout.addWidget(self.vol_weight_row, 0, Qt.AlignCenter)
-        self.main_layout.addWidget(self.extra_results_widget)
-        self.main_layout.addSpacing(6)
-        self.main_layout.addWidget(self.div_notes)
-        self.main_layout.addWidget(self.btn_geology_notes, 0, Qt.AlignCenter)
-        self.main_layout.addWidget(self.geology_panel)
+        top_btns = QHBoxLayout()
+        top_btns.setSpacing(6)
+        top_btns.addWidget(self.btn_reclassify)
+        top_btns.addWidget(self.btn_save)
 
-        self.main_layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
-        self.main_layout.addSpacing(15)
+        btn_vbox.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
+        btn_vbox.addLayout(top_btns)
+        btn_vbox.addWidget(self.btn_delete)
 
-        self.main_layout.addWidget(self.btn_reclassify)
-        self.main_layout.addWidget(self.btn_save)
-        self.main_layout.addWidget(self.btn_delete)
+        outer.addWidget(btn_area)
         
 
 
@@ -418,7 +382,6 @@ class VoicePage(QWidget):
         
         title = QLabel("Voice to Text")
         title.setAlignment(Qt.AlignCenter)
-        # title.setStyleSheet("font-size: 22px; font-weight: 600;")
         title.setStyleSheet("""
             font-size: 22px;
             font-weight: bold;
@@ -716,7 +679,6 @@ class ExpandingVoiceWidget(QWidget):
     def __init__(self, vm, parent=None):
         super().__init__(parent)
         self.vm = vm
-        self.setMouseTracking(True)
         self.main_layout = QHBoxLayout(self)
         self.main_layout.setContentsMargins(5, 5, 5, 5)
         self.main_layout.setSpacing(10)
@@ -742,6 +704,7 @@ class ExpandingVoiceWidget(QWidget):
         self.button_container.hide()
 
         self.vm.recording_status_changed.connect(self._update_ui_state)
+        self.trigger_btn.clicked.connect(self._toggle_sub_buttons)
         self.btn_start.clicked.connect(lambda: self.vm.start_voice_to_text(silent=True))
         self.btn_stop.clicked.connect(self.vm.stop_voice_to_text)
         self.btn_redo.clicked.connect(self.vm.redo_voice_to_text)
@@ -770,40 +733,23 @@ class ExpandingVoiceWidget(QWidget):
                 font-size: 20px;
             """)
 
-    def _on_start_clicked(self):
-        self.trigger_btn.setText("🔴")
-        self.trigger_btn.setStyleSheet("background-color: #7e1f23; color: white; border-radius: 25px; font-size: 20px;")
-        self.vm.start_voice_to_text()
-
-    def _on_stop_clicked(self):
-        self.trigger_btn.setText("🎤")
-        self.trigger_btn.setStyleSheet("background-color: #344f41; color: white; border-radius: 25px; font-size: 20px;")
-        self.vm.stop_voice_to_text()
-
     def _make_sub_btn(self, text, color):
         btn = QPushButton(text)
         btn.setFixedSize(60, 40)
         btn.setStyleSheet(f"background-color: {color}; color: white; border-radius: 5px; font-size: 12px;")
         return btn
 
-    def enterEvent(self, event):
-        self.button_container.show()
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        self.button_container.hide()
-        super().leaveEvent(event)
+    def _toggle_sub_buttons(self):
+        self.button_container.setVisible(not self.button_container.isVisible())
 
 class AppWindow(QMainWindow):
     def __init__(self, vm):
         super().__init__()
 
-        import time
         self.session_start_time = time.time()
         
         self.vm = vm
         self.setWindowTitle("SAGE Jetson UI")
-        self.setStyleSheet("background-color: #cbd2c5;")
         self.setStyleSheet("""
             background-color: #cbd2c5;
             color: #344f41;
@@ -973,14 +919,6 @@ class AppWindow(QMainWindow):
         shortcut_quit = QShortcut(QKeySequence("Ctrl+C"), self)
         shortcut_quit.activated.connect(self._quit_application)
         
-    def _on_rock_clicked(self, item) -> None:
-        index = self.trip.list.row(item)
-        summary = self.vm.store.list_rocks()
-        if 0 <= index < len(summary):
-            entry = summary[index]
-            self.rock_detail.set_entry(entry)
-            self.stack.setCurrentWidget(self.rock_detail)
-
     def _on_virtual_key_pressed(self, key: str) -> None:
         cursor = self.voice.text.textCursor()
         
@@ -1079,8 +1017,6 @@ class AppWindow(QMainWindow):
         self.classified.btn_delete.clicked.connect(self.vm.delete_classification)
 
         self.voice.btn_start.clicked.connect(self.vm.start_voice_to_text)
-        # self.voice.btn_stop.clicked.connect(self.vm.stop_voice_to_text)
-        #self.voice.btn_stop.clicked.connect(self.vm.stop_voice_to_text)
         self.voice.btn_stop.clicked.connect(self._on_stop_or_edit_clicked)
         self.voice.btn_redo.clicked.connect(self.vm.redo_voice_to_text)
         self.voice.btn_save.clicked.connect(self.vm.save_transcription)
@@ -1234,6 +1170,7 @@ class AppWindow(QMainWindow):
             else:
                 self.classified.lbl_image.setText("No Image Available")
 
+        self._original_classification = result
         self.classified.lbl_label.setText(result.label.upper())
         self.classified.lbl_conf.setText(f"Confidence: {int(result.confidence * 100)}%")
 
@@ -1255,95 +1192,138 @@ class AppWindow(QMainWindow):
         else:
             self.classified.lbl_tier.setVisible(False)
 
-        # Alternative classifications (2nd / 3rd)
-        top3 = None
-        if result.raw and isinstance(result.raw, dict):
-            top3 = result.raw.get("top3", [])
-
-        if top3 and len(top3) >= 2 and float(top3[1].get("confidence", 0.0)) > 0:
-            self.classified.lbl_rank2.setText("2nd:")
-            self.classified.lbl_name2.setText(top3[1].get("label", "").upper())
-            self.classified.lbl_perc2.setText(f"({int(float(top3[1]['confidence']) * 100)}%)")
-        else:
-            for lbl in [self.classified.lbl_rank2, self.classified.lbl_name2, self.classified.lbl_perc2]:
-                lbl.setText("")
-
-        if top3 and len(top3) >= 3 and float(top3[2].get("confidence", 0.0)) > 0:
-            self.classified.lbl_rank3.setText("3rd:")
-            self.classified.lbl_name3.setText(top3[2].get("label", "").upper())
-            self.classified.lbl_perc3.setText(f"({int(float(top3[2]['confidence']) * 100)}%)")
-        else:
-            for lbl in [self.classified.lbl_rank3, self.classified.lbl_name3, self.classified.lbl_perc3]:
-                lbl.setText("")
-
         # Weight label (volume updated separately via _on_volume_display)
         if result.estimated_weight is not None:
             self.classified.lbl_extra.setText(f"Wt: {result.estimated_weight}")
-            self.classified.lbl_vol_sep.setVisible(True)
         else:
             self.classified.lbl_extra.setText("")
-            self.classified.lbl_vol_sep.setVisible(False)
 
-        # Features 2-column grid
-        grid = self.classified.features_grid
-        while grid.count():
-            item = grid.takeAt(0)
-            if item.widget():
-                item.widget().setParent(None)
+        # Build geology lookup keyed by feature name
+        geology_notes = result.geology_notes or []
+        geo_lookup = {}
+        for nd in geology_notes:
+            if isinstance(nd, dict):
+                geo_lookup[nd.get("feature", "")] = nd.get("note", "")
+            else:
+                geo_lookup[getattr(nd, "feature", "")] = getattr(nd, "note", "")
+
+        # Features + inline geology notes (rebuilt each classification)
+        feat_layout = self.classified.features_layout
+        while feat_layout.count():
+            item = feat_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.setParent(None)
+                w.deleteLater()
         ui_meta = (result.raw or {}).get("ui", {}) if isinstance(result.raw, dict) else {}
         show_features = (
             result.features is not None
             and result.tier not in (None, "uncertain")
             and ui_meta.get("show_features", True)
         )
+        first_feat = True
         if show_features:
-            row = 0
             for feat_name, feat_data in result.features.items():
                 if not feat_data.get("display", True):
                     continue
                 if feat_data.get("tier") not in ("high", "medium"):
                     continue
+                if not first_feat:
+                    sep = _make_divider()
+                    sep.setStyleSheet("background-color: #c0c8bb; max-height: 1px;")
+                    feat_layout.addWidget(sep)
+                first_feat = False
                 conf_pct = int(feat_data.get("confidence", 0.0) * 100)
-                lbl_name = QLabel(feat_name.replace("_", " "))
-                lbl_name.setStyleSheet("font-size: 15px; color: #555;")
-                lbl_name.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-                lbl_val = QLabel(f"{feat_data.get('value', '')}  ({conf_pct}%)")
-                lbl_val.setStyleSheet("font-size: 15px; font-weight: 700;")
-                lbl_val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                grid.addWidget(lbl_name, row, 0)
-                grid.addWidget(lbl_val, row, 1)
-                row += 1
-        features_visible = show_features and grid.rowCount() > 0
-        self.classified.features_widget.setVisible(features_visible)
-        self.classified.div_features.setVisible(features_visible)
-        self.classified.div_volume.setVisible(features_visible)
+                display_name = feat_name.replace("_", " ").title()
+                feat_row_w = QWidget()
+                feat_row = QHBoxLayout(feat_row_w)
+                feat_row.setContentsMargins(0, 8, 0, 4)
+                feat_row.setSpacing(6)
+                lbl_feat_name = QLabel(display_name)
+                lbl_feat_name.setStyleSheet("font-size: 18px; color: #344f41; font-weight: 700;")
+                lbl_feat_val = QLabel(str(feat_data.get("value", "")))
+                lbl_feat_val.setStyleSheet("font-size: 18px;")
+                lbl_feat_conf = QLabel(f"conf. {conf_pct}%")
+                lbl_feat_conf.setStyleSheet("font-size: 15px; color: #697d6a;")
+                feat_row.addWidget(lbl_feat_name)
+                feat_row.addStretch()
+                feat_row.addWidget(lbl_feat_val)
+                feat_row.addWidget(lbl_feat_conf)
+                feat_layout.addWidget(feat_row_w)
+                note_text = geo_lookup.get(feat_name, "")
+                if note_text:
+                    lbl_note = QLabel(note_text)
+                    lbl_note.setWordWrap(True)
+                    lbl_note.setStyleSheet(
+                        "font-size: 15px; color: #697d6a; padding: 0px 0px 4px 0px;"
+                    )
+                    lbl_note.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+                    feat_layout.addWidget(lbl_note)
 
-        # Geology notes panel — two-line format per note
-        for i in reversed(range(self.classified.geology_layout.count())):
-            w = self.classified.geology_layout.itemAt(i).widget()
-            if w:
-                w.setParent(None)
-        geology_notes = result.geology_notes or []
-        for idx, note_data in enumerate(geology_notes):
-            if idx > 0:
-                sep = _make_divider()
-                self.classified.geology_layout.addWidget(sep)
-            feat_display = note_data.get("feature", "").replace("_", " ").upper()
-            lbl_feat = QLabel(feat_display)
-            lbl_feat.setStyleSheet(
-                "font-size: 13px; font-weight: 700; color: #555; margin-top: 4px;"
+        # Alternative classification chips (selectable override)
+        top3 = None
+        if result.raw and isinstance(result.raw, dict):
+            top3 = result.raw.get("top3", [])
+        while self.classified.alt_buttons_layout.count():
+            item = self.classified.alt_buttons_layout.takeAt(0)
+            if item.widget():
+                item.widget().setParent(None)
+        alt_chips = []
+        alts = []
+        if top3:
+            for entry in top3[1:3]:
+                conf = float(entry.get("confidence", 0.0))
+                if conf > 0:
+                    alts.append((entry.get("label", ""), conf))
+        for lbl_text, conf in alts:
+            chip = QPushButton(f"{lbl_text.upper()}  {int(conf * 100)}%")
+            chip.setCheckable(True)
+            chip.setFocusPolicy(Qt.StrongFocus)
+            chip.setStyleSheet("""
+                QPushButton {
+                    background-color: #e0e8d8; color: #344f41;
+                    border: 1px solid #697d6a; border-radius: 4px;
+                    font-size: 15px; padding: 3px 10px;
+                }
+                QPushButton:checked {
+                    background-color: #617c32; color: #f5f6f4;
+                    border-color: #617c32;
+                }
+                QPushButton:focus { border: 2px solid #344f41; }
+            """)
+            alt_chips.append(chip)
+            self.classified.alt_buttons_layout.addWidget(chip)
+        for chip, (lbl_text, conf) in zip(alt_chips, alts):
+            chip.clicked.connect(
+                lambda checked, l=lbl_text, c=conf, b=chip, all_b=list(alt_chips):
+                    self._on_alt_override(l, c, b, all_b, checked)
             )
-            lbl_note = QLabel(note_data.get("note", ""))
-            lbl_note.setWordWrap(True)
-            lbl_note.setStyleSheet("font-size: 14px; color: #344f41;")
-            self.classified.geology_layout.addWidget(lbl_feat)
-            self.classified.geology_layout.addWidget(lbl_note)
-        has_notes = len(geology_notes) > 0
-        self.classified.btn_geology_notes.setVisible(has_notes)
-        self.classified.div_notes.setVisible(has_notes)
-        self.classified.geology_panel.setVisible(False)
-        if has_notes:
-            self.classified.btn_geology_notes.setText("Geology Notes \u25be")
+        has_alts = len(alt_chips) > 0
+        self.classified.div_alts.setVisible(has_alts)
+        self.classified.alt_row.setVisible(has_alts)
+
+    def _on_alt_override(self, label: str, confidence: float, clicked_btn, all_buttons, checked: bool) -> None:
+        from dataclasses import replace as _dc_replace
+        if not checked:
+            for b in all_buttons:
+                b.setChecked(False)
+            orig = getattr(self, "_original_classification", None)
+            if orig is not None:
+                if self.vm.current_classification is not None:
+                    self.vm.current_classification = _dc_replace(
+                        self.vm.current_classification, label=orig.label, confidence=orig.confidence
+                    )
+                self.classified.lbl_label.setText(orig.label.upper())
+                self.classified.lbl_conf.setText(f"Confidence: {int(orig.confidence * 100)}%")
+        else:
+            for b in all_buttons:
+                b.setChecked(b is clicked_btn)
+            if self.vm.current_classification is not None:
+                self.vm.current_classification = _dc_replace(
+                    self.vm.current_classification, label=label, confidence=confidence
+                )
+            self.classified.lbl_label.setText(label.upper())
+            self.classified.lbl_conf.setText(f"Confidence: {int(confidence * 100)}%")
 
     def _on_volume_display(self, text: str) -> None:
         # Reformat "Volume = X cm³" / "Volume = N/A" → "Vol: X cm³" / "Vol: N/A"

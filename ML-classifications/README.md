@@ -5,7 +5,7 @@ This is the rock classification pipeline: takes a photo of a rock and figures ou
 ## how are images collected + pre-processed?
 
 1. Images come from the sources listed in the training data table below
-2. Raw images are organized by file and cropped to 448×448 px (OpenCV GrabCut) and added to `dataset_manifest.json`
+2. Raw images are organized by file and cropped to 768x768 px (OpenCV GrabCut) and added to `dataset_manifest.json`
 3. Processed images are ran through Claude Vision (sonnet API) to classify geological _features_ for each rock image, writing 
 predictions back to `dataset_manifest.json` with confidence scores (1-3)
 4. Image labels with low confidence scores (<2) are manually reviewed  
@@ -67,7 +67,8 @@ Images were pulled from several sources with varying quality and origin (lunar v
 
 | Source | Basalt | Breccia | Anorthosite | Notes |
 |---|---|---|---|---|
-| [Lunar Sample Atlas (LPI)](https://www.lpi.usra.edu/lunar/samples/atlas/) | 600 | 600 | 90 | Lunar. High quality — weighted more heavily |
+| [JSC](https://curator.jsc.nasa.gov/lunar/samplecatalog/index.cfm) | 2800 | 1854 | 34 | Lunar. High quality — weighted more heavily |
+| [LPI](https://www.lpi.usra.edu/lunar/samples/atlas/) | 0 | 0 | 90 | Lunar. High quality — weighted more heavily |
 | Kaggle (4 datasets)* | 1000 | 15 | 61 | Mostly Earth-based. Weighted less — image quality is inconsistent |
 | [Smithsonian](https://collections.nmnh.si.edu/search/ms/) | 200 | 17 | 2 | Earth-based |
 | Flickr (James St. John, Kevin Gill, Mike Fitz) | 164 | 74 | 374 | Mostly Earth-based |

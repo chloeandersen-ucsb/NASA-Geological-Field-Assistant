@@ -32,9 +32,8 @@ voiceNotes/data
 ML-classifications/images_processed
 ML-classifications/images_raw
 ML-classifications/metadata
-ML-classifications/scripts/auto_label.py
-ML-classifications/scripts/crop_image.py
-ML-classifications/scripts/label_tool.py
+ML-classifications/scripts/jsc.py
+ML-classifications/camera-pipeline/images
 .claude
 
 # Jupyter checkpoints
