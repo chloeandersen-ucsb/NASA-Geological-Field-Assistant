@@ -1056,7 +1056,7 @@ class AppWindow(QMainWindow):
         if context_words:
             self.voice.lbl_context.setText(f"Context: {context_words}")
         else:
-            self.voice.lbl_context.setText("Context: Cheatgrass (Default)")
+            self.voice.lbl_context.setText("Context: None (Default)")
     
     def _on_reset_context_clicked(self) -> None:
         self.vm.reset_voice_context()

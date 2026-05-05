@@ -38,7 +38,7 @@ def get_current_visual_context():
                 if label: return [label]
     except:
         pass
-    return ["Cheatgrass"] # Default fallback
+    return [] # Default fallback
 
 SAMPLE_RATE = 16000
 CHUNK_DURATION = 0.5        
@@ -97,10 +97,13 @@ def multimodal_correction(transcript, visual_keywords):
                     spelling_score = jellyfish.jaro_winkler_similarity(chunk, target_squished)
                     sounds_alike = (jellyfish.metaphone(chunk) == jellyfish.metaphone(target_squished))
                     
-                    # Safe threshold! No more "outcrop" hallucinations.
-                    threshold = 0.88 if len(target_squished) <= 4 else 0.78
+                    # --- NEW: Stricter Thresholds & Length Checks ---
+                    # Make the long-word threshold stricter (0.85 instead of 0.78)
+                    threshold = 0.88 if len(target_squished) <= 4 else 0.85
                     
-                    if sounds_alike or spelling_score > threshold:
+                    length_ratio = min(len(chunk), len(target_squished)) / max(len(chunk), len(target_squished))
+                    
+                    if length_ratio > 0.5 and (sounds_alike or spelling_score > threshold):
                         best_match = target
                         max_skip = window_size - 1
                         break
@@ -180,8 +183,45 @@ sys.stdout.flush()
 def rms(x):
     return np.sqrt(np.mean(np.square(x.astype(np.float64))))
 
+# def smart_merge(final_text, new_chunk):
+#     """Now returns a TUPLE: (full_merged_text, entirely_new_suffix)"""
+#     final_text = final_text.strip()
+#     new_chunk = new_chunk.strip()
+    
+#     if not final_text: return new_chunk, new_chunk
+#     if not new_chunk: return final_text, ""
+
+#     old_words = final_text.split()
+#     new_words = new_chunk.split()
+
+#     # --- 1. NEW: AGGRESSIVE STUTTER KILLER ---
+#     # Strip consecutive duplicate words created by ASR model boundary artifacts
+#     deduped_new = [new_words[0]]
+#     for w in new_words[1:]:
+#         if w.lower() != deduped_new[-1].lower():
+#             deduped_new.append(w)
+#     new_words = deduped_new
+
+#     # --- 2. LIST-BASED SEQUENCE MATCHER ---
+#     search_window = old_words[-15:]
+#     s = difflib.SequenceMatcher(None, [w.lower() for w in search_window], [w.lower() for w in new_words])
+#     match = s.find_longest_match(0, len(search_window), 0, len(new_words))
+    
+#     # We trust the match if it's 2+ words, OR if it's 1 word but aligns near the beginning of the new audio
+#     if match.size >= 2 or (match.size == 1 and match.b <= 2):
+#         absolute_chop_idx = len(old_words) - len(search_window) + match.a
+#         merged_words = old_words[:absolute_chop_idx] + new_words[match.b:]
+#         merged_text = " ".join(merged_words)
+        
+#         new_suffix = " ".join(new_words[match.b + match.size:])
+#         return merged_text, new_suffix
+#     else:
+#         # PANIC PROTOCOL: If no overlap is found, safely append the ENTIRE new chunk!
+#         # (Your old code only appended the last word, causing massive drops)
+#         safe_append = " ".join(new_words)
+#         return final_text + " " + safe_append, safe_append
+
 def smart_merge(final_text, new_chunk):
-    """Now returns a TUPLE: (full_merged_text, entirely_new_suffix)"""
     final_text = final_text.strip()
     new_chunk = new_chunk.strip()
     
@@ -191,34 +231,41 @@ def smart_merge(final_text, new_chunk):
     old_words = final_text.split()
     new_words = new_chunk.split()
 
-    # --- 1. THE STUTTER KILLER ---
-    # Instantly drop exact duplicate words passing between chunks
-    if old_words and new_words and old_words[-1].lower() == new_words[0].lower():
-        new_words = new_words[1:]
-        if not new_words: return final_text, ""
+    # 1. INTERNAL STUTTER KILLER
+    deduped_new = [new_words[0]]
+    for w in new_words[1:]:
+        if w.lower() != deduped_new[-1].lower():
+            deduped_new.append(w)
+    new_words = deduped_new
 
-    # --- 2. LIST-BASED SEQUENCE MATCHER ---
-    # Grab the last 15 words to search for the overlap
+    # 2. EXACT PREFIX-SUFFIX MATCHER (Prevents double cheatgrass)
+    max_overlap = 0
+    for i in range(len(new_words), 0, -1):
+        if len(old_words) >= i:
+            if [w.lower() for w in old_words[-i:]] == [w.lower() for w in new_words[:i]]:
+                max_overlap = i
+                break
+                
+    if max_overlap > 0:
+        new_suffix_words = new_words[max_overlap:]
+        merged_text = " ".join(old_words + new_suffix_words)
+        new_suffix = " ".join(new_suffix_words)
+        return merged_text, new_suffix
+        
+    # 3. FUZZY MATCHER (Fallback)
     search_window = old_words[-15:]
-    
-    # difflib works on lists of strings! It will find the longest sequence of identical words.
     s = difflib.SequenceMatcher(None, [w.lower() for w in search_window], [w.lower() for w in new_words])
     match = s.find_longest_match(0, len(search_window), 0, len(new_words))
     
-    # If we find an overlap of at least 2 words (or 1 word if the new audio chunk is tiny)
-    if match.size >= 2 or (match.size == 1 and len(new_words) <= 3):
+    if match.size >= 2 or (match.size == 1 and match.b <= 2):
         absolute_chop_idx = len(old_words) - len(search_window) + match.a
-        
-        # Splicing: Old text up to the match + the ENTIRE new chunk starting from the match
         merged_words = old_words[:absolute_chop_idx] + new_words[match.b:]
         merged_text = " ".join(merged_words)
-        
-        # Return only the genuinely new text to print to the screen
         new_suffix = " ".join(new_words[match.b + match.size:])
         return merged_text, new_suffix
     else:
-        # PANIC PROTOCOL: Stream moves safely forward without repeating massive blocks
-        safe_append = " ".join(new_words[-1:])
+        # PANIC PROTOCOL: Only append the very last word to prevent screen flooding
+        safe_append = new_words[-1] if new_words else ""
         return final_text + " " + safe_append, safe_append
         
 # ------------------------------------------------------------------
@@ -250,6 +297,9 @@ recording_active = False
 total_frames_recorded = 0
 last_inference_frames = 0
 
+last_raw_text = ""
+stable_chunks = 0
+
 try:
     while True:
         import select
@@ -264,6 +314,8 @@ try:
                 rolling_buffer = np.zeros((1,0), dtype=np.float32)
                 total_frames_recorded = 0
                 last_inference_frames = 0
+                silence_chunks = 0
+                last_raw_text = ""
                 final_transcript = ""
                 stream.start()
                 print("\nRECORDING NOW... (Fine-tuned Model)\n")
@@ -271,6 +323,24 @@ try:
             elif line == "stop":
                 stream.stop()
                 recording_active = False
+
+                if last_raw_text:
+                    live_context = get_current_visual_context()
+                    
+                    # We must run the Head Drop here too so it merges cleanly!
+                    raw_words = last_raw_text.split()
+                    if total_frames_recorded > window_size and len(raw_words) > 1:
+                        raw_words = raw_words[1:]
+                    flushed_raw = " ".join(raw_words)
+                    
+                    corrected_text = multimodal_correction(flushed_raw, live_context).replace("⁇", "").strip()
+                    if corrected_text:
+                        new_full_transcript, new_part = smart_merge(final_transcript, corrected_text)
+                        if new_part:
+                            timestamp = datetime.now().strftime('%H:%M:%S')
+                            print(f"[{timestamp}] {new_part}")
+                            sys.stdout.flush()
+
                 print("\n\nStopping stream... Preparing final transcript...")
                 
                 # ------------------------------------------------------------------
@@ -318,6 +388,9 @@ try:
 
                     visual_context = get_current_visual_context()
                     dictionary_cleaned_text = multimodal_correction(final_raw, visual_context).replace("⁇", "")
+                    
+                    sys.stdout.flush() # TEST
+                    
                     final_clean_text = dictionary_cleaned_text
                     
                     if llm and dictionary_cleaned_text.strip():
@@ -414,14 +487,21 @@ Raw ASR: {dictionary_cleaned_text}<|end|>
                         transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
                         raw_text = transcripts[0].text if hasattr(transcripts[0], 'text') else str(transcripts[0])
 
+                    # --- THE TEXT-STABILITY FLUSHER ---
+                    if raw_text == last_raw_text:
+                        stable_chunks += 1
+                    else:
+                        stable_chunks = 0
+                    last_raw_text = raw_text
+
                     raw_words = raw_text.split()
                     
-                    # --- THE STUTTER CURE ---
-                    # 1. Tail Drop: Always drop the last word (physically chopped in half right now)
-                    if len(raw_words) > 1:
+                    # If the transcript is actively changing, the last word is likely half-spoken. Drop it!
+                    # If the transcript has stayed EXACTLY the same for 2 loops (1.0s), the sentence is done. Keep it!
+                    if len(raw_words) > 1 and stable_chunks < 2:
                         raw_words = raw_words[:-1]
                         
-                    # 2. Head Drop: If the buffer is sliding (4.0s+), the FIRST word is an artifact of the old audio cut. Drop it!
+                    # Head Drop: If the buffer is sliding (4.0s+), the FIRST word is an artifact of the old audio cut. Drop it!
                     if total_frames_recorded > window_size and len(raw_words) > 1:
                         raw_words = raw_words[1:]
                         
@@ -435,6 +515,7 @@ Raw ASR: {dictionary_cleaned_text}<|end|>
                         
                         if new_part:
                             timestamp = datetime.now().strftime('%H:%M:%S')
+                            # Standard print statement with a newline, safe for IDEs and PySide6
                             print(f"[{timestamp}] {new_part}")
                             sys.stdout.flush()
                                 
