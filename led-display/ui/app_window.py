@@ -231,42 +231,25 @@ class ClassifiedPage(QWidget):
         super().__init__()
         self.vm = vm
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(16, 10, 16, 10)
+        self.main_layout.setSpacing(4)
 
-        # ── Scrollable content ───────────────────────────────────────────────
-        from PySide6.QtWidgets import QScrollArea
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setFocusPolicy(Qt.NoFocus)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll.setStyleSheet("QScrollBar:vertical { width: 6px; }")
-
-        content = QWidget()
-        self.main_layout = QVBoxLayout(content)
-        self.main_layout.setContentsMargins(16, 14, 16, 8)
-        self.main_layout.setSpacing(6)
-        scroll.setWidget(content)
-        outer.addWidget(scroll, stretch=1)
-
-        # ── Images (compact thumbnails for reference) ────────────────────────
+        # ── Images (compact thumbnails) ──────────────────────────────────────
         self.image_container = QWidget()
         self.image_container.setStyleSheet("background-color: transparent;")
         img_layout = QHBoxLayout(self.image_container)
-        img_layout.setContentsMargins(0, 0, 0, 4)
+        img_layout.setContentsMargins(0, 0, 0, 0)
         img_layout.setSpacing(10)
         self.lbl_image = QLabel()
         self.lbl_image.setAlignment(Qt.AlignCenter)
         self.lbl_image.setStyleSheet("background-color: transparent; border: none;")
-        self.lbl_image.setFixedSize(130, 98)
+        self.lbl_image.setFixedSize(105, 79)
         self.lbl_image.setScaledContents(True)
         self.lbl_side_image = QLabel()
         self.lbl_side_image.setAlignment(Qt.AlignCenter)
         self.lbl_side_image.setStyleSheet("background-color: transparent; border: none;")
-        self.lbl_side_image.setFixedSize(130, 98)
+        self.lbl_side_image.setFixedSize(105, 79)
         self.lbl_side_image.setScaledContents(True)
         img_layout.addStretch()
         img_layout.addWidget(self.lbl_image)
@@ -276,13 +259,13 @@ class ClassifiedPage(QWidget):
 
         # ── Line 1: Rock name (large, left) + Volume (right) ─────────────────
         name_vol_row = QHBoxLayout()
-        name_vol_row.setContentsMargins(0, 6, 0, 0)
+        name_vol_row.setContentsMargins(0, 4, 0, 0)
         name_vol_row.setSpacing(8)
         self.lbl_label = QLabel("—")
-        self.lbl_label.setStyleSheet("font-size: 32px; font-weight: 700;")
+        self.lbl_label.setStyleSheet("font-size: 26px; font-weight: 700;")
         self.lbl_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.lbl_volume = QLabel("")
-        self.lbl_volume.setStyleSheet("font-size: 17px; color: #555;")
+        self.lbl_volume.setStyleSheet("font-size: 15px; color: #555;")
         self.lbl_volume.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         name_vol_row.addWidget(self.lbl_label)
         name_vol_row.addWidget(self.lbl_volume)
@@ -290,17 +273,17 @@ class ClassifiedPage(QWidget):
 
         # ── Line 2: Confidence + tier badge + weight ──────────────────────────
         conf_wt_row = QHBoxLayout()
-        conf_wt_row.setContentsMargins(0, 0, 0, 4)
+        conf_wt_row.setContentsMargins(0, 0, 0, 2)
         conf_wt_row.setSpacing(8)
         self.lbl_conf = QLabel("—")
-        self.lbl_conf.setStyleSheet("font-size: 18px; color: #555;")
+        self.lbl_conf.setStyleSheet("font-size: 15px; color: #555;")
         self.lbl_tier = QLabel("")
         self.lbl_tier.setStyleSheet(
-            "font-size: 17px; font-weight: 700; border-radius: 5px; padding: 2px 10px; color: #f5f6f4;"
+            "font-size: 14px; font-weight: 700; border-radius: 5px; padding: 2px 8px; color: #f5f6f4;"
         )
         self.lbl_tier.setVisible(False)
         self.lbl_extra = QLabel("")
-        self.lbl_extra.setStyleSheet("font-size: 16px; color: #777;")
+        self.lbl_extra.setStyleSheet("font-size: 14px; color: #777;")
         conf_wt_row.addWidget(self.lbl_conf)
         conf_wt_row.addWidget(self.lbl_tier)
         conf_wt_row.addStretch()
@@ -308,15 +291,15 @@ class ClassifiedPage(QWidget):
         self.main_layout.addLayout(conf_wt_row)
 
         # ── Divider ───────────────────────────────────────────────────────────
-        self.main_layout.addSpacing(12)
+        self.main_layout.addSpacing(4)
         self.main_layout.addWidget(_make_divider())
 
         # ── Features + geology notes (rebuilt on each classification) ─────────
         self.features_section = QWidget()
         self.features_layout = QVBoxLayout(self.features_section)
-        self.features_layout.setContentsMargins(0, 4, 0, 0)
-        self.features_layout.setSpacing(3)
-        self.main_layout.addWidget(self.features_section)
+        self.features_layout.setContentsMargins(0, 2, 0, 0)
+        self.features_layout.setSpacing(2)
+        self.main_layout.addWidget(self.features_section, stretch=1)
 
         # ── Alternative classifications (selectable override) ─────────────────
         self.div_alts = _make_divider()
@@ -325,10 +308,10 @@ class ClassifiedPage(QWidget):
 
         self.alt_row = QWidget()
         alt_outer = QHBoxLayout(self.alt_row)
-        alt_outer.setContentsMargins(0, 6, 0, 4)
+        alt_outer.setContentsMargins(0, 4, 0, 2)
         alt_outer.setSpacing(8)
         lbl_also = QLabel("Alternatively:")
-        lbl_also.setStyleSheet("font-size: 16px; color: #697d6a; font-weight: 700;")
+        lbl_also.setStyleSheet("font-size: 14px; color: #697d6a; font-weight: 700;")
         self.alt_buttons_layout = QHBoxLayout()
         self.alt_buttons_layout.setSpacing(6)
         alt_outer.addWidget(lbl_also)
@@ -336,30 +319,25 @@ class ClassifiedPage(QWidget):
         alt_outer.addStretch()
         self.alt_row.setVisible(False)
         self.main_layout.addWidget(self.alt_row)
-        self.main_layout.addStretch(1)
 
-        # ── Fixed buttons pinned at bottom ────────────────────────────────────
-        btn_area = QWidget()
-        btn_area.setStyleSheet("border-top: 1px solid #697d6a;")
-        btn_vbox = QVBoxLayout(btn_area)
-        btn_vbox.setContentsMargins(12, 10, 12, 10)
-        btn_vbox.setSpacing(8)
+        # ── Buttons ───────────────────────────────────────────────────────────
+        self.main_layout.addWidget(_make_divider())
 
         self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
 
         self.btn_reclassify = big_button("Reclassify")
         self.btn_reclassify.setStyleSheet("""
-            QPushButton { background-color: #95b7dc; font-size: 20px; color: #385573; }
+            QPushButton { background-color: #95b7dc; font-size: 18px; color: #385573; }
             QPushButton:hover { background-color: #b8d4ec; }
         """)
         self.btn_save = big_button("Save")
         self.btn_save.setStyleSheet("""
-            QPushButton { background-color: #617c32; font-size: 20px; color: #f5f6f4; }
+            QPushButton { background-color: #617c32; font-size: 18px; color: #f5f6f4; }
             QPushButton:hover { background-color: #7a9a3e; }
         """)
         self.btn_delete = big_button("Delete")
         self.btn_delete.setStyleSheet("""
-            QPushButton { background-color: #313940; font-size: 20px; color: #f5f6f4; }
+            QPushButton { background-color: #313940; font-size: 18px; color: #f5f6f4; }
             QPushButton:hover { background-color: #424d56; }
         """)
 
@@ -368,11 +346,9 @@ class ClassifiedPage(QWidget):
         top_btns.addWidget(self.btn_reclassify)
         top_btns.addWidget(self.btn_save)
 
-        btn_vbox.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
-        btn_vbox.addLayout(top_btns)
-        btn_vbox.addWidget(self.btn_delete)
-
-        outer.addWidget(btn_area)
+        self.main_layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
+        self.main_layout.addLayout(top_btns)
+        self.main_layout.addWidget(self.btn_delete)
         
 
 
@@ -550,8 +526,12 @@ class TripLoadPage(QWidget):
         layout.addWidget(self.list, stretch=1)
 
         self.btn_back = big_button("Back")
+        self.btn_back.setStyleSheet("""
+            QPushButton { background-color: #cbd2c5; color: #344f41; font-size: 20px; font-weight: bold; border-radius: 8px; }
+            QPushButton:hover { background-color: #b0bdb2; }
+        """)
         layout.addWidget(self.btn_back)
-        
+
         self._missions_data = []
         self._summary = None
 
@@ -611,8 +591,12 @@ class MissionDetailPage(QWidget):
             QPushButton:hover { background-color: #ff3333; }
         """)
         self.btn_back = big_button("Back")
-        action_row.addWidget(self.btn_delete_mission)
+        self.btn_back.setStyleSheet("""
+            QPushButton { background-color: #cbd2c5; color: #344f41; font-size: 20px; font-weight: bold; border-radius: 8px; }
+            QPushButton:hover { background-color: #b0bdb2; }
+        """)
         action_row.addWidget(self.btn_back)
+        action_row.addWidget(self.btn_delete_mission)
         layout.addLayout(action_row)
 
         self._timeline_data = []
@@ -737,9 +721,9 @@ class RockDetailPage(QWidget):
         self.lbl_summary_title.setStyleSheet("font-size: 18px; font-weight: 700;")
         
         self.btn_force_summary = QPushButton("RE-SUMMARIZE")
-        self.btn_force_summary.setFixedSize(140, 30)
+        self.btn_force_summary.setMinimumHeight(45)
         self.btn_force_summary.setStyleSheet("""
-            QPushButton { background-color: #95b7dc; color: #385573; font-weight: bold; border-radius: 6px; font-size: 14px; }
+            QPushButton { background-color: #95b7dc; color: #385573; font-weight: bold; border-radius: 6px; font-size: 16px; }
             QPushButton:hover { background-color: #b8d2ea; }
         """)
         
@@ -796,6 +780,10 @@ class RockDetailPage(QWidget):
         layout.addLayout(rock_action_row)
 
         self.btn_back = big_button("Back")
+        self.btn_back.setStyleSheet("""
+            QPushButton { background-color: #cbd2c5; color: #344f41; font-size: 20px; font-weight: bold; border-radius: 8px; }
+            QPushButton:hover { background-color: #b0bdb2; }
+        """)
         layout.addWidget(self.btn_back)
         self._current_rock_id = None
 
@@ -946,6 +934,10 @@ class VoiceNoteDetailPage(QWidget):
         layout.addLayout(note_action_row)
 
         self.btn_back = big_button("Back")
+        self.btn_back.setStyleSheet("""
+            QPushButton { background-color: #cbd2c5; color: #344f41; font-size: 20px; font-weight: bold; border-radius: 8px; }
+            QPushButton:hover { background-color: #b0bdb2; }
+        """)
         layout.addWidget(self.btn_back)
         self._current_note = None
 
@@ -1184,6 +1176,7 @@ class AppWindow(QMainWindow):
 
         if hasattr(self, "mission_detail"):
             self.mission_detail.btn_cancel_assign.show()
+            self.mission_detail.lbl_status.setText("▼ Navigate list — select a rock to link this note")
 
     def _do_shake(self):
         """Bounces the margins of the Rock widgets left and right."""
@@ -1209,6 +1202,10 @@ class AppWindow(QMainWindow):
 
         if hasattr(self, "mission_detail"):
             self.mission_detail.btn_cancel_assign.hide()
+            summary = getattr(self.mission_detail, "_summary", None)
+            if summary:
+                is_current = summary.mission.mission_id == getattr(self.vm, "active_mission_id", None)
+                self.mission_detail.lbl_status.setText("Current mission" if is_current else "")
             if hasattr(self.mission_detail, "list"):
                 for i in range(self.mission_detail.list.count()):
                     list_item = self.mission_detail.list.item(i)
