@@ -135,6 +135,7 @@ class CameraPreviewPage(QWidget):
         layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
         
         self.btn_capture = QPushButton("Capture")
+        self.btn_capture.setProperty("joystick_primary", True)
         self.btn_cancel = QPushButton("Cancel")
         self.btn_cancel.setMinimumHeight(50)
         self.btn_capture.setMinimumHeight(50)
@@ -194,6 +195,7 @@ class CaptureReviewPage(QWidget):
         self.btn_retake.setMinimumHeight(55)
         self.btn_retake.setStyleSheet("background-color: #95b7dc; font-size: 20px; color: #385573;")
         self.btn_classify = QPushButton("Classify")
+        self.btn_classify.setProperty("joystick_primary", True)
         self.btn_classify.setMinimumHeight(55)
         self.btn_classify.setStyleSheet("background-color: #617c32; font-size: 20px; color: #f5f6f4;")
         btns.addWidget(self.btn_retake)
@@ -331,6 +333,7 @@ class ClassifiedPage(QWidget):
             QPushButton:hover { background-color: #b8d4ec; }
         """)
         self.btn_save = big_button("Save")
+        self.btn_save.setProperty("joystick_primary", True)
         self.btn_save.setStyleSheet("""
             QPushButton { background-color: #617c32; font-size: 18px; color: #f5f6f4; }
             QPushButton:hover { background-color: #7a9a3e; }
@@ -769,6 +772,7 @@ class RockDetailPage(QWidget):
         layout.addLayout(rock_action_row)
 
         self.btn_back = big_button("Back")
+        self.btn_back.setProperty("joystick_primary", True)
         self.btn_back.setStyleSheet("""
             QPushButton { background-color: #cbd2c5; color: #344f41; font-size: 20px; font-weight: bold; border-radius: 8px; }
             QPushButton:hover { background-color: #b0bdb2; }

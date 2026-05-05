@@ -554,6 +554,13 @@ class JoystickNavigator(QObject):
         buttons = self._buttons()
         lists   = self._lists()
 
+        # Honour an explicitly designated primary button before falling back to
+        # positional sorting — lets each page declare its most logical first focus.
+        for btn in buttons:
+            if btn.property("joystick_primary"):
+                self._highlight_btn(btn)
+                return
+
         if lists and buttons:
             # Start in the list if it appears before the first button
             if self._widget_y(lists[0]) < self._btn_y(buttons[0]):
