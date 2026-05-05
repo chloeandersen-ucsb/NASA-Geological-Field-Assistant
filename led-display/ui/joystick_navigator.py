@@ -182,6 +182,8 @@ class JoystickNavigator(QObject):
 
         self._focused_list: Optional[QListWidget] = None
         self._focused_list_row: int = -1
+        self._highlighted_item_widget: Optional[QWidget] = None
+        self._highlighted_item_widget_style: str = ""
 
         self._thread = QThread(self)
         self._worker = _JoystickWorker(bus, addr)
@@ -237,11 +239,29 @@ class JoystickNavigator(QObject):
 
     def _highlight_list_row(self, lst: QListWidget, row: int):
         self._clear_btn_highlight()
+        # Restore previous item widget style before moving to a new row
+        if self._highlighted_item_widget is not None:
+            try:
+                self._highlighted_item_widget.setStyleSheet(self._highlighted_item_widget_style)
+            except RuntimeError:
+                pass
+            self._highlighted_item_widget = None
+            self._highlighted_item_widget_style = ""
         self._focused_list = lst
         self._focused_list_row = row
         lst.setCurrentRow(row)
         lst.scrollToItem(lst.item(row))
         lst.setFocus(Qt.OtherFocusReason)
+        # Apply visible highlight to the custom item widget (covers Qt's native selection)
+        item = lst.item(row)
+        if item:
+            widget = lst.itemWidget(item)
+            if widget:
+                self._highlighted_item_widget = widget
+                self._highlighted_item_widget_style = widget.styleSheet()
+                widget.setStyleSheet(
+                    "background-color: #ffffff; border: 4px solid #344f41; border-radius: 6px;"
+                )
 
     def _clear_list_highlight(self):
         if self._focused_list is not None:
@@ -249,6 +269,13 @@ class JoystickNavigator(QObject):
                 self._focused_list.clearSelection()
             except RuntimeError:
                 pass
+        if self._highlighted_item_widget is not None:
+            try:
+                self._highlighted_item_widget.setStyleSheet(self._highlighted_item_widget_style)
+            except RuntimeError:
+                pass
+            self._highlighted_item_widget = None
+            self._highlighted_item_widget_style = ""
         self._focused_list = None
         self._focused_list_row = -1
 
@@ -440,7 +467,8 @@ class JoystickNavigator(QObject):
 
     def _move_left(self):
         if self._in_list():
-            # Single-column list: left/right has no meaning; ignore
+            # Left skips out of the list to the button above it
+            self._exit_list(direction=-1)
             return
 
         buttons = self._buttons()
@@ -458,6 +486,8 @@ class JoystickNavigator(QObject):
 
     def _move_right(self):
         if self._in_list():
+            # Right skips out of the list to the button below it
+            self._exit_list(direction=1)
             return
 
         buttons = self._buttons()

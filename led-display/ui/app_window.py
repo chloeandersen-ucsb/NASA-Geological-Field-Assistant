@@ -478,36 +478,19 @@ class TripLoadPage(QWidget):
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
         layout.addWidget(title)
 
-        self.btn_create_new_mission = QPushButton("CREATE NEW MISSION")
-        self.btn_create_new_mission.setMinimumHeight(45)
+        self.btn_create_new_mission = QPushButton("Create New Mission")
+        self.btn_create_new_mission.setMinimumHeight(55)
         self.btn_create_new_mission.setStyleSheet("""
-            QPushButton {
-                background-color: #344f41;
-                color: white;
-                font-size: 18px;
-                font-weight: bold;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #486454;
-            }
+            QPushButton { background-color: #344f41; color: white; font-size: 20px; font-weight: bold; border-radius: 6px; }
+            QPushButton:hover { background-color: #486454; }
         """)
         layout.addWidget(self.btn_create_new_mission)
 
-        # --- Delete All Button ---
-        self.btn_delete_all = QPushButton("DELETE ALL")
-        self.btn_delete_all.setMinimumHeight(45)
+        self.btn_delete_all = QPushButton("Delete All")
+        self.btn_delete_all.setMinimumHeight(55)
         self.btn_delete_all.setStyleSheet("""
-            QPushButton {
-                background-color: #cc0000;
-                color: white;
-                font-size: 18px;
-                font-weight: bold;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #ff3333;
-            }
+            QPushButton { background-color: #313940; color: white; font-size: 20px; font-weight: bold; border-radius: 6px; }
+            QPushButton:hover { background-color: #424d56; }
         """)
         layout.addWidget(self.btn_delete_all)
 
@@ -566,29 +549,29 @@ class MissionDetailPage(QWidget):
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(self.list, stretch=1)
 
-        self.btn_set_current = QPushButton("SET AS CURRENT MISSION")
-        self.btn_set_current.setMinimumHeight(45)
+        self.btn_set_current = QPushButton("Set as Current Mission")
+        self.btn_set_current.setMinimumHeight(55)
         self.btn_set_current.setStyleSheet("""
-            QPushButton { background-color: #344f41; color: white; font-size: 16px; font-weight: bold; border-radius: 6px; }
+            QPushButton { background-color: #344f41; color: white; font-size: 20px; font-weight: bold; border-radius: 6px; }
             QPushButton:hover { background-color: #486454; }
         """)
         layout.addWidget(self.btn_set_current)
 
-        self.btn_cancel_assign = QPushButton("CANCEL ASSIGNMENT")
-        self.btn_cancel_assign.setMinimumHeight(45)
+        self.btn_cancel_assign = QPushButton("Cancel Assignment")
+        self.btn_cancel_assign.setMinimumHeight(55)
         self.btn_cancel_assign.setStyleSheet("""
-            QPushButton { background-color: #95b7dc; color: #385573; font-size: 16px; font-weight: bold; border-radius: 6px; }
+            QPushButton { background-color: #95b7dc; color: #385573; font-size: 20px; font-weight: bold; border-radius: 6px; }
             QPushButton:hover { background-color: #b8d2ea; }
         """)
         layout.addWidget(self.btn_cancel_assign)
         self.btn_cancel_assign.hide()
 
         action_row = QHBoxLayout()
-        self.btn_delete_mission = QPushButton("DELETE MISSION")
-        self.btn_delete_mission.setMinimumHeight(45)
+        self.btn_delete_mission = QPushButton("Delete Mission")
+        self.btn_delete_mission.setMinimumHeight(55)
         self.btn_delete_mission.setStyleSheet("""
-            QPushButton { background-color: #cc0000; color: white; font-size: 16px; font-weight: bold; border-radius: 6px; }
-            QPushButton:hover { background-color: #ff3333; }
+            QPushButton { background-color: #313940; color: white; font-size: 20px; font-weight: bold; border-radius: 6px; }
+            QPushButton:hover { background-color: #424d56; }
         """)
         self.btn_back = big_button("Back")
         self.btn_back.setStyleSheet("""
@@ -636,7 +619,7 @@ class MissionCreatePage(QWidget):
         """)
         layout.addWidget(self.text)
 
-        self.btn_create = QPushButton("CREATE MISSION")
+        self.btn_create = QPushButton("Create Mission")
         self.btn_create.setMinimumHeight(55)
         self.btn_create.setStyleSheet("""
             QPushButton {
@@ -712,15 +695,21 @@ class RockDetailPage(QWidget):
 
         self.lbl_info = QLabel("")
         self.lbl_info.setWordWrap(True)
-        self.lbl_info.setStyleSheet("font-size: 18px; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
-        layout.addWidget(self.lbl_info, stretch=2)
+        self.lbl_info.setStyleSheet("font-size: 16px; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
+        layout.addWidget(self.lbl_info)
 
-        # --- NEW: Summary Header with Re-Summarize Button ---
+        self.features_section = QWidget()
+        self.features_layout = QVBoxLayout(self.features_section)
+        self.features_layout.setContentsMargins(0, 2, 0, 2)
+        self.features_layout.setSpacing(2)
+        layout.addWidget(self.features_section)
+
+        # --- Summary Header with Re-Summarize Button ---
         summary_header_layout = QHBoxLayout()
         self.lbl_summary_title = QLabel("AI Summary:")
         self.lbl_summary_title.setStyleSheet("font-size: 18px; font-weight: 700;")
         
-        self.btn_force_summary = QPushButton("RE-SUMMARIZE")
+        self.btn_force_summary = QPushButton("Re-Summarize")
         self.btn_force_summary.setMinimumHeight(45)
         self.btn_force_summary.setStyleSheet("""
             QPushButton { background-color: #95b7dc; color: #385573; font-weight: bold; border-radius: 6px; font-size: 16px; }
@@ -763,17 +752,17 @@ class RockDetailPage(QWidget):
         layout.addWidget(self.notes_text, stretch=1)
 
         rock_action_row = QHBoxLayout()
-        self.btn_make_current = QPushButton("MAKE CURRENT ROCK")
-        self.btn_make_current.setMinimumHeight(45)
+        self.btn_make_current = QPushButton("Make Current Rock")
+        self.btn_make_current.setMinimumHeight(55)
         self.btn_make_current.setStyleSheet("""
-            QPushButton { background-color: #344f41; color: white; font-size: 16px; font-weight: bold; border-radius: 6px; }
+            QPushButton { background-color: #344f41; color: white; font-size: 20px; font-weight: bold; border-radius: 6px; }
             QPushButton:hover { background-color: #486454; }
         """)
-        self.btn_delete_rock = QPushButton("DELETE ROCK")
-        self.btn_delete_rock.setMinimumHeight(45)
+        self.btn_delete_rock = QPushButton("Delete Rock")
+        self.btn_delete_rock.setMinimumHeight(55)
         self.btn_delete_rock.setStyleSheet("""
-            QPushButton { background-color: #cc0000; color: white; font-size: 16px; font-weight: bold; border-radius: 6px; }
-            QPushButton:hover { background-color: #ff3333; }
+            QPushButton { background-color: #313940; color: white; font-size: 20px; font-weight: bold; border-radius: 6px; }
+            QPushButton:hover { background-color: #424d56; }
         """)
         rock_action_row.addWidget(self.btn_make_current)
         rock_action_row.addWidget(self.btn_delete_rock)
@@ -857,12 +846,67 @@ class RockDetailPage(QWidget):
 
         vol_txt = f"{res.estimated_volume} cm³" if res.estimated_volume is not None else "N/A"
         weight_txt = res.estimated_weight if res.estimated_weight is not None else "N/A"
-        self.lbl_info.setText(f"Volume: {vol_txt}\nWeight: {weight_txt}")
-        
-        # --- NEW: Parse and populate the table instead of HTML ---
+        self.lbl_info.setText(f"Vol: {vol_txt}   Wt: {weight_txt}")
+
+        # Rebuild ML features section
+        feat_layout = self.features_layout
+        while feat_layout.count():
+            child = feat_layout.takeAt(0)
+            w = child.widget()
+            if w:
+                w.setParent(None)
+                w.deleteLater()
+        geo_lookup = {}
+        for nd in (res.geology_notes or []):
+            if isinstance(nd, dict):
+                geo_lookup[nd.get("feature", "")] = nd.get("note", "")
+            else:
+                geo_lookup[getattr(nd, "feature", "")] = getattr(nd, "note", "")
+        ui_meta = (res.raw or {}).get("ui", {}) if isinstance(res.raw, dict) else {}
+        show_features = (
+            res.features is not None
+            and res.tier not in (None, "uncertain")
+            and ui_meta.get("show_features", True)
+        )
+        first_feat = True
+        if show_features:
+            for feat_name, feat_data in res.features.items():
+                if not feat_data.get("display", True):
+                    continue
+                if feat_data.get("tier") not in ("high", "medium"):
+                    continue
+                if not first_feat:
+                    sep = _make_divider()
+                    sep.setStyleSheet("background-color: #c0c8bb; max-height: 1px;")
+                    feat_layout.addWidget(sep)
+                first_feat = False
+                conf_pct = int(feat_data.get("confidence", 0.0) * 100)
+                display_name = feat_name.replace("_", " ").title()
+                feat_row_w = QWidget()
+                feat_row = QHBoxLayout(feat_row_w)
+                feat_row.setContentsMargins(0, 4, 0, 2)
+                feat_row.setSpacing(6)
+                lbl_n = QLabel(display_name)
+                lbl_n.setStyleSheet("font-size: 15px; color: #344f41; font-weight: 700;")
+                lbl_v = QLabel(str(feat_data.get("value", "")))
+                lbl_v.setStyleSheet("font-size: 15px;")
+                lbl_c = QLabel(f"conf. {conf_pct}%")
+                lbl_c.setStyleSheet("font-size: 13px; color: #697d6a;")
+                feat_row.addWidget(lbl_n)
+                feat_row.addStretch()
+                feat_row.addWidget(lbl_v)
+                feat_row.addWidget(lbl_c)
+                feat_layout.addWidget(feat_row_w)
+                note_text = geo_lookup.get(feat_name, "")
+                if note_text:
+                    lbl_note = QLabel(note_text)
+                    lbl_note.setWordWrap(True)
+                    lbl_note.setStyleSheet("font-size: 13px; color: #697d6a; padding: 0px 0px 2px 0px;")
+                    lbl_note.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+                    feat_layout.addWidget(lbl_note)
+
         table_data = self._parse_summary_to_table_data(ai_summary)
         self._populate_table(table_data)
-        # ---------------------------------------------------------
 
         # --- Populate Voice Notes ---
         if associated_notes:
@@ -917,17 +961,17 @@ class VoiceNoteDetailPage(QWidget):
         layout.addWidget(self.text, stretch=1)
 
         note_action_row = QHBoxLayout()
-        self.btn_add_to_classification = QPushButton("ADD TO CLASSIFICATION")
-        self.btn_add_to_classification.setMinimumHeight(45)
+        self.btn_add_to_classification = QPushButton("Add to Classification")
+        self.btn_add_to_classification.setMinimumHeight(55)
         self.btn_add_to_classification.setStyleSheet("""
-            QPushButton { background-color: #95b7dc; color: #385573; font-size: 15px; font-weight: bold; border-radius: 6px; }
+            QPushButton { background-color: #95b7dc; color: #385573; font-size: 20px; font-weight: bold; border-radius: 6px; }
             QPushButton:hover { background-color: #b8d2ea; }
         """)
-        self.btn_delete_note = QPushButton("DELETE NOTE")
-        self.btn_delete_note.setMinimumHeight(45)
+        self.btn_delete_note = QPushButton("Delete Note")
+        self.btn_delete_note.setMinimumHeight(55)
         self.btn_delete_note.setStyleSheet("""
-            QPushButton { background-color: #cc0000; color: white; font-size: 16px; font-weight: bold; border-radius: 6px; }
-            QPushButton:hover { background-color: #ff3333; }
+            QPushButton { background-color: #313940; color: white; font-size: 20px; font-weight: bold; border-radius: 6px; }
+            QPushButton:hover { background-color: #424d56; }
         """)
         note_action_row.addWidget(self.btn_add_to_classification)
         note_action_row.addWidget(self.btn_delete_note)
