@@ -339,7 +339,7 @@ try:
                         if new_part:
                             timestamp = datetime.now().strftime('%H:%M:%S')
                             print(f"[{timestamp}] {new_part}")
-                            sys.stdout.flush()
+                            #sys.stdout.flush()
 
                 print("\n\nStopping stream... Preparing final transcript...")
                 
