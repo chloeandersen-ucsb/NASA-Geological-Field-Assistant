@@ -12,7 +12,7 @@ sys.path.insert(0, str(project_root))
 img_path = project_root / "led-display" / "ui" / "sage-logo-wcbg.png"
 
 
-from PySide6.QtCore import Qt, QTimer, Signal, QPoint
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QStackedWidget, QMessageBox,
@@ -586,8 +586,34 @@ class MissionDetailPage(QWidget):
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(self.list, stretch=1)
 
+        self.btn_set_current = QPushButton("SET AS CURRENT MISSION")
+        self.btn_set_current.setMinimumHeight(45)
+        self.btn_set_current.setStyleSheet("""
+            QPushButton { background-color: #344f41; color: white; font-size: 16px; font-weight: bold; border-radius: 6px; }
+            QPushButton:hover { background-color: #486454; }
+        """)
+        layout.addWidget(self.btn_set_current)
+
+        self.btn_cancel_assign = QPushButton("CANCEL ASSIGNMENT")
+        self.btn_cancel_assign.setMinimumHeight(45)
+        self.btn_cancel_assign.setStyleSheet("""
+            QPushButton { background-color: #95b7dc; color: #385573; font-size: 16px; font-weight: bold; border-radius: 6px; }
+            QPushButton:hover { background-color: #b8d2ea; }
+        """)
+        layout.addWidget(self.btn_cancel_assign)
+        self.btn_cancel_assign.hide()
+
+        action_row = QHBoxLayout()
+        self.btn_delete_mission = QPushButton("DELETE MISSION")
+        self.btn_delete_mission.setMinimumHeight(45)
+        self.btn_delete_mission.setStyleSheet("""
+            QPushButton { background-color: #cc0000; color: white; font-size: 16px; font-weight: bold; border-radius: 6px; }
+            QPushButton:hover { background-color: #ff3333; }
+        """)
         self.btn_back = big_button("Back")
-        layout.addWidget(self.btn_back)
+        action_row.addWidget(self.btn_delete_mission)
+        action_row.addWidget(self.btn_back)
+        layout.addLayout(action_row)
 
         self._timeline_data = []
         self._summary = None
@@ -752,6 +778,23 @@ class RockDetailPage(QWidget):
         """)
         layout.addWidget(self.notes_text, stretch=1)
 
+        rock_action_row = QHBoxLayout()
+        self.btn_make_current = QPushButton("MAKE CURRENT ROCK")
+        self.btn_make_current.setMinimumHeight(45)
+        self.btn_make_current.setStyleSheet("""
+            QPushButton { background-color: #344f41; color: white; font-size: 16px; font-weight: bold; border-radius: 6px; }
+            QPushButton:hover { background-color: #486454; }
+        """)
+        self.btn_delete_rock = QPushButton("DELETE ROCK")
+        self.btn_delete_rock.setMinimumHeight(45)
+        self.btn_delete_rock.setStyleSheet("""
+            QPushButton { background-color: #cc0000; color: white; font-size: 16px; font-weight: bold; border-radius: 6px; }
+            QPushButton:hover { background-color: #ff3333; }
+        """)
+        rock_action_row.addWidget(self.btn_make_current)
+        rock_action_row.addWidget(self.btn_delete_rock)
+        layout.addLayout(rock_action_row)
+
         self.btn_back = big_button("Back")
         layout.addWidget(self.btn_back)
         self._current_rock_id = None
@@ -885,10 +928,29 @@ class VoiceNoteDetailPage(QWidget):
         """)
         layout.addWidget(self.text, stretch=1)
 
+        note_action_row = QHBoxLayout()
+        self.btn_add_to_classification = QPushButton("ADD TO CLASSIFICATION")
+        self.btn_add_to_classification.setMinimumHeight(45)
+        self.btn_add_to_classification.setStyleSheet("""
+            QPushButton { background-color: #95b7dc; color: #385573; font-size: 15px; font-weight: bold; border-radius: 6px; }
+            QPushButton:hover { background-color: #b8d2ea; }
+        """)
+        self.btn_delete_note = QPushButton("DELETE NOTE")
+        self.btn_delete_note.setMinimumHeight(45)
+        self.btn_delete_note.setStyleSheet("""
+            QPushButton { background-color: #cc0000; color: white; font-size: 16px; font-weight: bold; border-radius: 6px; }
+            QPushButton:hover { background-color: #ff3333; }
+        """)
+        note_action_row.addWidget(self.btn_add_to_classification)
+        note_action_row.addWidget(self.btn_delete_note)
+        layout.addLayout(note_action_row)
+
         self.btn_back = big_button("Back")
         layout.addWidget(self.btn_back)
+        self._current_note = None
 
     def set_note(self, note: dict) -> None:
+        self._current_note = note
         ts = note.get("ts", 0)
         if ts:
             dt = datetime.datetime.fromtimestamp(ts)
@@ -1115,10 +1177,13 @@ class AppWindow(QMainWindow):
         self._assigning_note_ts = note_ts
         self._shake_offset = 0
         self._shake_direction = 1
-        
+
         self._shake_timer = QTimer(self)
         self._shake_timer.timeout.connect(self._do_shake)
-        self._shake_timer.start(40) # Update the layout every 40ms
+        self._shake_timer.start(40)
+
+        if hasattr(self, "mission_detail"):
+            self.mission_detail.btn_cancel_assign.show()
 
     def _do_shake(self):
         """Bounces the margins of the Rock widgets left and right."""
@@ -1141,13 +1206,15 @@ class AppWindow(QMainWindow):
         if hasattr(self, "_shake_timer") and self._shake_timer is not None:
             self._shake_timer.stop()
             self._shake_timer = None
-            
-        if hasattr(self, "mission_detail") and hasattr(self.mission_detail, "list"):
-            for i in range(self.mission_detail.list.count()):
-                list_item = self.mission_detail.list.item(i)
-                widget = self.mission_detail.list.itemWidget(list_item)
-                if widget:
-                    widget.setContentsMargins(5, 2, 5, 2)
+
+        if hasattr(self, "mission_detail"):
+            self.mission_detail.btn_cancel_assign.hide()
+            if hasattr(self.mission_detail, "list"):
+                for i in range(self.mission_detail.list.count()):
+                    list_item = self.mission_detail.list.item(i)
+                    widget = self.mission_detail.list.itemWidget(list_item)
+                    if widget:
+                        widget.setContentsMargins(5, 2, 5, 2)
     
     def _on_delete_all_clicked(self) -> None:
         # Create the custom popup
@@ -1306,13 +1373,21 @@ class AppWindow(QMainWindow):
 
         self.mission_detail.btn_back.clicked.connect(self._show_trip_home)
         self.mission_detail.list.itemClicked.connect(self._on_timeline_clicked)
+        self.mission_detail.btn_set_current.clicked.connect(self._on_set_current_mission_clicked)
+        self.mission_detail.btn_cancel_assign.clicked.connect(self._stop_rock_assignment)
+        self.mission_detail.btn_delete_mission.clicked.connect(self._on_delete_current_mission_clicked)
 
         self.mission_create.btn_create.clicked.connect(self._on_create_mission_clicked)
         self.mission_create.btn_cancel.clicked.connect(self._show_trip_home)
 
         self.rock_detail.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(self.mission_detail))
         self.rock_detail.btn_force_summary.clicked.connect(self._on_force_summary_clicked)
+        self.rock_detail.btn_make_current.clicked.connect(self._on_make_current_rock_clicked)
+        self.rock_detail.btn_delete_rock.clicked.connect(self._on_delete_current_rock_clicked)
+
         self.voice_note_detail.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(self.mission_detail))
+        self.voice_note_detail.btn_add_to_classification.clicked.connect(self._on_add_to_classification_clicked)
+        self.voice_note_detail.btn_delete_note.clicked.connect(self._on_delete_current_note_clicked)
         
     def _on_stop_or_edit_clicked(self) -> None:
         if self.voice.btn_stop.text() == "Stop":
@@ -1778,16 +1853,7 @@ class AppWindow(QMainWindow):
             lbl.setStyleSheet("font-size: 16px;")
             lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
 
-            dot_btn = QPushButton("⋮")
-            dot_btn.setFixedSize(30, 30)
-            dot_btn.setStyleSheet("""
-                QPushButton { font-size: 24px; font-weight: bold; border: none; background: transparent; color: #344f41; }
-                QPushButton::menu-indicator { image: none; width: 0px; }
-            """)
-            self._attach_timeline_menu_to_button(dot_btn, item)
-
             row_layout.addWidget(lbl, stretch=1)
-            row_layout.addWidget(dot_btn)
 
             list_item.setSizeHint(widget.sizeHint())
             self.mission_detail.list.setItemWidget(list_item, widget)
@@ -1829,16 +1895,7 @@ class AppWindow(QMainWindow):
             lbl.setStyleSheet("font-size: 16px;")
             lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
 
-            dot_btn = QPushButton("⋮")
-            dot_btn.setFixedSize(30, 30)
-            dot_btn.setStyleSheet("""
-                QPushButton { font-size: 24px; font-weight: bold; border: none; background: transparent; color: #344f41; }
-                QPushButton::menu-indicator { image: none; width: 0px; }
-            """)
-            self._attach_mission_menu_to_button(dot_btn, mission_summary)
-
             row_layout.addWidget(lbl, stretch=1)
-            row_layout.addWidget(dot_btn)
 
             list_item.setSizeHint(widget.sizeHint())
             self.trip.list.setItemWidget(list_item, widget)
@@ -1851,112 +1908,38 @@ class AppWindow(QMainWindow):
                 self._selected_mission_id = None
                 self._show_trip_home()
 
-    def _attach_mission_menu_to_button(self, button, mission_summary: MissionSummary):
-        from PySide6.QtWidgets import QMenu, QWidgetAction
+    def _on_set_current_mission_clicked(self) -> None:
+        summary = self.mission_detail._summary
+        if summary:
+            self.vm.make_mission_current(summary.mission.mission_id)
 
-        menu = QMenu(button)
-        menu.setStyleSheet("QMenu { background-color: #cbd2c5; border: 2px solid #344f41; }")
+    def _on_delete_current_mission_clicked(self) -> None:
+        summary = self.mission_detail._summary
+        if summary:
+            self._delete_mission(summary.mission.mission_id, summary.mission.name)
 
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+    def _on_make_current_rock_clicked(self) -> None:
+        entry = getattr(self.rock_detail, "_current_rock_entry", None)
+        if entry:
+            self.vm.make_rock_current(entry)
 
-        btn_current = QPushButton("MAKE CURRENT MISSION")
-        btn_current.setStyleSheet("""
-            QPushButton { font-size: 18px; color: #344f41; padding: 12px 20px; border: none; text-align: left; }
-            QPushButton:hover { background-color: #95b7dc; }
-        """)
-        btn_current.clicked.connect(
-            lambda checked=False, mission_id=mission_summary.mission.mission_id, m=menu: [self.vm.make_mission_current(mission_id), m.close()]
-        )
-        layout.addWidget(btn_current)
+    def _on_delete_current_rock_clicked(self) -> None:
+        entry = getattr(self.rock_detail, "_current_rock_entry", None)
+        if entry:
+            self._delete_timeline_item({"type": "rock", "data": entry})
+            self.stack.setCurrentWidget(self.mission_detail)
 
-        btn_delete = QPushButton("DELETE MISSION")
-        btn_delete.setStyleSheet("""
-            QPushButton { font-size: 18px; color: #cc0000; padding: 12px 20px; border: none; text-align: left; font-weight: bold; }
-            QPushButton:hover { background-color: #95b7dc; }
-        """)
-        btn_delete.clicked.connect(
-            lambda checked=False, mission_id=mission_summary.mission.mission_id, mission_name=mission_summary.mission.name, m=menu:
-                [self._delete_mission(mission_id, mission_name), m.close()]
-        )
-        layout.addWidget(btn_delete)
+    def _on_add_to_classification_clicked(self) -> None:
+        note = getattr(self.voice_note_detail, "_current_note", None)
+        if note:
+            self._start_rock_assignment(note.get("ts"))
+            self.stack.setCurrentWidget(self.mission_detail)
 
-        action = QWidgetAction(menu)
-        action.setDefaultWidget(container)
-        menu.addAction(action)
-        button.clicked.connect(lambda checked=False, b=button, m=menu: self._show_bounded_menu(b, m))
-
-    def _attach_timeline_menu_to_button(self, button, item_dict):
-        from PySide6.QtWidgets import QMenu, QWidgetAction
-
-        menu = QMenu(button)
-        menu.setStyleSheet("QMenu { background-color: #cbd2c5; border: 2px solid #344f41; }")
-
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        if item_dict["type"] == "rock":
-            btn_current = QPushButton("Make current")
-            btn_current.setStyleSheet("""
-                QPushButton { font-size: 18px; color: #344f41; padding: 12px 20px; border: none; text-align: left; }
-                QPushButton:hover { background-color: #95b7dc; }
-            """)
-            btn_current.clicked.connect(lambda checked=False, d=item_dict["data"], m=menu: [self.vm.make_rock_current(d), m.close()])
-            layout.addWidget(btn_current)
-
-        if item_dict["type"] == "voice":
-            btn_assign = QPushButton("Add to classification")
-            btn_assign.setStyleSheet("""
-                QPushButton { font-size: 18px; color: #344f41; padding: 12px 20px; border: none; text-align: left; }
-                QPushButton:hover { background-color: #95b7dc; }
-            """)
-            btn_assign.clicked.connect(lambda checked=False, i=item_dict, m=menu: [self._start_rock_assignment(i["data"].get("ts")), m.close()])
-            layout.addWidget(btn_assign)
-
-        btn_delete = QPushButton("Delete")
-        btn_delete.setStyleSheet("""
-            QPushButton { font-size: 18px; color: #cc0000; padding: 12px 20px; border: none; text-align: left; font-weight: bold; }
-            QPushButton:hover { background-color: #95b7dc; }
-        """)
-        btn_delete.clicked.connect(lambda checked=False, i=item_dict, m=menu: [self._delete_timeline_item(i), m.close()])
-        layout.addWidget(btn_delete)
-
-        action = QWidgetAction(menu)
-        action.setDefaultWidget(container)
-        menu.addAction(action)
-        button.clicked.connect(lambda checked=False, b=button, m=menu: self._show_bounded_menu(b, m))
-
-    def _show_bounded_menu(self, button: QPushButton, menu) -> None:
-        menu.ensurePolished()
-        menu_size = menu.sizeHint()
-
-        preferred_pos = button.mapToGlobal(button.rect().bottomRight())
-        screen = QApplication.screenAt(preferred_pos)
-        if screen is None:
-            screen = button.screen() or QApplication.primaryScreen()
-        available = screen.availableGeometry() if screen else self.geometry()
-
-        x = preferred_pos.x() - menu_size.width()
-        y = preferred_pos.y()
-
-        if x < available.left():
-            x = min(
-                button.mapToGlobal(button.rect().topLeft()).x(),
-                available.right() - menu_size.width()
-            )
-        if x + menu_size.width() > available.right():
-            x = available.right() - menu_size.width()
-
-        if y + menu_size.height() > available.bottom():
-            y = button.mapToGlobal(button.rect().topLeft()).y() - menu_size.height()
-        if y < available.top():
-            y = available.top()
-
-        menu.popup(QPoint(x, y))
+    def _on_delete_current_note_clicked(self) -> None:
+        note = getattr(self.voice_note_detail, "_current_note", None)
+        if note:
+            self._delete_timeline_item({"type": "voice", "data": note})
+            self.stack.setCurrentWidget(self.mission_detail)
 
     def _delete_mission(self, mission_id: str, mission_name: str) -> None:
         msg_box = QMessageBox(self)
