@@ -24,6 +24,90 @@ from PySide6.QtWidgets import (
 import connector
 from core.viewmodel import AppStateType, ClassificationResult, MissionSummary, TripSummary
 
+class SpinnerWidget(QWidget):
+    """A custom widget that draws a smooth, rotating loading circle."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.angle = 0
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._rotate)
+        
+    def _rotate(self):
+        self.angle = (self.angle + 15) % 360  # Spin speed
+        self.update()
+        
+    def start(self):
+        self.timer.start(30) # 30ms for smooth 60fps rotation
+        self.show()
+        
+    def stop(self):
+        self.timer.stop()
+        self.hide()
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # 1. Draw the dim background track
+        pen = QPen(QColor(255, 255, 255, 50)) 
+        pen.setWidth(6)
+        painter.setPen(pen)
+        painter.drawArc(self.rect().adjusted(6, 6, -6, -6), 0, 360 * 16)
+        
+        # 2. Draw the bright spinning part
+        pen = QPen(QColor("#a88b5c")) # Matches your accent color
+        pen.setWidth(6)
+        pen.setCapStyle(Qt.RoundCap)
+        painter.setPen(pen)
+        painter.drawArc(self.rect().adjusted(6, 6, -6, -6), -self.angle * 16, 120 * 16)
+
+
+class LoadingOverlay(QWidget):
+    """A semi-transparent overlay that blocks clicks and animates text."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False) # Blocks clicks to the page underneath!
+        
+        self.layout = QVBoxLayout(self)
+        self.layout.setAlignment(Qt.AlignCenter)
+        
+        # Add the spinning circle
+        self.spinner = SpinnerWidget()
+        self.spinner.setFixedSize(60, 60)
+        
+        # Add the animated text label
+        self.lbl_text = QLabel("Finalizing Transcript")
+        self.lbl_text.setStyleSheet("color: white; font-size: 22px; font-weight: bold; background: transparent;")
+        self.lbl_text.setAlignment(Qt.AlignCenter)
+        
+        self.layout.addWidget(self.spinner, 0, Qt.AlignCenter)
+        self.layout.addSpacing(15)
+        self.layout.addWidget(self.lbl_text, 0, Qt.AlignCenter)
+        
+        # Ellipsis Animation Timer
+        self.dot_count = 0
+        self.text_timer = QTimer(self)
+        self.text_timer.timeout.connect(self._animate_text)
+        
+    def _animate_text(self):
+        self.dot_count = (self.dot_count + 1) % 4
+        dots = "." * self.dot_count
+        self.lbl_text.setText(f"Finalizing Transcript{dots}")
+        
+    def paintEvent(self, event):
+        # Fill the entire screen with 60% opacity black
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 160)) 
+        
+    def start(self):
+        self.show()
+        self.spinner.start()
+        self.text_timer.start(350) # Ticks exactly every 0.25 seconds!
+        
+    def stop(self):
+        self.hide()
+        self.spinner.stop()
+        self.text_timer.stop()
 
 def big_button(text: str) -> QPushButton:
     b = QPushButton(text)
@@ -465,6 +549,14 @@ class VoicePage(QWidget):
             row.addWidget(b)
 
         layout.addLayout(row)
+
+        self.loading_overlay = LoadingOverlay(self)
+        self.loading_overlay.hide()
+
+    def resizeEvent(self, event):
+        # Force the overlay to always match the exact size of the VoicePage
+        self.loading_overlay.setGeometry(self.rect())
+        super().resizeEvent(event)
 
 
 class TripLoadPage(QWidget):
@@ -1080,11 +1172,14 @@ class AppWindow(QMainWindow):
         for b in [v.btn_start, v.btn_stop, v.btn_redo, v.btn_save, v.btn_delete, v.btn_reset, v.btn_cancel]:
             b.hide()
             
+        # Ensure overlay is hidden by default
+        if mode != "formatting":
+            v.loading_overlay.stop()
+            
         # 2. Show only what belongs in the current phase
         if mode == "initial":
             v.btn_start.show()
             v.btn_cancel.show()
-            # Only show reset if they are currently latched to a specific rock context
             active_rock = getattr(self.vm, "active_rock_id", None)
             if active_rock and active_rock != "ORPHAN":
                 v.btn_reset.show()
@@ -1092,6 +1187,10 @@ class AppWindow(QMainWindow):
         elif mode == "recording":
             v.btn_stop.setText("Stop")
             v.btn_stop.show()
+            
+        elif mode == "formatting":
+            # Fire up the gray screen, spinner, and animated text!
+            v.loading_overlay.start()
             
         elif mode == "review":
             v.btn_stop.setText("Edit")
@@ -1326,6 +1425,7 @@ class AppWindow(QMainWindow):
         self.vm.classification_changed.connect(self._on_classification)
         self.vm.volume_display_changed.connect(self._on_volume_display)
         self.vm.transcription_changed.connect(self._on_transcription)
+        self.vm.transcription_formatted.connect(self._on_transcription_formatted)
         self.vm.mission_name_transcription_changed.connect(self._on_mission_name_transcription)
         self.vm.rock_summary_changed.connect(self._on_rock_summary_changed)
         self.vm.trip_changed.connect(self._on_trip)
@@ -1357,6 +1457,15 @@ class AppWindow(QMainWindow):
         self.mission_keyboard.key_pressed.connect(self._on_mission_key_pressed)
         self.mission_create.text.textChanged.connect(self._update_mission_create_button)
         self._update_mission_create_button()
+
+    def _on_transcription_formatted(self):
+        """Called when the LLM finishes formatting the text."""
+        if self.stack.currentWidget() == self.voice:
+            # Turn off the overlay and show the buttons!
+            if not self.vm.transcription_text.strip():
+                self._update_voice_buttons("initial")
+            else:
+                self._update_voice_buttons("review")
         
     def _on_camera_frame(self, image: QImage) -> None:
         if self.vm.state == AppStateType.CAMERA_PREVIEW:
@@ -2021,7 +2130,7 @@ class AppWindow(QMainWindow):
             
             # If we are actually looking at the voice page, update the layout
             if self.stack.currentWidget() == self.voice:
-                self._update_voice_buttons("review")
+                self._update_voice_buttons("formatting")
 
     def _on_mission_name_recording_status_changed(self, is_recording: bool):
         if is_recording:

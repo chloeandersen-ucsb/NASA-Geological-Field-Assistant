@@ -613,6 +613,7 @@ class ViewModel(QObject):
     classification_changed = Signal(object)
     volume_display_changed = Signal(str)
     transcription_changed = Signal(str)
+    transcription_formatted = Signal()
     recording_status_changed = Signal(bool)
     mission_name_transcription_changed = Signal(str)
     mission_name_recording_status_changed = Signal(bool)
@@ -1387,6 +1388,7 @@ class ViewModel(QObject):
         print(f"[VIEWMODEL] CLEANUP: Replacing live text with final version", file=sys.stderr)
         self.transcription_text = final_text
         self.transcription_changed.emit(self.transcription_text)
+        self.transcription_formatted.emit()
 
     def _on_rock_summary_finished(self, rock_id: str, summary: str) -> None:
         if self.sender() is not self._rock_summary_worker or not rock_id:
