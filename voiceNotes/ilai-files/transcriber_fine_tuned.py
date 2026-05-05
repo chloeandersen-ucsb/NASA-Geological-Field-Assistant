@@ -38,11 +38,11 @@ def get_current_visual_context():
                 if label: return [label]
     except:
         pass
-    return ["Gneiss"] # Default fallback
+    return ["Cheatgrass"] # Default fallback
 
 SAMPLE_RATE = 16000
 CHUNK_DURATION = 0.5        
-WINDOW_DURATION = 2.5       
+WINDOW_DURATION = 4.0       
 ENERGY_THRESHOLD = 0.001    
 PRINT_SILENCE = True
 
@@ -163,9 +163,7 @@ sys.stdout.flush()
 # --- NEW: BOOT THE HEAVIER LLM ---
 from llama_cpp import Llama
 
-print("Loading Llama-3 8B LLM for post-processing...")
-# Ensure you have downloaded a Llama-3 8B quantized model (like Q4_K_M)
-LLM_MODEL_PATH = os.path.join(PROJECT_ROOT, "led-display", "models", "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf")
+LLM_MODEL_PATH = os.path.join(PROJECT_ROOT, "led-display", "models", "Phi-3-mini-4k-instruct-q4.gguf")
 
 try:
     # n_gpu_layers=-1 offloads it to the Jetson's GPU for maximum speed
@@ -249,6 +247,9 @@ rolling_buffer = np.zeros((1, 0), dtype=np.float32)
 final_transcript = ""
 recording_active = False
 
+total_frames_recorded = 0
+last_inference_frames = 0
+
 try:
     while True:
         import select
@@ -261,6 +262,8 @@ try:
                 recording_active = True
                 full_audio_buffer = []
                 rolling_buffer = np.zeros((1,0), dtype=np.float32)
+                total_frames_recorded = 0
+                last_inference_frames = 0
                 final_transcript = ""
                 stream.start()
                 print("\nRECORDING NOW... (Fine-tuned Model)\n")
@@ -282,14 +285,12 @@ try:
                     full_len = torch.tensor([full_signal.shape[1]], dtype=torch.int64, device=device)
 
                     with torch.no_grad():
-                        # Always get logits to extract confidence alternatives
                         logits = asr_model.forward(input_signal=full_signal, input_signal_length=full_len)
                         if isinstance(logits, tuple): logits = logits[0]
                         pred_tokens = logits.argmax(dim=-1)
                         transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
                         final_raw = transcripts[0].text if hasattr(transcripts[0], 'text') else str(transcripts[0])
                         
-                        # Extract low confidence alternatives
                         probs = torch.softmax(logits, dim=-1)
                         top_probs, top_indices = torch.topk(probs, k=4, dim=-1)
                         vocab = asr_model.decoder.vocabulary
@@ -299,15 +300,13 @@ try:
                             top_prob = top_probs[0, t, 0].item()
                             top_idx = top_indices[0, t, 0].item()
                             
-                            # If it's not a blank token and confidence is low
                             if top_idx < len(vocab) and top_prob < 0.85:
                                 alts = []
                                 for k in range(4):
                                     idx = top_indices[0, t, k].item()
                                     prob = top_probs[0, t, k].item()
-                                    # Only include plausible alternative tokens
                                     if idx < len(vocab) and prob > 0.01:
-                                        token = vocab[idx].replace(' ', '') # Clean subword marker
+                                        token = vocab[idx].replace(' ', '')
                                         if token:
                                             alts.append(token)
                                 if len(alts) > 1:
@@ -318,12 +317,7 @@ try:
                             confidence_hint = "The ASR model was unsure about some sounds. Here are the top alternatives it considered for the ambiguous parts (in chronological order): " + " ".join(ambiguous_notes)
 
                     visual_context = get_current_visual_context()
-
-                    # 2. RUN THE DICTIONARY SWEEP FIRST!
-                    # Fix the geology terms while it's all still raw, lowercase ASR text
                     dictionary_cleaned_text = multimodal_correction(final_raw, visual_context).replace("⁇", "")
-                    
-                    # 3. LLM Post-Processing Layer (Formatting + Confidence Check)
                     final_clean_text = dictionary_cleaned_text
                     
                     if llm and dictionary_cleaned_text.strip():
@@ -331,46 +325,40 @@ try:
                         if confidence_hint:
                             print("Passing confidence notes to LLM...")
                             context_str = ", ".join(visual_context)
-                            system_prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-You are an expert geology assistant and robotic text formatter. Your job is to format the text with capitalization and punctuation.
+                            system_prompt = f"""<|system|>
+You are an expert geology assistant and robotic text formatter. Your job is to format the text with proper capitalization and punctuation.
 Visual Context: {context_str}
 {confidence_hint}
 
-If the ASR text contains errors, use the visual context and the phonetic alternatives to choose the best geological words. Do NOT completely rewrite the sentence. Keep it as close to the original as possible, just fixing errors and formatting.
-CRITICAL: Do NOT output conversational text, explanations, or introductions like "Here is the formatted text". Output ONLY the final transcript."""
+If the ASR text contains errors, use the visual context and the phonetic alternatives to choose the best geological words. Keep the text as close to the original as possible. Output ONLY the final formatted transcript. Do not include conversational filler.<|end|>"""
                         else:
-                            system_prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-You are a robotic text formatter. Your ONLY job is to add capitalization and punctuation.
-You must output the EXACT same words in the EXACT same order. 
-DO NOT delete words. DO NOT add words. DO NOT fix grammar. 
-CRITICAL: Do NOT output conversational text, explanations, or introductions like "Here is the formatted text". Output ONLY the formatted text."""
+                            system_prompt = f"""<|system|>
+You are a robotic text formatter. Your ONLY job is to add proper capitalization and punctuation to the text.
+Output ONLY the formatted text. Do not add conversational filler. Do not change the words.<|end|>"""
 
-                        # Perfect Llama-3 Few-Shot Template
-                        prompt = f"""{system_prompt}<|eot_id|><|start_header_id|>user<|end_header_id|>
-Raw ASR: i found this dark piece magnesium underground crater need record much<|eot_id|><|start_header_id|>assistant<|end_header_id|>
-I found this dark piece magnesium underground crater. Need record much.<|eot_id|><|start_header_id|>user<|end_header_id|>
-Raw ASR: {dictionary_cleaned_text}<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
+                        prompt = f"""{system_prompt}
+<|user|>
+Raw ASR: i found this dark piece magnesium underground crater need record much<|end|>
+<|assistant|>
+I found this dark piece magnesium underground crater. Need record much.<|end|>
+<|user|>
+Raw ASR: {dictionary_cleaned_text}<|end|>
+<|assistant|>"""
 
                         response = llm(
                             prompt, 
                             max_tokens=200, 
-                            stop=["<|eot_id|>"], # REMOVED the \n stop token!
+                            stop=["<|end|>"],
                             temperature=0.1 if not confidence_hint else 0.2
                         )
                         
                         llm_output = response["choices"][0]["text"].strip()
                         
-                        # Strip conversational filler if LLM ignores instructions
                         if "Here is the formatted text:" in llm_output:
                             llm_output = llm_output.split("Here is the formatted text:")[-1].strip()
                         elif "Here is the corrected text:" in llm_output:
                             llm_output = llm_output.split("Here is the corrected text:")[-1].strip()
-                        elif llm_output.startswith("Here"):
-                            lines = llm_output.split('\n')
-                            if len(lines) > 1:
-                                llm_output = '\n'.join(lines[1:]).strip()
                         
-                        # Only accept the LLM text if it isn't completely empty
                         if llm_output:
                             final_clean_text = llm_output
     
@@ -386,60 +374,72 @@ Raw ASR: {dictionary_cleaned_text}<|eot_id|><|start_header_id|>assistant<|end_he
                 sys.stdout.flush()
 
         if recording_active:
+            # 1. Drain the audio queue and count total frames
             while not audio_q.empty():
                 block = audio_q.get()
                 block_mono = block[:, 0].reshape(1, -1)
                 rolling_buffer = np.concatenate((rolling_buffer, block_mono), axis=1)
                 full_audio_buffer.append(block_mono.flatten())
-
-            if rolling_buffer.shape[1] >= window_size:
-                current_visual_context = get_current_visual_context()
-
-                window_audio = rolling_buffer[:, :window_size]
-                if rms(window_audio.flatten()) < ENERGY_THRESHOLD:
-                    rolling_buffer = rolling_buffer[:, chunk_size:]
-                    continue
-
-                max_val = np.max(np.abs(window_audio))
-                if max_val > 0: window_audio = window_audio / (max_val + 1e-9)
-                tensor_in = torch.from_numpy(window_audio).float().to(device)
-                len_in = torch.tensor([tensor_in.shape[1]], dtype=torch.int64, device=device)
-
-                with torch.no_grad():
-                    logits = asr_model.forward(input_signal=tensor_in, input_signal_length=len_in)
-                    if isinstance(logits, tuple): logits = logits[0]
-                    pred_tokens = logits.argmax(dim=-1)
-                    transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
-                    raw_text = transcripts[0].text if hasattr(transcripts[0], 'text') else str(transcripts[0])
-
-                # --- NEW: THE UNSTABLE TAIL DROP ---
-                # The last word in a rolling window is almost always physically chopped in half.
-                # We drop it here. In the next 0.5s loop, it will be fully inside the window and transcribe perfectly.
-                raw_words = raw_text.split()
-                if len(raw_words) > 2:
-                    raw_text = " ".join(raw_words[:-2])
-                # -----------------------------------
-
-                # 1. Grab the live context from the file
-                live_context = get_current_visual_context()
                 
-                # 2. Feed it into your correction brain
-                corrected_text = multimodal_correction(raw_text, live_context)
+                total_frames_recorded += block_mono.shape[1]
+
+            # 2. Start inference ONLY after 2.0 seconds of audio is collected
+            if total_frames_recorded >= int(SAMPLE_RATE * 2.0):
                 
-                # --- RULE 1: Destroy the weird question marks ---
-                corrected_text = corrected_text.replace("⁇", "").strip()
-                
-                if corrected_text:
-                    # Unpack the tuple!
-                    new_full_transcript, new_part = smart_merge(final_transcript, corrected_text)
+                # 3. Prevent bursts: only trigger if 0.5s of NEW audio has arrived since the last inference
+                if total_frames_recorded - last_inference_frames >= chunk_size:
                     
-                    if new_part:
-                        timestamp = datetime.now().strftime('%H:%M:%S')
-                        print(f"[{timestamp}] {new_part}")
-                        sys.stdout.flush()
-                            
-                    final_transcript = new_full_transcript
-                rolling_buffer = rolling_buffer[:, chunk_size:]
+                    # Sync the tracker directly to prevent the "inference bomb" lag
+                    last_inference_frames = total_frames_recorded
+
+                    # Cap the buffer to the maximum window size (4.0s)
+                    if rolling_buffer.shape[1] > window_size:
+                        rolling_buffer = rolling_buffer[:, -window_size:]
+
+                    current_visual_context = get_current_visual_context()
+                    window_audio = rolling_buffer 
+                    
+                    if rms(window_audio.flatten()) < ENERGY_THRESHOLD:
+                        continue
+
+                    max_val = np.max(np.abs(window_audio))
+                    if max_val > 0: window_audio = window_audio / (max_val + 1e-9)
+                    tensor_in = torch.from_numpy(window_audio).float().to(device)
+                    len_in = torch.tensor([tensor_in.shape[1]], dtype=torch.int64, device=device)
+
+                    with torch.no_grad():
+                        logits = asr_model.forward(input_signal=tensor_in, input_signal_length=len_in)
+                        if isinstance(logits, tuple): logits = logits[0]
+                        pred_tokens = logits.argmax(dim=-1)
+                        transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
+                        raw_text = transcripts[0].text if hasattr(transcripts[0], 'text') else str(transcripts[0])
+
+                    raw_words = raw_text.split()
+                    
+                    # --- THE STUTTER CURE ---
+                    # 1. Tail Drop: Always drop the last word (physically chopped in half right now)
+                    if len(raw_words) > 1:
+                        raw_words = raw_words[:-1]
+                        
+                    # 2. Head Drop: If the buffer is sliding (4.0s+), the FIRST word is an artifact of the old audio cut. Drop it!
+                    if total_frames_recorded > window_size and len(raw_words) > 1:
+                        raw_words = raw_words[1:]
+                        
+                    raw_text = " ".join(raw_words)
+
+                    live_context = get_current_visual_context()
+                    corrected_text = multimodal_correction(raw_text, live_context).replace("⁇", "").strip()
+                    
+                    if corrected_text:
+                        new_full_transcript, new_part = smart_merge(final_transcript, corrected_text)
+                        
+                        if new_part:
+                            timestamp = datetime.now().strftime('%H:%M:%S')
+                            print(f"[{timestamp}] {new_part}")
+                            sys.stdout.flush()
+                                
+                        final_transcript = new_full_transcript
+                        
         time.sleep(0.01)
 
 except KeyboardInterrupt:
