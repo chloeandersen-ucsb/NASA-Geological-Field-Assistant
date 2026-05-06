@@ -37,6 +37,10 @@ ML-classifications/scripts/jsc.py
 ML-classifications/camera-pipeline/images
 .claude
 
+# Dev scratch / test files
+test_*.py
+patch_*.py
+
 # Jupyter checkpoints
 .ipynb_checkpoints/
 **/.ipynb_checkpoints/

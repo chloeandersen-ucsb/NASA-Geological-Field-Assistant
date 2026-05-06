@@ -108,14 +108,22 @@ def _build_report_prompt(payload: dict, notes: list[str]) -> str:
 
     joined_notes = "\n".join(f"- {note}" for note in notes)
     
+    retry_instruction = " Please provide a more detailed, varied, and comprehensive synthesis than a standard report." if payload.get("is_retry") else ""
+
     return (
         f"=== METADATA ===\n{chr(10).join(metadata)}\n\n"
-        f"=== FIELD NOTES ===\n{joined_notes}\n\n"
-        "Read the data above, then extract the facts to fill out EXACTLY this blank template. Keep descriptions brief. Do not write any other paragraphs:\n\n"
-        "- Color & Appearance: \n"
-        "- Texture & Structure: \n"
-        "- Dimensions & Weight: \n"
-        "- Field Context & Notes: "
+        f"=== FIELD AUDIO TRANSCRIPTS ===\n{joined_notes}\n\n"
+        "=== INSTRUCTIONS ===\n"
+        "Synthesize the metadata and transcripts above into a concise field report. "
+        "You MUST copy the exact 6-line template below word-for-word and fill in the brackets. Do not add, remove, or rename any lines. If data is missing, replace the bracket with 'Not specified'.\n"
+        f"{retry_instruction}\n\n"
+        "TEMPLATE:\n"
+        "- Color & Appearance: [fill in]\n"
+        "- Mineralogy & Composition: [fill in]\n"
+        "- Texture & Structure: [fill in]\n"
+        "- Weathering & Alteration: [fill in]\n"
+        "- Dimensions & Weight: [fill in]\n"
+        "- Field Context & Sampling Notes: [fill in]"
     )
 
 
@@ -161,26 +169,52 @@ def _extract_response_text(response: dict) -> str:
 
 
 def _clean_generated_summary(text: str) -> str:
-    # DEBUG: See what the AI actually said before we chop it
+    # DEBUG: See what the AI actually said before we process it
     print(f"\n--- RAW AI OUTPUT ---\n{text}\n---------------------\n")
 
+    # 1. The Absolute Source of Truth: Our unbreakable 6 rows
+    final_fields = {
+        "Color & Appearance": "Not specified.",
+        "Mineralogy & Composition": "Not specified.",
+        "Texture & Structure": "Not specified.",
+        "Weathering & Alteration": "Not specified.",
+        "Dimensions & Weight": "Not specified.",
+        "Field Context & Sampling Notes": "Not specified."
+    }
+
+    # 2. Clean up any weird AI markdown formatting
     summary = re.sub(r"^```[a-zA-Z]*\n", "", text.strip())
     summary = re.sub(r"\n```$", "", summary)
-    
-    # More forgiving Regex: allow spaces before the hyphen, or no hyphen at all
-    match = re.search(r"(?i)(Color & Appearance|Texture & Structure|Dimensions & Weight|Field Context):", summary)
-    
-    if match:
-        # Start from the beginning of the line where the first category appears
-        start_pos = summary.rfind('\n', 0, match.start()) + 1
-        summary = summary[start_pos:]
-        
-    return summary.strip()
+
+    # 3. Aggressively hunt through the AI's output line-by-line
+    for line in summary.split('\n'):
+        for key in final_fields.keys():
+            # This regex looks for the category name, ignoring dashes, spaces, or bolding (**)
+            pattern = re.compile(rf"^\s*[-*]*\s*(?:\*\*)?{re.escape(key)}(?:\*\*)?\s*:\s*(.*)", re.IGNORECASE)
+            match = pattern.search(line)
+            
+            if match:
+                value = match.group(1).strip()
+                # If the AI actually provided an answer, save it!
+                if value and "[fill in]" not in value.lower() and "not specified" not in value.lower():
+                    final_fields[key] = value
+                break # Move to the next line
+
+    # 4. Reconstruct the perfect 6-line string for the UI
+    perfect_summary = []
+    for key, value in final_fields.items():
+        perfect_summary.append(f"- {key}: {value}")
+
+    return "\n".join(perfect_summary)
 
 
 def _generate_summary(payload: dict, notes: list[str]) -> str:
     llm = _load_llama()
     prompt = _build_report_prompt(payload, notes)
+
+    is_retry = payload.get("is_retry", False)
+    temperature = 0.6 if is_retry else 0.1
+
     response = llm.create_chat_completion(
         messages=[
             {
@@ -192,7 +226,7 @@ def _generate_summary(payload: dict, notes: list[str]) -> str:
                 "content": prompt,
             },
         ],
-        temperature=0.1,
+        temperature=temperature,
         top_p=0.9,
         max_tokens=400,
     )

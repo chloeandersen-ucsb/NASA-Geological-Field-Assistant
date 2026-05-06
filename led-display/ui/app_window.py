@@ -17,7 +17,7 @@ from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPain
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QStackedWidget, QMessageBox,
     QWidget, QVBoxLayout, QLabel, QPushButton,
-    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QDialog, QFrame,
+    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout, QDialog, QFrame,
 )
 
 import importlib.util, pathlib
@@ -30,6 +30,164 @@ JoystickNavigator = _mod.JoystickNavigator
 import connector
 from core.viewmodel import AppStateType, ClassificationResult, MissionSummary, TripSummary
 
+class SummaryPopupOverlay(QWidget):
+    closed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+
+        self._outer = QVBoxLayout(self)
+        self._outer.setAlignment(Qt.AlignCenter)
+
+        self.box = QWidget()
+        self.box.setFixedSize(420, 340)
+        self.box.setStyleSheet(
+            "background-color: #F5F6F1; border: 3px solid #5E6D62; border-radius: 12px;"
+        )
+        box_layout = QVBoxLayout(self.box)
+        box_layout.setContentsMargins(16, 14, 16, 12)
+        box_layout.setSpacing(8)
+
+        self.lbl_title = QLabel("Category")
+        self.lbl_title.setAlignment(Qt.AlignCenter)
+        self.lbl_title.setStyleSheet(
+            "font-size: 20px; font-weight: bold; color: #233127; border: none; padding-bottom: 4px;"
+        )
+        box_layout.addWidget(self.lbl_title)
+
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setStyleSheet("background-color: #5E6D62; border: none;")
+        divider.setFixedHeight(2)
+        box_layout.addWidget(divider)
+
+        self.lbl_content = QLabel("")
+        self.lbl_content.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.lbl_content.setWordWrap(True)
+        self.lbl_content.setStyleSheet(
+            "font-size: 17px; color: #233127; border: none; margin-top: 4px;"
+        )
+        box_layout.addWidget(self.lbl_content, stretch=1)
+
+        self.btn_close = QPushButton("Close")
+        self.btn_close.setMinimumHeight(44)
+        self.btn_close.setProperty("joystick_primary", True)
+        self.btn_close.setStyleSheet("""
+            QPushButton {
+                background-color: #5E6D62; color: white;
+                font-size: 16px; font-weight: bold;
+                border-radius: 8px; border: none;
+            }
+            QPushButton:hover { background-color: #617c32; }
+        """)
+        self.btn_close.clicked.connect(self._close)
+        box_layout.addWidget(self.btn_close)
+
+        self._outer.addWidget(self.box)
+
+    def _close(self):
+        self.hide()
+        self.closed.emit()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 160))
+
+    def mousePressEvent(self, event):
+        if not self.box.geometry().contains(event.pos()):
+            self._close()
+
+    def show_popup(self, title: str, content: str):
+        self.lbl_title.setText(title)
+        self.lbl_content.setText(content)
+        self.raise_()
+        self.show()
+
+class SpinnerWidget(QWidget):
+    """A custom widget that draws a smooth, rotating loading circle."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.angle = 0
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._rotate)
+        
+    def _rotate(self):
+        self.angle = (self.angle + 15) % 360  # Spin speed
+        self.update()
+        
+    def start(self):
+        self.timer.start(30) # 30ms for smooth 60fps rotation
+        self.show()
+        
+    def stop(self):
+        self.timer.stop()
+        self.hide()
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # 1. Draw the dim background track
+        pen = QPen(QColor(255, 255, 255, 50)) 
+        pen.setWidth(6)
+        painter.setPen(pen)
+        painter.drawArc(self.rect().adjusted(6, 6, -6, -6), 0, 360 * 16)
+        
+        # 2. Draw the bright spinning part
+        pen = QPen(QColor(_COLOR_TIER_MEDIUM))
+        pen.setWidth(6)
+        pen.setCapStyle(Qt.RoundCap)
+        painter.setPen(pen)
+        painter.drawArc(self.rect().adjusted(6, 6, -6, -6), -self.angle * 16, 120 * 16)
+
+
+class LoadingOverlay(QWidget):
+    """A semi-transparent overlay that blocks clicks and animates text."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False) # Blocks clicks to the page underneath!
+        
+        self.layout = QVBoxLayout(self)
+        self.layout.setAlignment(Qt.AlignCenter)
+        
+        # Add the spinning circle
+        self.spinner = SpinnerWidget()
+        self.spinner.setFixedSize(60, 60)
+        
+        # Add the animated text label
+        self.lbl_text = QLabel("Finalizing Transcript")
+        self.lbl_text.setStyleSheet("color: white; font-size: 22px; font-weight: bold; background: transparent;")
+        self.lbl_text.setAlignment(Qt.AlignCenter)
+        
+        self.layout.addWidget(self.spinner, 0, Qt.AlignCenter)
+        self.layout.addSpacing(15)
+        self.layout.addWidget(self.lbl_text, 0, Qt.AlignCenter)
+        
+        # Ellipsis Animation Timer
+        self.dot_count = 0
+        self.text_timer = QTimer(self)
+        self.text_timer.timeout.connect(self._animate_text)
+        
+    def _animate_text(self):
+        self.dot_count = (self.dot_count + 1) % 4
+        dots = "." * self.dot_count
+        self.lbl_text.setText(f"Finalizing Transcript{dots}")
+        
+    def paintEvent(self, event):
+        # Fill the entire screen with 60% opacity black
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 160)) 
+        
+    def start(self):
+        self.show()
+        self.spinner.start()
+        self.text_timer.start(350) # Ticks exactly every 0.25 seconds!
+        
+    def stop(self):
+        self.hide()
+        self.spinner.stop()
+        self.text_timer.stop()
 
 # Centralized UI theme. Keep the app minimal, high-contrast, and consistent
 # for a 480x800 astronaut-facing display controlled by joystick.
@@ -49,8 +207,28 @@ _COLOR_DANGER_H    = "#842121"
 _COLOR_STOP        = "#7E1F23"
 _COLOR_STOP_H      = "#6D191D"
 _COLOR_FOCUS       = "#111827"
-_BTN_RADIUS        = 10
-_BTN_H             = 52
+_BTN_RADIUS        = 4
+_BTN_H             = 46
+_FONT_UI           = "Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif"
+_FONT_DATA         = "'DM Mono', 'Courier New', Courier, monospace"
+
+# Extended palette — named so they're grep-able and not scattered as raw hex
+_COLOR_HOME_BG         = "#586e5d"   # HomePage background
+_COLOR_HOME_TEXT       = "#cad2c5"   # Light text on dark bg
+_COLOR_HOME_MUTED      = "#8aab90"   # Subdued accents on dark bg
+_COLOR_HOME_BTN        = "#3d5245"   # Dark green border / separator
+_COLOR_HOME_BTN_H      = "#2B4035"   # Hover on dark buttons
+_COLOR_IMG_BG          = "#0a0e0c"   # Camera / image placeholder bg
+_COLOR_HOVER_LIGHT     = "#d4ddd0"   # Hover on light-surface elements
+_COLOR_FEAT_SEP        = "#c0c8bb"   # Feature row divider
+_COLOR_FEATURES_BORDER = "#b5c9b7"   # Features box border
+_COLOR_STATUS_BAR      = "#4d6655"   # Status bar label text
+_COLOR_TIER_HIGH       = "#617c32"
+_COLOR_TIER_MEDIUM     = "#a88b5c"
+_COLOR_TIER_LOW        = "#c46200"
+_COLOR_TIER_UNK        = "#888888"
+_COLOR_ALT_CHIP_BG     = "#e0e8d8"   # Alternative classification chip bg
+_COLOR_HDR_TEXT        = "#cad2c5"   # Header bar label text
 
 
 def _button_style(
@@ -58,46 +236,50 @@ def _button_style(
     fg: str = "white",
     hover: str | None = None,
     border: str = "transparent",
+    focus_border: str | None = None,
 ) -> str:
     hover = hover or bg
+    fb = focus_border if focus_border is not None else _COLOR_FOCUS
     return f"""
         QPushButton {{
             background-color: {bg};
             color: {fg};
-            font-size: 18px;
+            font-size: 15px;
             font-weight: 700;
-            border: 2px solid {border};
+            font-family: {_FONT_UI};
+            border: 1px solid {border};
             border-radius: {_BTN_RADIUS}px;
-            padding: 8px 12px;
+            padding: 6px 10px;
         }}
         QPushButton:hover {{ background-color: {hover}; }}
         QPushButton:pressed {{ background-color: {hover}; }}
-        QPushButton:focus {{ border: 2px solid {_COLOR_FOCUS}; }}
+        QPushButton:focus {{ border: 2px solid {fb}; }}
         QPushButton:disabled {{ background-color: #AAB5AC; color: #E8ECE8; }}
     """
 
-_SS_PRIMARY   = _button_style(_COLOR_PRIMARY, "white", _COLOR_PRIMARY_H)
-_SS_SECONDARY = _button_style(_COLOR_SECONDARY, _COLOR_TEXT, _COLOR_SECONDARY_H, border=_COLOR_BORDER)
-_SS_BACK      = _button_style(_COLOR_SECONDARY, _COLOR_TEXT, _COLOR_SECONDARY_H, border=_COLOR_BORDER)
-_SS_DELETE    = _button_style(_COLOR_DANGER, "white", _COLOR_DANGER_H)
-_SS_STOP      = _button_style(_COLOR_STOP, "white", _COLOR_STOP_H)
-_SS_ARMED_DELETE = _button_style(_COLOR_STOP, "white", _COLOR_STOP_H, border=_COLOR_FOCUS)
+# Dark-bg buttons use a white focus ring; light-bg buttons use the dark focus ring.
+_SS_PRIMARY      = _button_style(_COLOR_PRIMARY, "white", _COLOR_PRIMARY_H, focus_border="white")
+_SS_SECONDARY    = _button_style(_COLOR_SECONDARY, _COLOR_TEXT, _COLOR_SECONDARY_H, border=_COLOR_BORDER)
+_SS_BACK         = _button_style(_COLOR_SECONDARY, _COLOR_TEXT, _COLOR_SECONDARY_H, border=_COLOR_BORDER)
+_SS_DELETE       = _button_style(_COLOR_DANGER, "white", _COLOR_DANGER_H, focus_border="white")
+_SS_STOP         = _button_style(_COLOR_STOP, "white", _COLOR_STOP_H, focus_border="white")
+_SS_ARMED_DELETE = _button_style(_COLOR_STOP, "white", _COLOR_STOP_H, border=_COLOR_FOCUS, focus_border="white")
 
 
 def _list_style() -> str:
     return f"""
         QListWidget {{
-            background-color: {_COLOR_SURFACE};
+            background-color: transparent;
             color: {_COLOR_TEXT};
-            border: 2px solid {_COLOR_BORDER};
-            border-radius: 12px;
-            padding: 8px;
-            font-size: 16px;
+            border: none;
+            padding: 2px;
+            font-size: 15px;
+            font-family: {_FONT_UI};
             outline: 0;
         }}
         QListWidget::item {{
             padding: 0px;
-            margin: 4px 0px;
+            margin: 3px 0px;
             border: none;
         }}
         QListWidget::item:selected {{
@@ -108,9 +290,17 @@ def _list_style() -> str:
 
 
 def big_button(text: str) -> QPushButton:
-    b = QPushButton(text)
-    b.setMinimumHeight(70)
-    b.setStyleSheet(_button_style(_COLOR_TEXT, "#F5F6F1", "#2B4035"))
+    b = QPushButton(text.upper())
+    b.setMinimumHeight(62)
+    b.setStyleSheet(
+        f"QPushButton {{ background-color: {_COLOR_TEXT}; color: {_COLOR_HOME_TEXT};"
+        f" font-size: 14px; font-weight: 700; font-family: {_FONT_UI};"
+        f" border-radius: {_BTN_RADIUS}px; border: 1px solid {_COLOR_HOME_BTN};"
+        " padding: 6px 12px; }}"
+        f" QPushButton:hover {{ background-color: {_COLOR_HOME_BTN_H}; }}"
+        f" QPushButton:pressed {{ background-color: {_COLOR_HOME_BTN_H}; }}"
+        f" QPushButton:focus {{ border: 2px solid {_COLOR_FOCUS}; }}"
+    )
     return b
 
 def _btn(style: str, text: str, height: int = _BTN_H) -> QPushButton:
@@ -130,28 +320,44 @@ class HomePage(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 16, 20, 20)
+        layout.setSpacing(0)
 
-        self.setStyleSheet("""
-            background-color: #586e5d;
-            color: #cad2c5;
+        self.setStyleSheet(f"""
+            background-color: {_COLOR_HOME_BG};
+            color: {_COLOR_HOME_TEXT};
+            font-family: {_FONT_UI};
         """)
+
+        layout.addStretch(1)
 
         logo = QLabel()
         pixmap = QPixmap(img_path)
-        logo.setStyleSheet("background: transparent; border: none;")
-        logo.setPixmap(pixmap.scaled(400, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setStyleSheet("background: transparent; border: none; padding-bottom: 30px;")
+        logo.setPixmap(pixmap.scaled(360, 180, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
 
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet(f"background-color: {_COLOR_HOME_BTN}; border: none; max-height: 1px;")
+        layout.addWidget(sep)
+        layout.addSpacing(16)
+
         self.btn_classify = big_button("Classify Rock")
-        self.btn_voice = big_button("Voice to Text")
-        self.btn_trip = big_button("View Trip Notes")
-        self.btn_quit = _btn(_SS_BACK, "Quit", height=44)
+        self.btn_voice    = big_button("Voice to Text")
+        self.btn_trip     = big_button("View Trip Notes")
+        self.btn_quit     = _btn(
+            _button_style(_COLOR_HOME_BTN, _COLOR_HOME_MUTED, _COLOR_HOME_BTN_H, border=_COLOR_HOME_BTN),
+            "Quit", height=38
+        )
 
         layout.addWidget(self.btn_classify)
+        layout.addSpacing(6)
         layout.addWidget(self.btn_voice)
+        layout.addSpacing(6)
         layout.addWidget(self.btn_trip)
-        layout.addSpacing(60)
+        layout.addStretch(1)
         layout.addWidget(self.btn_quit)
 
 
@@ -159,11 +365,22 @@ class LoadingPage(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        label = QLabel("Analyzing…")
+        layout.setContentsMargins(20, 20, 20, 16)
+        label = QLabel("ANALYZING")
         label.setAlignment(Qt.AlignCenter)
-        label.setStyleSheet("font-size: 22px;")
+        label.setStyleSheet(
+            f"font-size: 16px; font-weight: 700; font-family: {_FONT_UI};"
+            f" color: {_COLOR_MUTED}; letter-spacing: 2px;"
+        )
+        sublabel = QLabel("Processing classification…")
+        sublabel.setAlignment(Qt.AlignCenter)
+        sublabel.setStyleSheet(
+            f"font-size: 13px; color: {_COLOR_MUTED}; font-family: {_FONT_DATA};"
+        )
         layout.addStretch(1)
         layout.addWidget(label)
+        layout.addSpacing(6)
+        layout.addWidget(sublabel)
         layout.addStretch(1)
         self.btn_cancel = _back_btn("Cancel")
         layout.addWidget(self.btn_cancel)
@@ -172,7 +389,7 @@ class LoadingPage(QWidget):
         for i in range(self.layout().count()):
             item = self.layout().itemAt(i)
             if item and item.widget() and isinstance(item.widget(), QLabel):
-                item.widget().setText(message)
+                item.widget().setText(message.upper())
                 break
 
 
@@ -180,11 +397,22 @@ class VoiceLoadingPage(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        label = QLabel("Initializing voice transcription…")
+        layout.setContentsMargins(20, 20, 20, 16)
+        label = QLabel("INITIALIZING")
         label.setAlignment(Qt.AlignCenter)
-        label.setStyleSheet("font-size: 22px;")
+        label.setStyleSheet(
+            f"font-size: 16px; font-weight: 700; font-family: {_FONT_UI};"
+            f" color: {_COLOR_MUTED};"
+        )
+        sublabel = QLabel("Voice transcription loading…")
+        sublabel.setAlignment(Qt.AlignCenter)
+        sublabel.setStyleSheet(
+            f"font-size: 13px; color: {_COLOR_MUTED}; font-family: {_FONT_DATA};"
+        )
         layout.addStretch(1)
         layout.addWidget(label)
+        layout.addSpacing(6)
+        layout.addWidget(sublabel)
         layout.addStretch(1)
 
 
@@ -195,14 +423,19 @@ class CameraPreviewPage(QWidget):
         self.vm = vm
         layout = QVBoxLayout(self)
 
-        self.lbl_step = QLabel("Capture First View")
+        self.lbl_step = QLabel("CAPTURE · VIEW 1")
         self.lbl_step.setAlignment(Qt.AlignCenter)
-        self.lbl_step.setStyleSheet("font-size: 18px; color: #233127;")
+        self.lbl_step.setStyleSheet(
+            f"font-size: 12px; font-weight: 700; font-family: {_FONT_UI};"
+            f" color: {_COLOR_MUTED}; padding: 6px 0px;"
+        )
         layout.addWidget(self.lbl_step)
 
         self.video_label = QLabel()
         self.video_label.setAlignment(Qt.AlignCenter)
-        self.video_label.setStyleSheet("background-color: #000000; border: 4px solid #233127; border-radius: 8px;")
+        self.video_label.setStyleSheet(
+            f"background-color: {_COLOR_IMG_BG}; border: 1px solid {_COLOR_HOME_BTN}; border-radius: {_BTN_RADIUS}px;"
+        )
         self.video_label.setMinimumSize(400, 300)
         self.video_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         layout.addWidget(self.video_label, stretch=1)
@@ -231,18 +464,16 @@ class CaptureReviewPage(QWidget):
 
         title = QLabel("REVIEW CAPTURES")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("""
-            font-size: 22px;
-            font-weight: bold;
-            border-radius: 8px;
-            padding: 10px;
-        """)
+        title.setStyleSheet(
+            f"font-size: 12px; font-weight: 700; font-family: {_FONT_UI};"
+            f" color: {_COLOR_MUTED}; padding: 6px 0px;"
+        )
         layout.addWidget(title, 0, Qt.AlignHCenter)
         layout.addStretch(1)
 
         images_row = QVBoxLayout()
         images_row.setAlignment(Qt.AlignCenter)
-        img_style = "border: 2px solid #233127; border-radius: 4px; padding: 2px"
+        img_style = f"border: 1px solid {_COLOR_HOME_BTN}; border-radius: {_BTN_RADIUS}px; padding: 2px"
         self.lbl_top = QLabel()
         self.lbl_top.setStyleSheet(img_style)
         self.lbl_side = QLabel()
@@ -285,36 +516,32 @@ class CaptureReviewPage(QWidget):
 def _make_divider():
     line = QFrame()
     line.setFrameShape(QFrame.HLine)
-    line.setStyleSheet("color: #5E6D62;")
+    line.setStyleSheet(f"background-color: {_COLOR_BORDER}; border: none; max-height: 1px;")
     line.setFixedHeight(1)
     return line
 
 
-def _make_list_row_widget(display_text: str, min_height: int = 68) -> QWidget:
-    """Consistent padded row for mission, rock, and note lists.
-
-    The row reserves border space at rest so joystick focus never changes
-    the row geometry or clips text.
-    """
+def _make_list_row_widget(display_text: str, min_height: int = 60) -> QWidget:
+    """Consistent padded row for mission, rock, and note lists."""
     widget = QWidget()
     widget.setObjectName("listRow")
     widget.setMinimumHeight(min_height)
     widget.setStyleSheet(f"""
         QWidget#listRow {{
             background-color: {_COLOR_SURFACE_ALT};
-            border: 2px solid transparent;
-            border-radius: 10px;
+            border: 1px solid transparent;
+            border-radius: 4px;
         }}
     """)
     row_layout = QHBoxLayout(widget)
-    row_layout.setContentsMargins(14, 10, 14, 10)
+    row_layout.setContentsMargins(12, 8, 12, 8)
     row_layout.setSpacing(8)
 
     lbl = QLabel(display_text)
     lbl.setTextFormat(Qt.RichText)
     lbl.setWordWrap(True)
     lbl.setTextInteractionFlags(Qt.NoTextInteraction)
-    lbl.setStyleSheet(f"font-size: 16px; color: {_COLOR_TEXT}; line-height: 1.35;")
+    lbl.setStyleSheet(f"font-size: 15px; color: {_COLOR_TEXT}; font-family: {_FONT_UI};")
     lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
     widget.setToolTip(display_text)
     row_layout.addWidget(lbl, stretch=1)
@@ -356,10 +583,14 @@ class ClassifiedPage(QWidget):
         name_vol_row.setContentsMargins(0, 4, 0, 0)
         name_vol_row.setSpacing(8)
         self.lbl_label = QLabel("—")
-        self.lbl_label.setStyleSheet("font-size: 26px; font-weight: 700;")
+        self.lbl_label.setStyleSheet(
+            f"font-size: 22px; font-weight: 700; font-family: {_FONT_UI}; color: {_COLOR_TEXT};"
+        )
         self.lbl_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.lbl_volume = QLabel("")
-        self.lbl_volume.setStyleSheet("font-size: 15px; color: #555;")
+        self.lbl_volume.setStyleSheet(
+            f"font-size: 13px; color: {_COLOR_MUTED}; font-family: {_FONT_DATA};"
+        )
         self.lbl_volume.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         name_vol_row.addWidget(self.lbl_label)
         name_vol_row.addWidget(self.lbl_volume)
@@ -370,14 +601,19 @@ class ClassifiedPage(QWidget):
         conf_wt_row.setContentsMargins(0, 0, 0, 2)
         conf_wt_row.setSpacing(8)
         self.lbl_conf = QLabel("—")
-        self.lbl_conf.setStyleSheet("font-size: 15px; color: #555;")
+        self.lbl_conf.setStyleSheet(
+            f"font-size: 13px; color: {_COLOR_MUTED}; font-family: {_FONT_DATA};"
+        )
         self.lbl_tier = QLabel("")
         self.lbl_tier.setStyleSheet(
-            "font-size: 14px; font-weight: 700; border-radius: 5px; padding: 2px 8px; color: #F5F6F1;"
+            f"font-size: 12px; font-weight: 700; font-family: {_FONT_UI};"
+            f" border-radius: {_BTN_RADIUS}px; padding: 2px 7px; color: {_COLOR_PAGE};"
         )
         self.lbl_tier.setVisible(False)
         self.lbl_extra = QLabel("")
-        self.lbl_extra.setStyleSheet("font-size: 14px; color: #777;")
+        self.lbl_extra.setStyleSheet(
+            f"font-size: 12px; color: {_COLOR_MUTED}; font-family: {_FONT_DATA};"
+        )
         conf_wt_row.addWidget(self.lbl_conf)
         conf_wt_row.addWidget(self.lbl_tier)
         conf_wt_row.addStretch()
@@ -404,8 +640,10 @@ class ClassifiedPage(QWidget):
         alt_outer = QHBoxLayout(self.alt_row)
         alt_outer.setContentsMargins(0, 4, 0, 2)
         alt_outer.setSpacing(8)
-        lbl_also = QLabel("Alternatively:")
-        lbl_also.setStyleSheet("font-size: 14px; color: #5E6D62; font-weight: 700;")
+        lbl_also = QLabel("ALT:")
+        lbl_also.setStyleSheet(
+            f"font-size: 11px; color: {_COLOR_MUTED}; font-weight: 700; font-family: {_FONT_UI};"
+        )
         self.alt_buttons_layout = QHBoxLayout()
         self.alt_buttons_layout.setSpacing(6)
         alt_outer.addWidget(lbl_also)
@@ -440,37 +678,44 @@ class VoicePage(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
 
-        self.setStyleSheet("""
-            background-color: #F5F6F1;
-            color: #233127;
-            font-family: Arial, Helvetica, sans-serif;
-            font-size: 18px;
+        self.setStyleSheet(f"""
+            background-color: {_COLOR_PAGE};
+            color: {_COLOR_TEXT};
+            font-family: {_FONT_UI};
         """)
-        
-        title = QLabel("Voice to Text")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("""
-            font-size: 22px;
-            font-weight: bold;
-            border: 2px solid #5E6D62;
-            border-radius: 8px;
-            padding: 8px;
-        """)
-        layout.addWidget(title)
 
-        # --- NEW: The Context Label ---
+        hdr = QWidget()
+        hdr.setStyleSheet(
+            f"background-color: {_COLOR_TEXT}; border-radius: {_BTN_RADIUS}px;"
+        )
+        hdr_layout = QHBoxLayout(hdr)
+        hdr_layout.setContentsMargins(12, 8, 12, 8)
+        title = QLabel("VOICE TO TEXT")
+        title.setStyleSheet(
+            f"font-size: 13px; font-weight: 700; font-family: {_FONT_UI};"
+            f" color: {_COLOR_HDR_TEXT}; background: transparent;"
+        )
+        hdr_layout.addWidget(title)
+        hdr_layout.addStretch()
+        layout.addWidget(hdr)
+
         self.lbl_context = QLabel("Context: None")
         self.lbl_context.setAlignment(Qt.AlignCenter)
-        self.lbl_context.setStyleSheet("font-size: 14px; color: #5E6D62; font-style: italic; margin-top: 2px; margin-bottom: 5px;")
+        self.lbl_context.setStyleSheet(
+            f"font-size: 12px; color: {_COLOR_MUTED}; font-family: {_FONT_DATA};"
+            " padding: 3px 0px;"
+        )
         layout.addWidget(self.lbl_context)
-        # ------------------------------
 
         self.text = QTextEdit()
-        self.text.setStyleSheet("""
-            font-size: 20px;
-            border: 2px solid #5E6D62;
-            border-radius: 8px;
+        self.text.setStyleSheet(f"""
+            font-size: 18px;
+            font-family: {_FONT_UI};
+            border: 1px solid {_COLOR_BORDER};
+            border-radius: {_BTN_RADIUS}px;
             padding: 8px;
+            background-color: {_COLOR_SURFACE};
+            color: {_COLOR_TEXT};
         """)
         self.text.setReadOnly(True)
         layout.addWidget(self.text, stretch=1)
@@ -489,6 +734,14 @@ class VoicePage(QWidget):
 
         layout.addLayout(row)
 
+        self.loading_overlay = LoadingOverlay(self)
+        self.loading_overlay.hide()
+
+    def resizeEvent(self, event):
+        # Force the overlay to always match the exact size of the VoicePage
+        self.loading_overlay.setGeometry(self.rect())
+        super().resizeEvent(event)
+
 
 class TripLoadPage(QWidget):
     def __init__(self):
@@ -498,26 +751,49 @@ class TripLoadPage(QWidget):
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(10)
 
-        title = QLabel("Trip Notes")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 24px; font-weight: 700;")
-        layout.addWidget(title)
+        hdr = QWidget()
+        hdr.setStyleSheet(f"background-color: {_COLOR_TEXT}; border-radius: {_BTN_RADIUS}px;")
+        hdr_layout = QHBoxLayout(hdr)
+        hdr_layout.setContentsMargins(12, 8, 12, 8)
+        title = QLabel("TRIP NOTES")
+        title.setStyleSheet(
+            f"font-size: 13px; font-weight: 700; font-family: {_FONT_UI};"
+            f" color: {_COLOR_HDR_TEXT}; background: transparent;"
+        )
+        hdr_layout.addWidget(title)
+        layout.addWidget(hdr)
+
+        info_card = QWidget()
+        info_card.setStyleSheet(
+            f"background-color: {_COLOR_SURFACE_ALT}; border-radius: {_BTN_RADIUS}px;"
+        )
+        info_layout = QVBoxLayout(info_card)
+        info_layout.setContentsMargins(10, 8, 10, 8)
+        info_layout.setSpacing(4)
 
         self.lbl_current_mission = QLabel("Current mission: --")
         self.lbl_current_mission.setAlignment(Qt.AlignCenter)
         self.lbl_current_mission.setWordWrap(True)
         self.lbl_current_mission.setStyleSheet(
-            f"font-size: 15px; color: {_COLOR_MUTED}; background-color: {_COLOR_SURFACE_ALT}; "
-            "border-radius: 10px; padding: 8px 10px;"
+            f"font-size: 13px; color: {_COLOR_MUTED}; font-family: {_FONT_DATA};"
+            " background: transparent;"
         )
-        layout.addWidget(self.lbl_current_mission)
+        info_layout.addWidget(self.lbl_current_mission)
+
+        sep = _make_divider()
+        info_layout.addWidget(sep)
+
+        missions_label = QLabel("MISSIONS")
+        missions_label.setStyleSheet(
+            f"font-size: 11px; font-weight: 700; font-family: {_FONT_UI};"
+            f" color: {_COLOR_MUTED}; background: transparent;"
+        )
+        info_layout.addWidget(missions_label)
+
+        layout.addWidget(info_card)
 
         self.btn_create_new_mission = _btn(_SS_PRIMARY, "Create Mission")
         layout.addWidget(self.btn_create_new_mission)
-
-        missions_label = QLabel("Missions")
-        missions_label.setStyleSheet("font-size: 18px; font-weight: 700;")
-        layout.addWidget(missions_label)
         
         self.list = QListWidget()
         self.list.setStyleSheet(_list_style())
@@ -545,25 +821,54 @@ class MissionDetailPage(QWidget):
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(9)
 
-        self.lbl_title = QLabel("Mission")
-        self.lbl_title.setAlignment(Qt.AlignCenter)
+        hdr = QWidget()
+        hdr.setStyleSheet(f"background-color: {_COLOR_TEXT}; border-radius: {_BTN_RADIUS}px;")
+        hdr_layout = QHBoxLayout(hdr)
+        hdr_layout.setContentsMargins(12, 8, 12, 8)
+        self.lbl_title = QLabel("MISSION")
         self.lbl_title.setWordWrap(True)
-        self.lbl_title.setStyleSheet("font-size: 23px; font-weight: 700;")
-        layout.addWidget(self.lbl_title)
+        self.lbl_title.setStyleSheet(
+            f"font-size: 13px; font-weight: 700; font-family: {_FONT_UI};"
+            f" color: {_COLOR_HDR_TEXT}; background: transparent;"
+        )
+        hdr_layout.addWidget(self.lbl_title)
+        layout.addWidget(hdr)
+
+        info_card = QWidget()
+        info_card.setStyleSheet(
+            f"background-color: {_COLOR_SURFACE_ALT}; border-radius: {_BTN_RADIUS}px;"
+        )
+        info_layout = QVBoxLayout(info_card)
+        info_layout.setContentsMargins(10, 8, 10, 8)
+        info_layout.setSpacing(4)
 
         self.lbl_status = QLabel("")
         self.lbl_status.setAlignment(Qt.AlignCenter)
-        self.lbl_status.setStyleSheet(f"font-size: 15px; color: {_COLOR_MUTED}; padding: 4px;")
-        layout.addWidget(self.lbl_status)
+        self.lbl_status.setStyleSheet(
+            f"font-size: 12px; color: {_COLOR_MUTED}; font-family: {_FONT_UI};"
+            " background: transparent;"
+        )
+        info_layout.addWidget(self.lbl_status)
 
         self.lbl_totals = QLabel("Total volume: --   Total weight: --")
         self.lbl_totals.setAlignment(Qt.AlignCenter)
-        self.lbl_totals.setStyleSheet(f"font-size: 15px; color: {_COLOR_MUTED}; background-color: {_COLOR_SURFACE_ALT}; border-radius: 10px; padding: 8px 10px;")
-        layout.addWidget(self.lbl_totals)
+        self.lbl_totals.setStyleSheet(
+            f"font-size: 12px; color: {_COLOR_MUTED}; font-family: {_FONT_DATA};"
+            " background: transparent;"
+        )
+        info_layout.addWidget(self.lbl_totals)
 
-        items_label = QLabel("Mission Items")
-        items_label.setStyleSheet("font-size: 18px; font-weight: 600;")
-        layout.addWidget(items_label)
+        sep = _make_divider()
+        info_layout.addWidget(sep)
+
+        items_label = QLabel("MISSION ITEMS")
+        items_label.setStyleSheet(
+            f"font-size: 11px; font-weight: 700; font-family: {_FONT_UI};"
+            f" color: {_COLOR_MUTED}; background: transparent;"
+        )
+        info_layout.addWidget(items_label)
+
+        layout.addWidget(info_card)
 
         self.list = QListWidget()
         self.list.setStyleSheet(_list_style())
@@ -593,32 +898,44 @@ class MissionCreatePage(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(10)
 
-        title = QLabel("Create New Mission")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 24px; font-weight: 700;")
-        layout.addWidget(title)
+        hdr = QWidget()
+        hdr.setStyleSheet(f"background-color: {_COLOR_TEXT}; border-radius: {_BTN_RADIUS}px;")
+        hdr_layout = QHBoxLayout(hdr)
+        hdr_layout.setContentsMargins(12, 8, 12, 8)
+        title = QLabel("CREATE MISSION")
+        title.setStyleSheet(
+            f"font-size: 13px; font-weight: 700; font-family: {_FONT_UI};"
+            f" color: {_COLOR_HDR_TEXT}; background: transparent;"
+        )
+        hdr_layout.addWidget(title)
+        layout.addWidget(hdr)
 
-        prompt = QLabel("Type a name for the mission:")
-        prompt.setStyleSheet("font-size: 18px; font-weight: 600;")
+        prompt = QLabel("Mission name:")
+        prompt.setStyleSheet(
+            f"font-size: 13px; font-weight: 600; font-family: {_FONT_UI}; color: {_COLOR_MUTED};"
+        )
         layout.addWidget(prompt)
 
-        self.lbl_recording_status = QLabel("Recording... speak the mission name")
+        self.lbl_recording_status = QLabel("Recording… speak the mission name")
         self.lbl_recording_status.setAlignment(Qt.AlignCenter)
-        self.lbl_recording_status.setStyleSheet("font-size: 16px; color: #7e1f23; font-weight: 700;")
+        self.lbl_recording_status.setStyleSheet(
+            f"font-size: 13px; color: {_COLOR_STOP}; font-weight: 700; font-family: {_FONT_UI};"
+        )
         layout.addWidget(self.lbl_recording_status)
 
         self.text = QTextEdit()
-        self.text.setFixedHeight(80)
-        self.text.setStyleSheet("""
-            font-size: 20px;
-            border: 2px solid #5E6D62;
-            border-radius: 8px;
-            padding: 10px;
-            background-color: #F5F6F1;
-            color: #233127;
+        self.text.setFixedHeight(76)
+        self.text.setStyleSheet(f"""
+            font-size: 18px;
+            font-family: {_FONT_UI};
+            border: 1px solid {_COLOR_BORDER};
+            border-radius: {_BTN_RADIUS}px;
+            padding: 8px;
+            background-color: {_COLOR_SURFACE};
+            color: {_COLOR_TEXT};
         """)
         layout.addWidget(self.text)
 
@@ -631,36 +948,42 @@ class MissionCreatePage(QWidget):
 class RockDetailPage(QWidget):
     def __init__(self):
         super().__init__()
-        self.setStyleSheet("""
-            background-color: #F5F6F1;
-            color: #233127;
-            font-family: Arial, Helvetica, sans-serif;
+        self.setStyleSheet(f"""
+            background-color: {_COLOR_PAGE};
+            color: {_COLOR_TEXT};
+            font-family: {_FONT_UI};
         """)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(6)
 
         # --- Fixed header ---
-        self.lbl_title = QLabel("Rock Detail")
-        self.lbl_title.setAlignment(Qt.AlignCenter)
+        hdr = QWidget()
+        hdr.setStyleSheet(f"background-color: {_COLOR_TEXT}; border-radius: {_BTN_RADIUS}px;")
+        hdr_layout = QHBoxLayout(hdr)
+        hdr_layout.setContentsMargins(12, 8, 12, 8)
+        self.lbl_title = QLabel("ROCK DETAIL")
         self.lbl_title.setStyleSheet(
-            "font-size: 24px; font-weight: 700; border: 2px solid #5E6D62;"
-            " border-radius: 8px; padding: 10px 8px;"
+            f"font-size: 13px; font-weight: 700; font-family: {_FONT_UI};"
+            f" color: {_COLOR_HDR_TEXT}; background: transparent;"
         )
-        layout.addWidget(self.lbl_title)
-
         self.lbl_time = QLabel("")
-        self.lbl_time.setAlignment(Qt.AlignCenter)
-        self.lbl_time.setStyleSheet("font-size: 14px; font-weight: 600; color: #5E6D62;")
-        layout.addWidget(self.lbl_time)
+        self.lbl_time.setStyleSheet(
+            f"font-size: 11px; color: {_COLOR_HOME_MUTED}; font-family: {_FONT_DATA}; background: transparent;"
+        )
+        self.lbl_time.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        hdr_layout.addWidget(self.lbl_title)
+        hdr_layout.addStretch()
+        hdr_layout.addWidget(self.lbl_time)
+        layout.addWidget(hdr)
 
         # --- Tab bar ---
         tab_bar = QHBoxLayout()
-        tab_bar.setSpacing(6)
-        self.btn_tab_classification = QPushButton("Classification")
-        self.btn_tab_classification.setMinimumHeight(42)
-        self.btn_tab_field_notes = QPushButton("Field Notes")
-        self.btn_tab_field_notes.setMinimumHeight(42)
+        tab_bar.setSpacing(4)
+        self.btn_tab_classification = QPushButton("CLASSIFICATION")
+        self.btn_tab_classification.setMinimumHeight(36)
+        self.btn_tab_field_notes = QPushButton("FIELD NOTES")
+        self.btn_tab_field_notes.setMinimumHeight(36)
         tab_bar.addWidget(self.btn_tab_classification)
         tab_bar.addWidget(self.btn_tab_field_notes)
         layout.addLayout(tab_bar)
@@ -680,11 +1003,15 @@ class RockDetailPage(QWidget):
         self.lbl_top = QLabel()
         self.lbl_top.setAlignment(Qt.AlignCenter)
         self.lbl_top.setMinimumHeight(110)
-        self.lbl_top.setStyleSheet("background-color: #222; border: 3px solid #233127; border-radius: 6px;")
+        self.lbl_top.setStyleSheet(
+            f"background-color: {_COLOR_IMG_BG}; border: 1px solid {_COLOR_HOME_BTN}; border-radius: {_BTN_RADIUS}px;"
+        )
         self.lbl_side = QLabel()
         self.lbl_side.setAlignment(Qt.AlignCenter)
         self.lbl_side.setMinimumHeight(110)
-        self.lbl_side.setStyleSheet("background-color: #222; border: 3px solid #233127; border-radius: 6px;")
+        self.lbl_side.setStyleSheet(
+            f"background-color: {_COLOR_IMG_BG}; border: 1px solid {_COLOR_HOME_BTN}; border-radius: {_BTN_RADIUS}px;"
+        )
         images_row.addWidget(self.lbl_top, stretch=1)
         images_row.addWidget(self.lbl_side, stretch=1)
         pc_layout.addLayout(images_row)
@@ -693,18 +1020,22 @@ class RockDetailPage(QWidget):
         self.lbl_info.setWordWrap(True)
         self.lbl_info.setAlignment(Qt.AlignCenter)
         self.lbl_info.setStyleSheet(
-            "font-size: 16px; border: 2px solid #5E6D62; border-radius: 8px; padding: 8px 12px;"
+            f"font-size: 13px; font-family: {_FONT_DATA}; color: {_COLOR_MUTED};"
+            f" background-color: {_COLOR_SURFACE_ALT}; border-radius: {_BTN_RADIUS}px; padding: 6px 10px;"
         )
         pc_layout.addWidget(self.lbl_info)
 
-        lbl_features_title = QLabel("Observed Features")
-        lbl_features_title.setStyleSheet("font-size: 16px; font-weight: 700; color: #233127;")
+        lbl_features_title = QLabel("OBSERVED FEATURES")
+        lbl_features_title.setStyleSheet(
+            f"font-size: 11px; font-weight: 700; font-family: {_FONT_UI}; color: {_COLOR_MUTED};"
+        )
         pc_layout.addWidget(lbl_features_title)
 
         self.features_section = QWidget()
         self.features_section.setObjectName("featuresBox")
         self.features_section.setStyleSheet(
-            "QWidget#featuresBox { background-color: #eef2eb; border: 2px solid #b5c9b7; border-radius: 8px; }"
+            f"QWidget#featuresBox {{ background-color: {_COLOR_SURFACE_ALT};"
+            f" border: 1px solid {_COLOR_FEATURES_BORDER}; border-radius: {_BTN_RADIUS}px; }}"
         )
         self.features_layout = QVBoxLayout(self.features_section)
         self.features_layout.setContentsMargins(10, 8, 10, 8)
@@ -720,43 +1051,98 @@ class RockDetailPage(QWidget):
         pn_layout.setSpacing(10)
 
         summary_header_layout = QHBoxLayout()
-        lbl_summary_title = QLabel("AI Summary")
-        lbl_summary_title.setStyleSheet("font-size: 18px; font-weight: 700; color: #233127;")
-        self.btn_force_summary = _btn(_SS_SECONDARY, "Re-Summarize", height=40)
+        lbl_summary_title = QLabel("AI SUMMARY")
+        lbl_summary_title.setStyleSheet(
+            f"font-size: 11px; font-weight: 700; font-family: {_FONT_UI}; color: {_COLOR_MUTED};"
+        )
+        self.btn_force_summary = _btn(_SS_SECONDARY, "Re-Summarize", height=36)
         summary_header_layout.addWidget(lbl_summary_title)
         summary_header_layout.addStretch(1)
         summary_header_layout.addWidget(self.btn_force_summary)
         pn_layout.addLayout(summary_header_layout)
 
-        self.summary_widget = QWidget()
-        self.summary_widget.setObjectName("summaryBox")
-        self.summary_widget.setStyleSheet(
-            "QWidget#summaryBox { background-color: #eef2eb; border: 2px solid #5E6D62; border-radius: 8px; }"
-        )
-        self.summary_widget_layout = QVBoxLayout(self.summary_widget)
-        self.summary_widget_layout.setContentsMargins(12, 10, 12, 10)
-        self.summary_widget_layout.setSpacing(6)
-        pn_layout.addWidget(self.summary_widget)
+        # Accordion for AI summary categories
+        self.summary_buttons_widget = QWidget()
+        accordion_layout = QVBoxLayout(self.summary_buttons_widget)
+        accordion_layout.setSpacing(3)
+        accordion_layout.setContentsMargins(0, 0, 0, 0)
 
-        lbl_notes_title = QLabel("Voice Notes")
-        lbl_notes_title.setStyleSheet("font-size: 18px; font-weight: 700; color: #233127;")
+        self.summary_data = {}
+        self.summary_buttons = {}
+        self._accordion_labels = {}
+
+        self.categories = [
+            ("Color & Appearance",          "Color & Appearance"),
+            ("Mineralogy & Composition",     "Mineralogy & Composition"),
+            ("Texture & Structure",          "Texture & Structure"),
+            ("Weathering & Alteration",      "Weathering & Alteration"),
+            ("Dimensions & Weight",          "Dimensions & Weight"),
+            ("Field Context & Notes",        "Field Context & Sampling Notes"),
+        ]
+
+        _btn_ss = (
+            f"QPushButton {{ background-color: {_COLOR_SURFACE_ALT}; color: {_COLOR_TEXT};"
+            f" font-weight: 700; font-size: 13px; font-family: {_FONT_UI};"
+            f" border-radius: {_BTN_RADIUS}px; border: none;"
+            " text-align: left; padding: 0 10px; }"
+            f" QPushButton:hover {{ background-color: {_COLOR_HOVER_LIGHT}; }}"
+            f" QPushButton:focus {{ border: 2px solid {_COLOR_FOCUS}; }}"
+        )
+        _content_ss = (
+            f"background-color: {_COLOR_PAGE}; color: {_COLOR_TEXT};"
+            f" font-size: 13px; font-family: {_FONT_UI};"
+            " border: none; padding: 6px 12px 10px 14px;"
+        )
+
+        for short_name, full_name in self.categories:
+            btn = QPushButton(f"▶  {short_name}")
+            btn.setMinimumHeight(44)
+            btn.setStyleSheet(_btn_ss)
+            btn.clicked.connect(lambda checked=False, fn=full_name: self._toggle_accordion(fn))
+            self.summary_buttons[full_name] = btn
+            self.summary_data[full_name] = "Not specified."
+
+            content_lbl = QLabel("Not specified.")
+            content_lbl.setWordWrap(True)
+            content_lbl.setStyleSheet(_content_ss)
+            content_lbl.setVisible(False)
+            self._accordion_labels[full_name] = content_lbl
+
+            accordion_layout.addWidget(btn)
+            accordion_layout.addWidget(content_lbl)
+            sep = _make_divider()
+            accordion_layout.addWidget(sep)
+
+        pn_layout.addWidget(self.summary_buttons_widget)
+
+        self.lbl_summary_loading = QLabel("Generating AI summary…")
+        self.lbl_summary_loading.setAlignment(Qt.AlignCenter)
+        self.lbl_summary_loading.setStyleSheet(
+            f"font-size: 13px; font-style: italic; color: {_COLOR_MUTED};"
+            f" font-family: {_FONT_DATA}; background-color: transparent;"
+        )
+        self.lbl_summary_loading.setMinimumHeight(120)
+        pn_layout.addWidget(self.lbl_summary_loading)
+        self.lbl_summary_loading.hide()
+
+        lbl_notes_title = QLabel("VOICE NOTES")
+        lbl_notes_title.setStyleSheet(
+            f"font-size: 11px; font-weight: 700; font-family: {_FONT_UI}; color: {_COLOR_MUTED};"
+        )
         pn_layout.addWidget(lbl_notes_title)
 
         self.notes_text = QTextEdit()
         self.notes_text.setReadOnly(True)
-        self.notes_text.setStyleSheet("""
-            QTextEdit {
-                font-size: 15px;
-                line-height: 1.5;
-                border: 2px solid #D6DDD2;
-                border-radius: 8px;
-                padding: 10px;
-                background-color: #f9faf8;
-            }
-            QTextEdit[readOnly="true"]:placeholder {
-                color: #8a9e8c;
-                font-style: italic;
-            }
+        self.notes_text.setStyleSheet(f"""
+            QTextEdit {{
+                font-size: 14px;
+                font-family: {_FONT_UI};
+                border: 1px solid {_COLOR_BORDER};
+                border-radius: {_BTN_RADIUS}px;
+                padding: 8px;
+                background-color: {_COLOR_SURFACE};
+                color: {_COLOR_TEXT};
+            }}
         """)
         pn_layout.addWidget(self.notes_text, stretch=1)
         self.panels.addWidget(panel_notes)
@@ -778,47 +1164,20 @@ class RockDetailPage(QWidget):
         self._apply_tab_styles(0)
 
     def _apply_tab_styles(self, active_idx: int) -> None:
-        active_ss   = "QPushButton { background-color: #617c32; color: white; font-size: 18px; font-weight: bold; border-radius: 6px; }"
-        inactive_ss = "QPushButton { background-color: #5E6D62; color: white; font-size: 18px; font-weight: bold; border-radius: 6px; } QPushButton:hover { background-color: #7d9280; }"
+        active_ss = (
+            f"QPushButton {{ background-color: {_COLOR_PRIMARY}; color: white;"
+            f" font-size: 12px; font-weight: 700; font-family: {_FONT_UI};"
+            f" border-radius: {_BTN_RADIUS}px; border: none; }}"
+        )
+        inactive_ss = (
+            f"QPushButton {{ background-color: {_COLOR_SURFACE_ALT}; color: {_COLOR_MUTED};"
+            f" font-size: 12px; font-weight: 700; font-family: {_FONT_UI};"
+            f" border-radius: {_BTN_RADIUS}px; border: 1px solid {_COLOR_BORDER}; }}"
+            f" QPushButton:hover {{ background-color: {_COLOR_HOVER_LIGHT}; }}"
+            f" QPushButton:focus {{ border: 2px solid {_COLOR_FOCUS}; }}"
+        )
         self.btn_tab_classification.setStyleSheet(active_ss if active_idx == 0 else inactive_ss)
         self.btn_tab_field_notes.setStyleSheet(active_ss if active_idx == 1 else inactive_ss)
-
-    def _populate_summary_labels(self, data: list[tuple[str, str]]) -> None:
-        while self.summary_widget_layout.count():
-            child = self.summary_widget_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-
-        # Placeholder state: single status/note entry — show as centered muted text, no key:value rows
-        if len(data) == 1 and data[0][0] in ("Status", "Note"):
-            lbl = QLabel(data[0][1])
-            lbl.setAlignment(Qt.AlignCenter)
-            lbl.setWordWrap(True)
-            lbl.setStyleSheet("font-size: 15px; color: #8a9e8c; font-style: italic; padding: 14px 8px;")
-            self.summary_widget_layout.addWidget(lbl)
-            return
-
-        first = True
-        for key, value in data:
-            if not first:
-                sep = _make_divider()
-                sep.setStyleSheet("background-color: #c8d4c2; max-height: 1px;")
-                self.summary_widget_layout.addWidget(sep)
-            first = False
-            row_w = QWidget()
-            row_l = QHBoxLayout(row_w)
-            row_l.setContentsMargins(0, 4, 0, 4)
-            row_l.setSpacing(10)
-            lbl_k = QLabel(f"{key}:")
-            lbl_k.setStyleSheet("font-size: 15px; font-weight: 700; color: #233127;")
-            lbl_k.setFixedWidth(148)
-            lbl_k.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-            lbl_v = QLabel(value)
-            lbl_v.setWordWrap(True)
-            lbl_v.setStyleSheet("font-size: 15px; color: #2e3d35; line-height: 1.4;")
-            row_l.addWidget(lbl_k)
-            row_l.addWidget(lbl_v, stretch=1)
-            self.summary_widget_layout.addWidget(row_w)
 
     def _parse_summary_to_table_data(self, summary: str) -> list[tuple[str, str]]:
         """Parses the bulleted AI string into Key/Value pairs."""
@@ -842,6 +1201,46 @@ class RockDetailPage(QWidget):
                 parsed_data.append(("Note", line.strip()))
                 
         return parsed_data
+
+    def _toggle_accordion(self, full_name: str) -> None:
+        currently_open = self._accordion_labels[full_name].isVisible()
+        # Collapse all
+        for fn, lbl in self._accordion_labels.items():
+            lbl.setVisible(False)
+            short = next(s for s, f in self.categories if f == fn)
+            self.summary_buttons[fn].setText(f"▶  {short}")
+        # If it was closed, open it
+        if not currently_open:
+            self._accordion_labels[full_name].setVisible(True)
+            short = next(s for s, f in self.categories if f == full_name)
+            self.summary_buttons[full_name].setText(f"▼  {short}")
+
+    def _populate_buttons(self, data: list[tuple[str, str]]) -> None:
+        # Collapse all and reset content
+        for fn, lbl in self._accordion_labels.items():
+            lbl.setVisible(False)
+            short = next(s for s, f in self.categories if f == fn)
+            self.summary_buttons[fn].setText(f"▶  {short}")
+            self.summary_data[fn] = "Not specified."
+            lbl.setText("Not specified.")
+
+        is_generating = any("Generating" in v for k, v in data)
+        if is_generating:
+            self.summary_buttons_widget.hide()
+            self.lbl_summary_loading.show()
+            self.btn_force_summary.setEnabled(False)
+            return
+
+        self.lbl_summary_loading.hide()
+        self.summary_buttons_widget.show()
+        self.btn_force_summary.setEnabled(True)
+
+        for key, val in data:
+            for full_name in self.summary_data.keys():
+                if key.split()[0].lower() in full_name.lower():
+                    self.summary_data[full_name] = val
+                    self._accordion_labels[full_name].setText(val)
+
 
     def set_entry(self, entry, associated_notes=None, ai_summary: str = "Generating AI summary...") -> None:
         self._current_rock_id = entry.rock_id
@@ -906,7 +1305,7 @@ class RockDetailPage(QWidget):
                     continue
                 if not first_feat:
                     sep = _make_divider()
-                    sep.setStyleSheet("background-color: #c0c8bb; max-height: 1px;")
+                    sep.setStyleSheet(f"background-color: {_COLOR_FEAT_SEP}; max-height: 1px;")
                     feat_layout.addWidget(sep)
                 first_feat = False
                 conf_pct = int(feat_data.get("confidence", 0.0) * 100)
@@ -916,11 +1315,17 @@ class RockDetailPage(QWidget):
                 feat_row.setContentsMargins(0, 5, 0, 3)
                 feat_row.setSpacing(8)
                 lbl_n = QLabel(display_name)
-                lbl_n.setStyleSheet("font-size: 16px; color: #233127; font-weight: 700;")
+                lbl_n.setStyleSheet(
+                    f"font-size: 14px; color: {_COLOR_TEXT}; font-weight: 700; font-family: {_FONT_UI};"
+                )
                 lbl_v = QLabel(str(feat_data.get("value", "")))
-                lbl_v.setStyleSheet("font-size: 16px; color: #2e3d35;")
+                lbl_v.setStyleSheet(
+                    f"font-size: 14px; color: {_COLOR_TEXT}; font-family: {_FONT_DATA};"
+                )
                 lbl_c = QLabel(f"{conf_pct}%")
-                lbl_c.setStyleSheet("font-size: 13px; color: #5E6D62; font-style: italic;")
+                lbl_c.setStyleSheet(
+                    f"font-size: 12px; color: {_COLOR_MUTED}; font-family: {_FONT_DATA};"
+                )
                 feat_row.addWidget(lbl_n)
                 feat_row.addStretch()
                 feat_row.addWidget(lbl_v)
@@ -931,12 +1336,13 @@ class RockDetailPage(QWidget):
                     lbl_note = QLabel(note_text)
                     lbl_note.setWordWrap(True)
                     lbl_note.setStyleSheet(
-                        "font-size: 13px; color: #5a7260; font-style: italic; padding: 1px 0px 4px 0px;"
+                        f"font-size: 12px; color: {_COLOR_MUTED}; font-style: italic;"
+                        f" font-family: {_FONT_UI}; padding: 1px 0px 4px 0px;"
                     )
                     lbl_note.setAlignment(Qt.AlignLeft | Qt.AlignTop)
                     feat_layout.addWidget(lbl_note)
 
-        self._populate_summary_labels(self._parse_summary_to_table_data(ai_summary))
+        self._populate_buttons(self._parse_summary_to_table_data(ai_summary))
 
         # --- Populate Voice Notes ---
         self.notes_text.setPlaceholderText("No recordings linked to this rock.")
@@ -954,39 +1360,50 @@ class RockDetailPage(QWidget):
 
     def set_ai_summary(self, rock_id: str, summary: str) -> None:
         if self._current_rock_id == rock_id:
-            self._populate_summary_labels(self._parse_summary_to_table_data(summary))
+            self._populate_buttons(self._parse_summary_to_table_data(summary))
 
 
 class VoiceNoteDetailPage(QWidget):
     def __init__(self):
         super().__init__()
-        self.setStyleSheet("""
-            background-color: #F5F6F1;
-            color: #233127;
-            font-family: Arial, Helvetica, sans-serif;
+        self.setStyleSheet(f"""
+            background-color: {_COLOR_PAGE};
+            color: {_COLOR_TEXT};
+            font-family: {_FONT_UI};
         """)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(10)
 
-        self.lbl_title = QLabel("Voice Note")
-        self.lbl_title.setAlignment(Qt.AlignCenter)
-        self.lbl_title.setStyleSheet("font-size: 24px; font-weight: 700; border: 2px solid #5E6D62; border-radius: 8px; padding: 8px;")
-        
-        layout.addWidget(self.lbl_title)
-
+        hdr = QWidget()
+        hdr.setStyleSheet(f"background-color: {_COLOR_TEXT}; border-radius: {_BTN_RADIUS}px;")
+        hdr_layout = QHBoxLayout(hdr)
+        hdr_layout.setContentsMargins(12, 8, 12, 8)
+        self.lbl_title = QLabel("VOICE NOTE")
+        self.lbl_title.setStyleSheet(
+            f"font-size: 13px; font-weight: 700; font-family: {_FONT_UI};"
+            f" color: {_COLOR_HDR_TEXT}; background: transparent;"
+        )
         self.lbl_time = QLabel("")
-        self.lbl_time.setAlignment(Qt.AlignCenter)
-        self.lbl_time.setStyleSheet("font-size: 16px; font-weight: 600;")
-        layout.addWidget(self.lbl_time)
+        self.lbl_time.setStyleSheet(
+            f"font-size: 11px; color: {_COLOR_HOME_MUTED}; font-family: {_FONT_DATA}; background: transparent;"
+        )
+        self.lbl_time.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        hdr_layout.addWidget(self.lbl_title)
+        hdr_layout.addStretch()
+        hdr_layout.addWidget(self.lbl_time)
+        layout.addWidget(hdr)
 
         self.text = QTextEdit()
         self.text.setReadOnly(True)
-        self.text.setStyleSheet("""
-            font-size: 18px;
-            border: 2px solid #5E6D62;
-            border-radius: 8px;
-            padding: 10px;
+        self.text.setStyleSheet(f"""
+            font-size: 16px;
+            font-family: {_FONT_UI};
+            border: 1px solid {_COLOR_BORDER};
+            border-radius: {_BTN_RADIUS}px;
+            padding: 8px;
+            background-color: {_COLOR_SURFACE};
+            color: {_COLOR_TEXT};
         """)
         layout.addWidget(self.text, stretch=1)
 
@@ -1022,17 +1439,21 @@ class ExpandingVoiceWidget(QWidget):
         self.main_layout.setSpacing(10)
 
         self.trigger_btn = QPushButton("🎤")
-        self.trigger_btn.setFixedSize(50, 50)
-        self.trigger_btn.setStyleSheet("background-color: #233127; color: white; border-radius: 25px; font-size: 20px;")
+        self.trigger_btn.setFixedSize(44, 44)
+        self.trigger_btn.setStyleSheet(
+            f"background-color: {_COLOR_TEXT}; color: white;"
+            f" border-radius: {_BTN_RADIUS}px; border: 1px solid {_COLOR_HOME_BTN};"
+            f" font-size: 18px; font-family: {_FONT_UI};"
+        )
         self.main_layout.addWidget(self.trigger_btn)
 
         self.button_container = QWidget()
         self.container_layout = QHBoxLayout(self.button_container)
         self.container_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.btn_start = self._make_sub_btn("Start", "#617c32")
-        self.btn_stop = self._make_sub_btn("Stop", "#7e1f23")
-        self.btn_redo = self._make_sub_btn("Redo", "#FFFFFF")
+        self.btn_start = self._make_sub_btn("Start", _COLOR_PRIMARY)
+        self.btn_stop  = self._make_sub_btn("Stop",  _COLOR_STOP)
+        self.btn_redo  = self._make_sub_btn("Redo",  _COLOR_SECONDARY)
 
         self.container_layout.addWidget(self.btn_start)
         self.container_layout.addWidget(self.btn_stop)
@@ -1053,27 +1474,24 @@ class ExpandingVoiceWidget(QWidget):
             self._update_ui_state(False)
 
     def _update_ui_state(self, is_recording: bool):
-        """Updates the button appearance based on actual recording state"""
         if is_recording:
-            self.trigger_btn.setText("🔴")
-            self.trigger_btn.setStyleSheet("""
-                background-color: #7e1f23; 
-                color: white; 
-                border-radius: 25px; 
-                font-size: 20px;
-            """)
+            self.trigger_btn.setText("●")
+            self.trigger_btn.setStyleSheet(
+                f"background-color: {_COLOR_STOP}; color: white;"
+                f" border-radius: {_BTN_RADIUS}px; border: 1px solid {_COLOR_STOP_H};"
+                f" font-size: 16px; font-weight: 700; font-family: {_FONT_UI};"
+            )
         else:
             self.trigger_btn.setText("🎤")
-            self.trigger_btn.setStyleSheet("""
-                background-color: #233127; 
-                color: white; 
-                border-radius: 25px; 
-                font-size: 20px;
-            """)
+            self.trigger_btn.setStyleSheet(
+                f"background-color: {_COLOR_TEXT}; color: white;"
+                f" border-radius: {_BTN_RADIUS}px; border: 1px solid {_COLOR_HOME_BTN};"
+                f" font-size: 18px; font-family: {_FONT_UI};"
+            )
 
     def _make_sub_btn(self, text, color):
         btn = QPushButton(text)
-        btn.setFixedSize(62, 40)
+        btn.setFixedSize(58, 38)
         if text.lower() == "stop":
             btn.setStyleSheet(_button_style(_COLOR_STOP, "white", _COLOR_STOP_H))
         elif text.lower() == "start":
@@ -1096,24 +1514,67 @@ class AppWindow(QMainWindow):
         self.setStyleSheet(f"""
             background-color: {_COLOR_BG};
             color: {_COLOR_TEXT};
-            font-family: Arial, Helvetica, sans-serif;
-            font-size: 18px;
+            font-family: {_FONT_UI};
+            font-size: 15px;
             font-weight: 400;
             QToolTip {{
                 background-color: {_COLOR_SURFACE};
                 color: {_COLOR_TEXT};
                 border: 1px solid {_COLOR_BORDER};
-                border-radius: 6px;
-                padding: 6px;
-                font-size: 14px;
+                border-radius: 4px;
+                padding: 5px;
+                font-size: 13px;
             }}
         """)
 
+        # --- NEW: Master Layout for the whole app ---
+        self.main_widget = QWidget()
+        self.setCentralWidget(self.main_widget)
+        self.main_layout = QVBoxLayout(self.main_widget)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(0)
 
+        # --- GLOBAL STATUS BAR ---
+        self.status_widget = QWidget()
+        self.status_widget.setStyleSheet("background: transparent;")
+        status_layout = QHBoxLayout(self.status_widget)
+        status_layout.setContentsMargins(5, 5, 5, 0)
+        
+        _sb_style = (
+            f"font-size: 12px; font-weight: 700; font-family: {_FONT_DATA};"
+            f" color: {_COLOR_STATUS_BAR}; background: transparent;"
+        )
+        self.lbl_time = QLabel("00:00")
+        self.lbl_time.setStyleSheet(_sb_style)
+
+        self.lbl_date = QLabel("Mon, Jan 1")
+        self.lbl_date.setStyleSheet(_sb_style)
+        self.lbl_date.setAlignment(Qt.AlignCenter)
+
+        self.lbl_battery = QLabel("100%")
+        self.lbl_battery.setStyleSheet(_sb_style)
+        self.lbl_battery.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        
+        status_layout.addWidget(self.lbl_time)
+        status_layout.addStretch(1)
+        status_layout.addWidget(self.lbl_date)
+        status_layout.addStretch(1)
+        status_layout.addWidget(self.lbl_battery)
+        
+        self.main_layout.addWidget(self.status_widget, 0, Qt.AlignTop)
+
+        # Start global timer
+        self.status_timer = QTimer(self)
+        self.status_timer.timeout.connect(self._update_status)
+        self.status_timer.start(1000)
+        self._update_status() 
+        # ---------------------------
+
+        # The deck of cards (StackedWidget) now goes BELOW the status bar
         self.stack = QStackedWidget()
         self.stack.setMinimumSize(0, 0)
         self.stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setCentralWidget(self.stack)
+        self.main_layout.addWidget(self.stack, stretch=1)
 
         self.home = HomePage()
         self.loading = LoadingPage()
@@ -1198,7 +1659,7 @@ class AppWindow(QMainWindow):
         if context_words:
             self.voice.lbl_context.setText(f"Context: {context_words}")
         else:
-            self.voice.lbl_context.setText("Context: None")
+            self.voice.lbl_context.setText("Context: None (Default)")
     
     def _on_reset_context_clicked(self) -> None:
         self.vm.reset_voice_context()
@@ -1210,7 +1671,7 @@ class AppWindow(QMainWindow):
         notes = getattr(self.rock_detail, "_current_associated_notes", None)
         if entry and notes:
             self.rock_detail.set_ai_summary(entry.rock_id, "Generating AI summary...")
-            self.vm.request_rock_summary(entry, notes, force=True)    
+            self.vm.request_rock_summary(entry, notes, force=True)
    
     def _update_voice_buttons(self, mode: str) -> None:
         """Dynamically hides/shows Voice to Text buttons based on the current phase."""
@@ -1220,11 +1681,14 @@ class AppWindow(QMainWindow):
         for b in [v.btn_start, v.btn_stop, v.btn_redo, v.btn_save, v.btn_delete, v.btn_reset, v.btn_cancel]:
             b.hide()
             
+        # Ensure overlay is hidden by default
+        if mode != "formatting":
+            v.loading_overlay.stop()
+            
         # 2. Show only what belongs in the current phase
         if mode == "initial":
             v.btn_start.show()
             v.btn_cancel.show()
-            # Only show reset if they are currently latched to a specific rock context
             active_rock = getattr(self.vm, "active_rock_id", None)
             if active_rock and active_rock != "ORPHAN":
                 v.btn_reset.show()
@@ -1232,6 +1696,10 @@ class AppWindow(QMainWindow):
         elif mode == "recording":
             v.btn_stop.setText("Stop")
             v.btn_stop.show()
+            
+        elif mode == "formatting":
+            # Fire up the gray screen, spinner, and animated text!
+            v.loading_overlay.start()
             
         elif mode == "review":
             v.btn_stop.setText("Edit")
@@ -1294,14 +1762,20 @@ class AppWindow(QMainWindow):
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("Delete All Data")
         msg_box.setText("Are you sure? Clicking CONFIRM will delete data from all your past missions. This data will be irretrievable.")
-        msg_box.setStyleSheet("QLabel { color: #233127; font-size: 18px; font-weight: normal; } QMessageBox { background-color: #D6DDD2; }")
-        
-        # Add the custom buttons
+        msg_box.setStyleSheet(f"QLabel {{ color: {_COLOR_TEXT}; font-size: 15px; font-weight: normal; font-family: {_FONT_UI}; }} QMessageBox {{ background-color: {_COLOR_BG}; }}")
+
         btn_confirm = msg_box.addButton("CONFIRM", QMessageBox.AcceptRole)
-        btn_confirm.setStyleSheet("background-color: #cc0000; color: white; font-weight: bold; padding: 8px;")
-        
+        btn_confirm.setStyleSheet(
+            f"background-color: {_COLOR_DANGER}; color: white; font-weight: 700;"
+            f" font-family: {_FONT_UI}; padding: 8px; border-radius: {_BTN_RADIUS}px; border: none;"
+        )
+
         btn_cancel = msg_box.addButton("CANCEL", QMessageBox.RejectRole)
-        btn_cancel.setStyleSheet("background-color: #FFFFFF; color: #385573; font-weight: bold; padding: 8px;")
+        btn_cancel.setStyleSheet(
+            f"background-color: {_COLOR_SECONDARY}; color: {_COLOR_TEXT}; font-weight: 700;"
+            f" font-family: {_FONT_UI}; padding: 8px; border-radius: {_BTN_RADIUS}px;"
+            f" border: 1px solid {_COLOR_BORDER};"
+        )
         
         msg_box.exec()
         
@@ -1490,6 +1964,7 @@ class AppWindow(QMainWindow):
         self.vm.classification_changed.connect(self._on_classification)
         self.vm.volume_display_changed.connect(self._on_volume_display)
         self.vm.transcription_changed.connect(self._on_transcription)
+        self.vm.transcription_formatted.connect(self._on_transcription_formatted)
         self.vm.mission_name_transcription_changed.connect(self._on_mission_name_transcription)
         self.vm.rock_summary_changed.connect(self._on_rock_summary_changed)
         self.vm.trip_changed.connect(self._on_trip)
@@ -1521,6 +1996,15 @@ class AppWindow(QMainWindow):
         self.mission_keyboard.key_pressed.connect(self._on_mission_key_pressed)
         self.mission_create.text.textChanged.connect(self._update_mission_create_button)
         self._update_mission_create_button()
+
+    def _on_transcription_formatted(self):
+        """Called when the LLM finishes formatting the text."""
+        if self.stack.currentWidget() == self.voice:
+            # Turn off the overlay and show the buttons!
+            if not self.vm.transcription_text.strip():
+                self._update_voice_buttons("initial")
+            else:
+                self._update_voice_buttons("review")
         
     def _on_camera_frame(self, image: QImage) -> None:
         if self.vm.state == AppStateType.CAMERA_PREVIEW:
@@ -1571,7 +2055,9 @@ class AppWindow(QMainWindow):
                 # Reset the little camera-preview voice button
                 self.camera_preview.mic_ctrl.trigger_btn.setText("🎤")
                 self.camera_preview.mic_ctrl.trigger_btn.setStyleSheet(
-                    "background-color: #233127; color: white; border-radius: 25px; font-size: 20px;"
+                    f"background-color: {_COLOR_TEXT}; color: white;"
+                    f" border-radius: {_BTN_RADIUS}px; border: 1px solid {_COLOR_HOME_BTN};"
+                    f" font-size: 18px; font-family: {_FONT_UI};"
                 )
 
         elif state == AppStateType.CAMERA_PREVIEW:
@@ -1638,17 +2124,18 @@ class AppWindow(QMainWindow):
 
         # Tier badge
         tier_colors = {
-            "high":      "#617c32",
-            "medium":    "#a88b5c",
-            "low":       "#c46200",
-            "uncertain": "#888888",
+            "high":      _COLOR_TIER_HIGH,
+            "medium":    _COLOR_TIER_MEDIUM,
+            "low":       _COLOR_TIER_LOW,
+            "uncertain": _COLOR_TIER_UNK,
         }
         if result.tier and result.tier in tier_colors:
             bg = tier_colors[result.tier]
             self.classified.lbl_tier.setText(result.tier.upper())
             self.classified.lbl_tier.setStyleSheet(
-                f"font-size: 15px; font-weight: 700; border-radius: 6px; "
-                f"padding: 2px 8px; color: #F5F6F1; background-color: {bg};"
+                f"font-size: 13px; font-weight: 700; font-family: {_FONT_UI};"
+                f" border-radius: {_BTN_RADIUS}px;"
+                f" padding: 2px 8px; color: {_COLOR_PAGE}; background-color: {bg};"
             )
             self.classified.lbl_tier.setVisible(True)
         else:
@@ -1692,7 +2179,7 @@ class AppWindow(QMainWindow):
                     continue
                 if not first_feat:
                     sep = _make_divider()
-                    sep.setStyleSheet("background-color: #c0c8bb; max-height: 1px;")
+                    sep.setStyleSheet(f"background-color: {_COLOR_FEAT_SEP}; max-height: 1px;")
                     feat_layout.addWidget(sep)
                 first_feat = False
                 conf_pct = int(feat_data.get("confidence", 0.0) * 100)
@@ -1702,11 +2189,11 @@ class AppWindow(QMainWindow):
                 feat_row.setContentsMargins(0, 8, 0, 4)
                 feat_row.setSpacing(6)
                 lbl_feat_name = QLabel(display_name)
-                lbl_feat_name.setStyleSheet("font-size: 18px; color: #233127; font-weight: 700;")
+                lbl_feat_name.setStyleSheet(f"font-size: 16px; color: {_COLOR_TEXT}; font-weight: 700; font-family: {_FONT_UI};")
                 lbl_feat_val = QLabel(str(feat_data.get("value", "")))
-                lbl_feat_val.setStyleSheet("font-size: 18px;")
+                lbl_feat_val.setStyleSheet(f"font-size: 16px; color: {_COLOR_TEXT}; font-family: {_FONT_DATA};")
                 lbl_feat_conf = QLabel(f"conf. {conf_pct}%")
-                lbl_feat_conf.setStyleSheet("font-size: 15px; color: #5E6D62;")
+                lbl_feat_conf.setStyleSheet(f"font-size: 13px; color: {_COLOR_MUTED}; font-family: {_FONT_DATA};")
                 feat_row.addWidget(lbl_feat_name)
                 feat_row.addStretch()
                 feat_row.addWidget(lbl_feat_val)
@@ -1717,7 +2204,7 @@ class AppWindow(QMainWindow):
                     lbl_note = QLabel(note_text)
                     lbl_note.setWordWrap(True)
                     lbl_note.setStyleSheet(
-                        "font-size: 15px; color: #5E6D62; padding: 0px 0px 4px 0px;"
+                        f"font-size: 13px; color: {_COLOR_MUTED}; font-family: {_FONT_UI}; padding: 0px 0px 4px 0px;"
                     )
                     lbl_note.setAlignment(Qt.AlignLeft | Qt.AlignTop)
                     feat_layout.addWidget(lbl_note)
@@ -1741,17 +2228,17 @@ class AppWindow(QMainWindow):
             chip = QPushButton(f"{lbl_text.upper()}  {int(conf * 100)}%")
             chip.setCheckable(True)
             chip.setFocusPolicy(Qt.StrongFocus)
-            chip.setStyleSheet("""
-                QPushButton {
-                    background-color: #e0e8d8; color: #233127;
-                    border: 1px solid #5E6D62; border-radius: 4px;
-                    font-size: 15px; padding: 3px 10px;
-                }
-                QPushButton:checked {
-                    background-color: #617c32; color: #F5F6F1;
-                    border-color: #617c32;
-                }
-                QPushButton:focus { border: 2px solid #233127; }
+            chip.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {_COLOR_ALT_CHIP_BG}; color: {_COLOR_TEXT};
+                    border: 1px solid {_COLOR_MUTED}; border-radius: {_BTN_RADIUS}px;
+                    font-size: 13px; font-family: {_FONT_UI}; font-weight: 700; padding: 3px 10px;
+                }}
+                QPushButton:checked {{
+                    background-color: {_COLOR_TIER_HIGH}; color: {_COLOR_PAGE};
+                    border-color: {_COLOR_TIER_HIGH};
+                }}
+                QPushButton:focus {{ border: 2px solid {_COLOR_FOCUS}; }}
             """)
             alt_chips.append(chip)
             self.classified.alt_buttons_layout.addWidget(chip)
@@ -1953,7 +2440,7 @@ class AppWindow(QMainWindow):
             badge = "  • CURRENT" if mission_summary.mission.mission_id == summary.current_mission_id else ""
             display_text = (
                 f"<b>{mission_summary.mission.name}</b>{badge}<br>"
-                f"<span style='font-size: 13px; color: #555;'>Updated {time_str}   Items: {item_count}</span>"
+                f"<span style='font-size: 13px; color: {_COLOR_MUTED};'>Updated {time_str}   Items: {item_count}</span>"
             )
 
             list_item = QListWidgetItem()
@@ -2048,13 +2535,20 @@ class AppWindow(QMainWindow):
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle("Delete Voice Note")
             msg_box.setText("Are you sure? Clicking CONFIRM will delete this data permanently.")
-            msg_box.setStyleSheet("QLabel { color: #233127; font-size: 18px; font-weight: normal; } QMessageBox { background-color: #D6DDD2; }")
-            
+            msg_box.setStyleSheet(f"QLabel {{ color: {_COLOR_TEXT}; font-size: 15px; font-weight: normal; font-family: {_FONT_UI}; }} QMessageBox {{ background-color: {_COLOR_BG}; }}")
+
             btn_cancel = msg_box.addButton("CANCEL", QMessageBox.RejectRole)
-            btn_cancel.setStyleSheet("background-color: #FFFFFF; color: #385573; font-weight: bold; padding: 8px;")
-            
+            btn_cancel.setStyleSheet(
+                f"background-color: {_COLOR_SECONDARY}; color: {_COLOR_TEXT}; font-weight: 700;"
+                f" font-family: {_FONT_UI}; padding: 8px; border-radius: {_BTN_RADIUS}px;"
+                f" border: 1px solid {_COLOR_BORDER};"
+            )
+
             btn_confirm = msg_box.addButton("CONFIRM", QMessageBox.AcceptRole)
-            btn_confirm.setStyleSheet("background-color: #cc0000; color: white; font-weight: bold; padding: 8px;")
+            btn_confirm.setStyleSheet(
+                f"background-color: {_COLOR_DANGER}; color: white; font-weight: 700;"
+                f" font-family: {_FONT_UI}; padding: 8px; border-radius: {_BTN_RADIUS}px; border: none;"
+            )
             
             msg_box.exec()
             
@@ -2064,23 +2558,35 @@ class AppWindow(QMainWindow):
         elif item_dict["type"] == "rock":
             dialog = QDialog(self)
             dialog.setWindowTitle("Delete Classification")
-            dialog.setStyleSheet("QDialog { background-color: #D6DDD2; }")
+            dialog.setStyleSheet(f"QDialog {{ background-color: {_COLOR_BG}; font-family: {_FONT_UI}; }}")
             layout = QVBoxLayout(dialog)
-            
+
             msg = QLabel("Are you sure? How would you like to delete this rock?")
-            msg.setStyleSheet("color: #233127; font-size: 18px; font-weight: normal;")
+            msg.setStyleSheet(f"color: {_COLOR_TEXT}; font-size: 15px; font-weight: normal; font-family: {_FONT_UI};")
             msg.setWordWrap(True)
             layout.addWidget(msg)
             layout.addSpacing(10)
-            
+
             btn_both = QPushButton("DELETE ROCK && ALL NOTES")
-            btn_both.setStyleSheet("background-color: #7e1f23; color: white; font-weight: bold; padding: 15px; font-size: 16px; border-radius: 6px;")
-            
+            btn_both.setStyleSheet(
+                f"background-color: {_COLOR_STOP}; color: white; font-weight: 700;"
+                f" font-family: {_FONT_UI}; padding: 12px; font-size: 14px;"
+                f" border-radius: {_BTN_RADIUS}px; border: none;"
+            )
+
             btn_only = QPushButton("DELETE ROCK ONLY")
-            btn_only.setStyleSheet("background-color: #cc0000; color: white; font-weight: bold; padding: 15px; font-size: 16px; border-radius: 6px;")
-            
+            btn_only.setStyleSheet(
+                f"background-color: {_COLOR_DANGER}; color: white; font-weight: 700;"
+                f" font-family: {_FONT_UI}; padding: 12px; font-size: 14px;"
+                f" border-radius: {_BTN_RADIUS}px; border: none;"
+            )
+
             btn_cancel = QPushButton("CANCEL")
-            btn_cancel.setStyleSheet("background-color: #FFFFFF; color: #385573; font-weight: bold; padding: 15px; font-size: 16px; border-radius: 6px;")
+            btn_cancel.setStyleSheet(
+                f"background-color: {_COLOR_SECONDARY}; color: {_COLOR_TEXT}; font-weight: 700;"
+                f" font-family: {_FONT_UI}; padding: 12px; font-size: 14px;"
+                f" border-radius: {_BTN_RADIUS}px; border: 1px solid {_COLOR_BORDER};"
+            )
             
             layout.addWidget(btn_both)
             layout.addWidget(btn_only)
@@ -2219,7 +2725,7 @@ class AppWindow(QMainWindow):
             
             # If we are actually looking at the voice page, update the layout
             if self.stack.currentWidget() == self.voice:
-                self._update_voice_buttons("review")
+                self._update_voice_buttons("formatting")
 
     def _on_mission_name_recording_status_changed(self, is_recording: bool):
         if is_recording:
@@ -2228,6 +2734,37 @@ class AppWindow(QMainWindow):
             self.mission_create.lbl_recording_status.setText("Typing mode")
         else:
             self.mission_create.lbl_recording_status.setText("Recording stopped")
+
+    def _update_status(self):
+        """Fetches the live system time, locks to West Coast, and gets battery percentage."""
+        import datetime
+        
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo("America/Los_Angeles")
+        except Exception:
+            tz = datetime.timezone(datetime.timedelta(hours=-7))
+            
+        now = datetime.datetime.now(tz)
+        
+        date_str = now.strftime("%A, %b %d, %Y").replace(" 0", " ")
+        time_str = now.strftime("%I:%M %p").lstrip("0")
+        
+        self.lbl_time.setText(time_str)
+        self.lbl_date.setText(date_str)
+        
+        try:
+            import psutil
+            battery = psutil.sensors_battery()
+            if battery:
+                percent = int(battery.percent)
+                is_plugged = battery.power_plugged
+                icon = "⚡" if is_plugged else "🔋"
+                self.lbl_battery.setText(f"{percent}% {icon}")
+            else:
+                self.lbl_battery.setText("Power Connected") 
+        except Exception as e:
+            self.lbl_battery.setText("Battery N/A")
             
 
 class Keyboard(QDialog):
@@ -2259,7 +2796,7 @@ class Keyboard(QDialog):
                 btn = QPushButton(key)
                 btn.setMinimumHeight(45)
                 btn.setMinimumWidth(20)
-                btn.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #FFFFFF; color: #233127; border: 1px solid #7F8B81; border-radius: 8px;")
+                btn.setStyleSheet(f"font-size: 14px; font-weight: 700; font-family: {_FONT_UI}; background-color: {_COLOR_SURFACE}; color: {_COLOR_TEXT}; border: 1px solid {_COLOR_BORDER}; border-radius: {_BTN_RADIUS}px;")
                 
                 if key.isalpha() and len(key) == 1:
                     self.letter_btns.append(btn)
@@ -2276,7 +2813,7 @@ class Keyboard(QDialog):
         self.btn_shift = QPushButton("⇧")
         self.btn_shift.setMinimumHeight(45)
         self.btn_shift.setMinimumWidth(40)
-        self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #EEF2EB; color: #233127; border: 1px solid #7F8B81; border-radius: 8px;")
+        self.btn_shift.setStyleSheet(f"font-size: 16px; font-weight: 700; font-family: {_FONT_UI}; background-color: {_COLOR_SURFACE_ALT}; color: {_COLOR_TEXT}; border: 1px solid {_COLOR_BORDER}; border-radius: {_BTN_RADIUS}px;")
         self.btn_shift.clicked.connect(self._on_shift_clicked)
         bottom_layout.addWidget(self.btn_shift, stretch=1)
         
@@ -2285,7 +2822,7 @@ class Keyboard(QDialog):
         
         self.btn_space = QPushButton("Space")
         self.btn_space.setMinimumHeight(45)
-        self.btn_space.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #FFFFFF; color: #233127; border: 1px solid #7F8B81; border-radius: 8px;")
+        self.btn_space.setStyleSheet(f"font-size: 14px; font-weight: 700; font-family: {_FONT_UI}; background-color: {_COLOR_SURFACE}; color: {_COLOR_TEXT}; border: 1px solid {_COLOR_BORDER}; border-radius: {_BTN_RADIUS}px;")
         self.btn_space.clicked.connect(lambda checked=False: self.key_pressed.emit("Space"))
         bottom_layout.addWidget(self.btn_space, stretch=3)
         
@@ -2294,14 +2831,14 @@ class Keyboard(QDialog):
             btn = QPushButton(arrow)
             btn.setMinimumHeight(45)
             btn.setMinimumWidth(20)
-            btn.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #EEF2EB; color: #233127; border: 1px solid #7F8B81; border-radius: 8px;")
+            btn.setStyleSheet(f"font-size: 15px; font-weight: 700; font-family: {_FONT_UI}; background-color: {_COLOR_SURFACE_ALT}; color: {_COLOR_TEXT}; border: 1px solid {_COLOR_BORDER}; border-radius: {_BTN_RADIUS}px;")
             btn.clicked.connect(lambda checked=False, char=arrow: self.key_pressed.emit(char))
             bottom_layout.addWidget(btn)
             
         # The Close Button (keeping the name btn_close so our hiding logic still works!)
         self.btn_close = QPushButton("Close")
         self.btn_close.setMinimumHeight(45)
-        self.btn_close.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #9E2B2B; color: white; border-radius: 8px;")
+        self.btn_close.setStyleSheet(f"font-size: 14px; font-weight: 700; font-family: {_FONT_UI}; background-color: {_COLOR_DANGER}; color: white; border-radius: {_BTN_RADIUS}px;")
         bottom_layout.addWidget(self.btn_close, stretch=1)
         
         main_layout.addLayout(bottom_layout)
@@ -2349,11 +2886,13 @@ class Keyboard(QDialog):
         # Update Shift Button icon & colors
         if self.shift_state == 0:
             self.btn_shift.setText("⇧")
-            self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #EEF2EB; color: #233127; border: 1px solid #7F8B81; border-radius: 8px;")
+            self.btn_shift.setStyleSheet(f"font-size: 16px; font-weight: 700; font-family: {_FONT_UI}; background-color: {_COLOR_SURFACE_ALT}; color: {_COLOR_TEXT}; border: 1px solid {_COLOR_BORDER}; border-radius: {_BTN_RADIUS}px;")
         elif self.shift_state == 1:
             self.btn_shift.setText("⬆")
-            self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #FFFFFF; color: #233127; border: 2px solid #111827; border-radius: 8px;")
+            self.btn_shift.setStyleSheet(f"font-size: 16px; font-weight: 700; font-family: {_FONT_UI}; background-color: {_COLOR_SURFACE}; color: {_COLOR_TEXT}; border: 2px solid {_COLOR_FOCUS}; border-radius: {_BTN_RADIUS}px;")
         elif self.shift_state == 2:
-            self.btn_shift.setText("⇪") # Caps lock icon
-            self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #4a90e2; color: white;")
+            self.btn_shift.setText("⇪")
+            self.btn_shift.setStyleSheet(f"font-size: 16px; font-weight: 700; font-family: {_FONT_UI}; background-color: {_COLOR_PRIMARY}; color: white; border-radius: {_BTN_RADIUS}px;")
+
+    
                 
