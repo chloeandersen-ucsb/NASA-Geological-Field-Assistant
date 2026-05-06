@@ -512,6 +512,9 @@ class Store:
                     image_path=r.get("image_path"), side_image_path=r.get("side_image_path"),
                     estimated_volume=r.get("estimated_volume"), estimated_weight=r.get("estimated_weight"),
                     raw=r.get("raw"),
+                    tier=r.get("tier"),
+                    features=r.get("features"),
+                    geology_notes=r.get("geology_notes"),
                 )
                 rocks.append(RockEntry(
                     rock_id=rec["rock_id"], 

@@ -34,19 +34,16 @@ INITIAL_DELAY = 0.40   # seconds before auto-repeat starts
 REPEAT_DELAY  = 0.18   # seconds between auto-repeats
 
 # ── Highlight style ───────────────────────────────────────────────────────────
-# White background + thick dark border makes the focused button unmistakable
-# regardless of the button's original color scheme.
+# Keep the button's semantic color and add only a dark focus border. This avoids
+# turning every focused control white and keeps primary/delete meaning visible.
 _HIGHLIGHT_BLOCK = (
-    " QPushButton { background-color: #ffffff;"
-    " color: #344f41;"
-    " border: 4px solid #344f41;"
-    " border-radius: 6px; }"
+    " QPushButton {"
+    " border: 2px solid #111827;"
+    " border-radius: 10px; }"
 )
 _HIGHLIGHT_PLAIN = (
-    " background-color: #ffffff;"
-    " color: #344f41;"
-    " border: 4px solid #344f41;"
-    " border-radius: 6px;"
+    " border: 2px solid #111827;"
+    " border-radius: 10px;"
 )
 
 # Row-grouping tolerance: buttons whose centers are within this many px
@@ -260,7 +257,8 @@ class JoystickNavigator(QObject):
                 self._highlighted_item_widget = widget
                 self._highlighted_item_widget_style = widget.styleSheet()
                 widget.setStyleSheet(
-                    "background-color: #ffffff; border: 4px solid #344f41; border-radius: 6px;"
+                    "background-color: #FFFFFF; border: 2px solid #111827; "
+                    "border-radius: 10px;"
                 )
 
     def _clear_list_highlight(self):
