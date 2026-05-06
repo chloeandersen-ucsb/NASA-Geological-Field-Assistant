@@ -1,1 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+*.log
+rock-volume/outputs/
+*.pt
+voiceNotes/data
+led-display/sage_data
+
+# ML training data  / related scripts
+ML-classifications/images_processed
+ML-classifications/images_raw
+ML-classifications/metadata
+ML-classifications/scripts/jsc.py
+ML-classifications/camera-pipeline/images
+.claude
+
+# Dev scratch / test files
+test_*.py
+patch_*.py
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Kaggle credentials (never commit)
+.kaggle/
+
+manifest.json
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+.env
+*.gguf
 led-display/models/

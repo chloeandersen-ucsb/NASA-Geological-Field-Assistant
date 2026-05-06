@@ -176,6 +176,7 @@ except Exception as e:
     print(f"Warning: Could not load LLM. Falling back to standard correction. Error: {e}")
     llm = None
 sys.stdout.flush()
+time.sleep(0.3)
 
 # ------------------------------------------------------------------
 # PART 3: LIVE INFERENCE LOGIC

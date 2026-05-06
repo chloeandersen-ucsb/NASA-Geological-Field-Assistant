@@ -163,31 +163,38 @@ class ClassificationService(ProcessService):
             
             connector.validate_ml_paths()
         
-        self.temperature = 1.0
         self._expected_json_path: str | None = None
-    
+        self._killing = False
+
     def classify(self, image_path: str, weights_path: str | None = None) -> None:
         if self.proc.state() != QProcess.NotRunning:
             self.failed.emit("Classifier already running")
             return
-        
+
         weights = weights_path or self.default_weights
-        
+
         base, _ = os.path.splitext(image_path)
         out_json = base + "_prediction.json"
         self._expected_json_path = out_json
-        
+        self._killing = False
+
         cmd = [
             self.python,
             str(self.rocknet_script),
             "--weights", str(weights),
             "--image", image_path,
-            "--temperature", str(self.temperature),
             "--output-json", out_json,
         ]
         self.proc.start(cmd[0], cmd[1:])
     
+    def kill(self) -> None:
+        self._killing = True
+        super().kill()
+
     def _on_finished(self, exit_code: int, _status) -> None:
+        if self._killing:
+            self._killing = False
+            return
         err = bytes(self.proc.readAllStandardError()).decode("utf-8", errors="ignore").strip()
         if exit_code != 0:
             self.failed.emit(err or f"Classification failed (exit {exit_code})")
@@ -208,25 +215,40 @@ class ClassificationService(ProcessService):
             self.failed.emit(f"Failed to read RockNet output JSON: {e}")
             return
         
-        # Handle both list format (top3) and dict format (backward compatibility)
-        if isinstance(payload, list):
-            # New format: list of 3 classifications [{"label": "...", "confidence": 0.xx}, ...]
+        # Detect v2 schema, legacy list format, and old dict format
+        if isinstance(payload, dict) and payload.get("schema_version") == "rocknet_v2.0":
+            primary = payload.get("primary", {})
+            if "family" not in primary or "confidence" not in primary:
+                self.failed.emit("RockNet v2 output missing primary.family/confidence")
+                return
+            scores = primary.get("scores", {})
+            top3 = [
+                {"label": k.capitalize(), "confidence": v}
+                for k, v in sorted(scores.items(), key=lambda x: -x[1])
+            ]
+            payload = {
+                "label": primary["family"].capitalize(),
+                "confidence": primary["confidence"],
+                "top3": top3,
+                "tier": primary.get("tier"),
+                "features": payload.get("features"),
+                "geology_notes": payload.get("geology_notes"),
+                "ui": payload.get("ui"),
+            }
+        elif isinstance(payload, list):
             if len(payload) == 0:
                 self.failed.emit("RockNet output JSON is empty list")
                 return
-            # Extract top result and include full top3 list
             top_result = payload[0]
             if "label" not in top_result or "confidence" not in top_result:
                 self.failed.emit("RockNet output JSON missing label/confidence in top result")
                 return
-            # Convert to dict format expected by display
             payload = {
                 "label": top_result["label"],
                 "confidence": top_result["confidence"],
                 "top3": payload,
             }
         elif isinstance(payload, dict):
-            # Old format: dict with label/confidence (backward compatibility)
             if "label" not in payload or "confidence" not in payload:
                 self.failed.emit("RockNet output JSON missing label/confidence")
                 return
@@ -237,6 +259,8 @@ class ClassificationService(ProcessService):
         self.finished.emit(payload)
     
     def _on_error(self, _err) -> None:
+        if self._killing:
+            return
         self.failed.emit("Classifier process error")
 
 

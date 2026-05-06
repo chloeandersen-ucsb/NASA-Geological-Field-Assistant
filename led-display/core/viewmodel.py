@@ -16,6 +16,7 @@ import uuid
 from PySide6.QtCore import QObject, Signal, QThread, QTimer
 
 from services.process_service import CameraService, ClassificationService, TranscriptionService, VolumeService
+import connector
 #from voiceNotes.ilai_files import transcriber_fine_tuned
 
 
@@ -38,6 +39,9 @@ class ClassificationResult:
     side_image_path: Optional[str] = None
     estimated_volume: Optional[float] = None
     estimated_weight: Optional[Union[float, str]] = None
+    tier: Optional[str] = None
+    features: Optional[dict] = None
+    geology_notes: Optional[list] = None
     raw: Optional[dict] = None
 
 
@@ -86,6 +90,30 @@ class RockSummaryWorker(QThread):
 
     def run(self) -> None:
         try:
+            _mock_vals = ("1", "true", "yes")
+            if (os.environ.get("SAGE_USE_MOCKS", "").lower() in _mock_vals
+                    or os.environ.get("SAGE_USE_MOCK_ML", "").lower() in _mock_vals):
+                import time
+                time.sleep(1.5)
+                if self.isInterruptionRequested():
+                    return
+                label = self._payload.get("label", "Unknown")
+                conf = self._payload.get("confidence", 0.0)
+                vol = self._payload.get("estimated_volume")
+                wt = self._payload.get("estimated_weight")
+                vol_str = f"{vol} cm³" if vol is not None else "Not specified"
+                wt_str = str(wt) if wt is not None else "Not specified"
+                mock_summary = (
+                    f"- Color & Appearance: Dark grey-green with fine crystalline texture\n"
+                    f"- Mineralogy & Composition: Classified as {label} ({int(conf*100)}% confidence)\n"
+                    f"- Texture & Structure: Fine-grained, slightly vesicular surface\n"
+                    f"- Weathering & Alteration: Moderate surface oxidation, minor pitting\n"
+                    f"- Dimensions & Weight: {vol_str} volume, {wt_str} estimated weight\n"
+                    f"- Field Context & Sampling Notes: Mock data — collected for UI testing"
+                )
+                self.summary_ready.emit(self._rock_id, mock_summary)
+                return
+
             script_path = Path(__file__).resolve().parent.parent / "scripts" / "rock_summary.py"
             spec = importlib.util.spec_from_file_location("rock_summary_runtime", script_path)
             if spec is None or spec.loader is None:
@@ -514,6 +542,9 @@ class Store:
                     image_path=r.get("image_path"), side_image_path=r.get("side_image_path"),
                     estimated_volume=r.get("estimated_volume"), estimated_weight=r.get("estimated_weight"),
                     raw=r.get("raw"),
+                    tier=r.get("tier"),
+                    features=r.get("features"),
+                    geology_notes=r.get("geology_notes"),
                 )
                 rocks.append(RockEntry(
                     rock_id=rec["rock_id"], 
@@ -718,7 +749,8 @@ class ViewModel(QObject):
         self._classify_payload: Optional[dict] = None
         self._classification_applied = False
 
-        self.classification_timeout_ms = 20_000
+        # Jetson needs extra time for CUDA init + model load (can take 60-90s on first run)
+        self.classification_timeout_ms = 120_000 if connector.is_jetson() else 20_000
         self._classify_timeout = QTimer(self)
         self._classify_timeout.setSingleShot(True)
         self._classify_timeout.timeout.connect(self._on_classify_timeout)
@@ -994,6 +1026,9 @@ class ViewModel(QObject):
             side_image_path=self._last_side_path,
             estimated_volume=estimated_volume,
             estimated_weight=estimated_weight,
+            tier=payload.get("tier"),
+            features=payload.get("features"),
+            geology_notes=payload.get("geology_notes"),
             raw=payload,
         )
         self.current_classification = result
@@ -1509,6 +1544,5 @@ class ViewModel(QObject):
         self.trip_changed.emit(summary)
 
     def _fail(self, message: str) -> None:
-        import sys
         print(f"\n[CRITICAL DEBUG] Failure detected: {message}", file=sys.stderr)
-        # self._abort_classification(message)  <-- Comment this out!
+        pass
