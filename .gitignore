@@ -27,6 +27,7 @@ Thumbs.db
 rock-volume/outputs/
 *.pt
 voiceNotes/data
+led-display/sage_data
 
 # ML training data  / related scripts
 ML-classifications/images_processed
