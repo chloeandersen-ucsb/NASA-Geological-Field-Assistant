@@ -1,0 +1,14 @@
+[
+  {
+    "label": "basalt pigeonite",
+    "confidence": 0.7452331185340881
+  },
+  {
+    "label": "basalt olivine",
+    "confidence": 0.15543465316295624
+  },
+  {
+    "label": "breccia impact",
+    "confidence": 0.08242769539356232
+  }
+]

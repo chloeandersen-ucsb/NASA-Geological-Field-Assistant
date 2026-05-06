@@ -390,6 +390,10 @@ class TranscriptionService(ProcessService):
         self.proc.finished.connect(_on_early_exit)
 
         cmd = [self.python, str(self.script)]
+        if os.environ.get("SAGE_USE_BASE_MODEL", "").lower() in ("1", "true", "yes"):
+            cmd.append("--use-base")
+        if os.environ.get("SAGE_RAW_ASR", "").lower() in ("1", "true", "yes"):
+            cmd.append("--raw-asr")
         print(f"[VOICE-TO-TEXT] Booting model: {' '.join(cmd)}", file=sys.stderr)
 
         self.proc.start(cmd[0], cmd[1:])

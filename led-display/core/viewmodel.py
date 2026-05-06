@@ -48,6 +48,8 @@ class RockEntry:
     result: ClassificationResult
     session_id: Optional[str] = None
     mission_id: Optional[str] = None
+    ai_summary: Optional[str] = None
+    ai_summary_signature: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -84,7 +86,7 @@ class RockSummaryWorker(QThread):
 
     def run(self) -> None:
         try:
-            script_path = Path(__file__).resolve().parent.parent / "services" / "rock_summary.py"
+            script_path = Path(__file__).resolve().parent.parent / "scripts" / "rock_summary.py"
             spec = importlib.util.spec_from_file_location("rock_summary_runtime", script_path)
             if spec is None or spec.loader is None:
                 raise RuntimeError("Unable to load rock summarizer module")
@@ -476,6 +478,8 @@ class Store:
             result=result,
             session_id=self.session_id, # Attach session ID
             mission_id=mission_id,
+            ai_summary=None,
+            ai_summary_signature=None
         )
         rec = {
             "type": "rock",
@@ -483,6 +487,8 @@ class Store:
             "ts": entry.ts,
             "session_id": entry.session_id, # Save to JSONL
             "mission_id": entry.mission_id,
+            "ai_summary": entry.ai_summary,
+            "ai_summary_signature": entry.ai_summary_signature,
             "result": asdict(entry.result),
         }
         with open(self.rocks_path, "a", encoding="utf-8") as f:
@@ -515,6 +521,8 @@ class Store:
                     result=result,
                     session_id=rec.get("session_id"), # Read from JSONL
                     mission_id=rec.get("mission_id"),
+                    ai_summary=rec.get("ai_summary"),
+                    ai_summary_signature=rec.get("ai_summary_signature")
                 ))
         return rocks
 
@@ -588,6 +596,25 @@ class Store:
             for rec in lines:
                 f.write(json.dumps(rec) + "\n")
 
+    def update_rock_summary(self, rock_id: str, signature: str, summary: str) -> None:
+        """Saves the AI summary permanently to the rocks.jsonl file."""
+        if not os.path.exists(self.rocks_path):
+            return
+        lines = []
+        with open(self.rocks_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                if rec.get("type") == "rock" and rec.get("rock_id") == rock_id:
+                    rec["ai_summary_signature"] = signature
+                    rec["ai_summary"] = summary
+                lines.append(rec)
+        with open(self.rocks_path, "w", encoding="utf-8") as f:
+            for rec in lines:
+                f.write(json.dumps(rec) + "\n")
+
     def list_voice_notes(self) -> List[dict]:
         if not os.path.isdir(self.voice_notes_data_dir):
             return []
@@ -613,6 +640,7 @@ class ViewModel(QObject):
     classification_changed = Signal(object)
     volume_display_changed = Signal(str)
     transcription_changed = Signal(str)
+    transcription_formatted = Signal()
     recording_status_changed = Signal(bool)
     mission_name_transcription_changed = Signal(str)
     mission_name_recording_status_changed = Signal(bool)
@@ -1281,7 +1309,6 @@ class ViewModel(QObject):
 
     def delete_voice_note_by_ts(self, ts: float) -> None:
         self.store.delete_voice_note(ts)
-        self._rock_summary_cache.clear()
         self._publish_trip()
 
     def _cancel_rock_summary_worker(self) -> None:
@@ -1310,6 +1337,11 @@ class ViewModel(QObject):
 
         note_signature = self._build_rock_summary_signature(associated_notes)
         cached = self._rock_summary_cache.get(entry.rock_id)
+
+        if not cached and entry.ai_summary and entry.ai_summary_signature:
+            cached = (entry.ai_summary_signature, entry.ai_summary)
+            # Load it into RAM for fast clicking later
+            self._rock_summary_cache[entry.rock_id] = cached
         
         # --- NEW: Check if we are forcing it, otherwise use cache ---
         if not force and cached and cached[0] == note_signature:
@@ -1324,6 +1356,7 @@ class ViewModel(QObject):
             "notes": notes,
             "estimated_volume": entry.result.estimated_volume,
             "estimated_weight": entry.result.estimated_weight,
+            "is_retry": force
         }
         worker = RockSummaryWorker(entry.rock_id, payload, self)
         worker.summary_ready.connect(self._on_rock_summary_finished)
@@ -1344,30 +1377,30 @@ class ViewModel(QObject):
         self.recording_status_changed.emit(False)
         self.go_home()
 
-    def _on_transcription_token(self, chunk: str) -> None:
-        import sys
-        print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
-
-        if self._transcription_target == "mission":
-            if not self._mission_name_accept_transcript:
-                return
-            self.mission_name_text += chunk.strip() + "\n"
-            self.mission_name_transcription_changed.emit(self.mission_name_text)
-            return
-
-        self.transcription_text += chunk.strip() + "\n"
-
-        print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
-        self.transcription_changed.emit(self.transcription_text)
-
     # def _on_transcription_token(self, chunk: str) -> None:
     #     import sys
     #     print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
-    #     # if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
-    #     #     self._set_state(AppStateType.VOICE_TO_TEXT)
-    #     self.transcription_text += chunk
+
+    #     if self._transcription_target == "mission":
+    #         if not self._mission_name_accept_transcript:
+    #             return
+    #         self.mission_name_text += chunk.strip() + "\n"
+    #         self.mission_name_transcription_changed.emit(self.mission_name_text)
+    #         return
+
+    #     self.transcription_text += chunk.strip() + "\n"
+
     #     print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
     #     self.transcription_changed.emit(self.transcription_text)
+
+    def _on_transcription_token(self, chunk: str) -> None:
+        import sys
+        print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
+        # if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
+        #     self._set_state(AppStateType.VOICE_TO_TEXT)
+        self.transcription_text += chunk
+        print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
+        self.transcription_changed.emit(self.transcription_text)
 
     def _on_transcription_completed(self, final_text: str) -> None:
         import sys
@@ -1387,6 +1420,7 @@ class ViewModel(QObject):
         print(f"[VIEWMODEL] CLEANUP: Replacing live text with final version", file=sys.stderr)
         self.transcription_text = final_text
         self.transcription_changed.emit(self.transcription_text)
+        self.transcription_formatted.emit()
 
     def _on_rock_summary_finished(self, rock_id: str, summary: str) -> None:
         if self.sender() is not self._rock_summary_worker or not rock_id:
@@ -1395,6 +1429,7 @@ class ViewModel(QObject):
         self._rock_summary_pending_request = None
         if pending_request and pending_request[0] == rock_id:
             self._rock_summary_cache[rock_id] = (pending_request[1], summary)
+            self.store.update_rock_summary(rock_id, pending_request[1], summary)
         self.rock_summary_changed.emit(rock_id, summary)
 
     def _on_rock_summary_failed(self, rock_id: str, message: str) -> None:
@@ -1431,7 +1466,6 @@ class ViewModel(QObject):
     def _publish_trip(self) -> None:
         self._cancel_rock_summary_worker()
         self._rock_summary_pending_request = None
-        self._rock_summary_cache.clear()
         rocks = self.store.list_rocks()
         voice_notes = self.store.list_voice_notes()
         missions = self.store.list_missions()
