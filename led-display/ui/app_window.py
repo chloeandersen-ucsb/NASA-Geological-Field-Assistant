@@ -179,40 +179,8 @@ class HomePage(QWidget):
             color: #cad2c5;
         """)
 
-        # --- NEW: iPhone-Style Status Bar ---
-        status_widget = QWidget()
-        status_widget.setStyleSheet("background: transparent;")
-        status_layout = QHBoxLayout(status_widget)
-        status_layout.setContentsMargins(5, 5, 5, 0)
-        
-        self.lbl_time = QLabel("00:00")
-        self.lbl_time.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
-        
-        self.lbl_date = QLabel("Mon, Jan 1")
-        self.lbl_date.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
-        self.lbl_date.setAlignment(Qt.AlignCenter)
-        
-        self.lbl_battery = QLabel("100% 🔋")
-        self.lbl_battery.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
-        self.lbl_battery.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        
-        status_layout.addWidget(self.lbl_time)
-        status_layout.addStretch(1)
-        status_layout.addWidget(self.lbl_date)
-        status_layout.addStretch(1)
-        status_layout.addWidget(self.lbl_battery)
-        
-        # Adding Qt.AlignTop forces the widget to glue itself to the absolute top of the screen!
-        layout.addWidget(status_widget, 0, Qt.AlignTop)
-        
-        # Add a small spacer so the logo doesn't crash into the top bar
+        # Add a small spacer so the logo doesn't crash into the top
         layout.addStretch(1)
-        # ------------------------------------
-
-        self.status_timer = QTimer(self)
-        self.status_timer.timeout.connect(self._update_status)
-        self.status_timer.start(1000)
-        self._update_status()
 
         logo = QLabel()
         pixmap = QPixmap(img_path)
@@ -239,43 +207,6 @@ class HomePage(QWidget):
         layout.addWidget(self.btn_trip)
         layout.addSpacing(60)
         layout.addWidget(self.btn_quit)
-
-    def _update_status(self):
-        """Fetches the live system time, locks to West Coast, and gets battery percentage."""
-        import datetime
-        
-        # 1. Safely update Time & Date
-        try:
-            from zoneinfo import ZoneInfo
-            tz = ZoneInfo("America/Los_Angeles")
-        except Exception:
-            # Bulletproof fallback to West Coast offset if the timezone database is missing!
-            tz = datetime.timezone(datetime.timedelta(hours=-7))
-            
-        now = datetime.datetime.now(tz)
-        
-        # %Y adds the 4-digit year. .replace() gracefully removes the leading zero from days 1-9.
-        date_str = now.strftime("%A, %b %d, %Y").replace(" 0", " ")
-        time_str = now.strftime("%I:%M %p").lstrip("0")
-        
-        self.lbl_time.setText(time_str)
-        self.lbl_date.setText(date_str)
-        
-        # 2. Safely update Battery
-        try:
-            import psutil
-            battery = psutil.sensors_battery()
-            if battery:
-                percent = int(battery.percent)
-                is_plugged = battery.power_plugged
-                icon = "🔋"
-                self.lbl_battery.setText(f"{percent}% {icon}")
-            else:
-                self.lbl_battery.setText("Power Connected") # Desktop fallback
-        except Exception as e:
-            # If psutil crashes entirely, gracefully show N/A without breaking the clock
-            self.lbl_battery.setText("Battery N/A")
-            print(f"Battery fetch error: {e}")
 
 
 class LoadingPage(QWidget):
@@ -1254,11 +1185,50 @@ class AppWindow(QMainWindow):
             font-weight: bold;
         """)
 
+        # --- NEW: Master Layout for the whole app ---
+        self.main_widget = QWidget()
+        self.setCentralWidget(self.main_widget)
+        self.main_layout = QVBoxLayout(self.main_widget)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(0)
 
+        # --- GLOBAL STATUS BAR ---
+        self.status_widget = QWidget()
+        self.status_widget.setStyleSheet("background: transparent;")
+        status_layout = QHBoxLayout(self.status_widget)
+        status_layout.setContentsMargins(5, 5, 5, 0)
+        
+        self.lbl_time = QLabel("00:00")
+        self.lbl_time.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
+        
+        self.lbl_date = QLabel("Mon, Jan 1")
+        self.lbl_date.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
+        self.lbl_date.setAlignment(Qt.AlignCenter)
+        
+        self.lbl_battery = QLabel("100% 🔋")
+        self.lbl_battery.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
+        self.lbl_battery.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        
+        status_layout.addWidget(self.lbl_time)
+        status_layout.addStretch(1)
+        status_layout.addWidget(self.lbl_date)
+        status_layout.addStretch(1)
+        status_layout.addWidget(self.lbl_battery)
+        
+        self.main_layout.addWidget(self.status_widget, 0, Qt.AlignTop)
+
+        # Start global timer
+        self.status_timer = QTimer(self)
+        self.status_timer.timeout.connect(self._update_status)
+        self.status_timer.start(1000)
+        self._update_status() 
+        # ---------------------------
+
+        # The deck of cards (StackedWidget) now goes BELOW the status bar
         self.stack = QStackedWidget()
         self.stack.setMinimumSize(0, 0)
         self.stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setCentralWidget(self.stack)
+        self.main_layout.addWidget(self.stack, stretch=1)
 
         self.home = HomePage()
         self.loading = LoadingPage()
@@ -2326,6 +2296,37 @@ class AppWindow(QMainWindow):
             self.mission_create.lbl_recording_status.setText("Typing mode")
         else:
             self.mission_create.lbl_recording_status.setText("Recording stopped")
+
+    def _update_status(self):
+        """Fetches the live system time, locks to West Coast, and gets battery percentage."""
+        import datetime
+        
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo("America/Los_Angeles")
+        except Exception:
+            tz = datetime.timezone(datetime.timedelta(hours=-7))
+            
+        now = datetime.datetime.now(tz)
+        
+        date_str = now.strftime("%A, %b %d, %Y").replace(" 0", " ")
+        time_str = now.strftime("%I:%M %p").lstrip("0")
+        
+        self.lbl_time.setText(time_str)
+        self.lbl_date.setText(date_str)
+        
+        try:
+            import psutil
+            battery = psutil.sensors_battery()
+            if battery:
+                percent = int(battery.percent)
+                is_plugged = battery.power_plugged
+                icon = "⚡" if is_plugged else "🔋"
+                self.lbl_battery.setText(f"{percent}% {icon}")
+            else:
+                self.lbl_battery.setText("Power Connected") 
+        except Exception as e:
+            self.lbl_battery.setText("Battery N/A")
             
 
 class Keyboard(QDialog):
@@ -2454,4 +2455,6 @@ class Keyboard(QDialog):
         elif self.shift_state == 2:
             self.btn_shift.setText("⇪") # Caps lock icon
             self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #4a90e2; color: white;")
+
+    
                 
