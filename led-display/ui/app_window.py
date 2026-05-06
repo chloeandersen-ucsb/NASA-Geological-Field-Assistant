@@ -16,13 +16,66 @@ img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
 from PySide6.QtCore import Qt, QTimer, Signal, QPoint
 from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor, QTextCursor
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QStackedWidget, QMessageBox,
-    QWidget, QVBoxLayout, QLabel, QPushButton,
-    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout, QDialog
+    QWidget, QVBoxLayout, QLabel, QPushButton, QMainWindow, QStackedWidget,
+    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout, QDialog,
+    QFrame
 )
 
 import connector
 from core.viewmodel import AppStateType, ClassificationResult, MissionSummary, TripSummary
+
+class SummaryPopupOverlay(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False) # Blocks clicks to the background!
+        
+        self.layout = QVBoxLayout(self)
+        self.layout.setAlignment(Qt.AlignCenter)
+        
+        # The white/light popup box
+        self.box = QWidget()
+        self.box.setFixedSize(400, 300)
+        self.box.setStyleSheet("background-color: #cbd2c5; border: 3px solid #344f41; border-radius: 12px;")        
+        box_layout = QVBoxLayout(self.box)
+        
+        self.lbl_title = QLabel("Category")
+        self.lbl_title.setAlignment(Qt.AlignCenter)
+        self.lbl_title.setStyleSheet("font-size: 20px; font-weight: bold; color: #344f41; border: none; padding-bottom: 5px;")
+        box_layout.addWidget(self.lbl_title)
+        
+        # A nice divider line
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setStyleSheet("background-color: #697d6a; border: none;")
+        divider.setFixedHeight(2)
+        box_layout.addWidget(divider)
+        
+        self.lbl_content = QLabel("Content goes here...")
+        self.lbl_content.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.lbl_content.setWordWrap(True)
+        self.lbl_content.setStyleSheet("font-size: 18px; color: #344f41; border: none; margin-top: 5px;")
+        box_layout.addWidget(self.lbl_content, stretch=1)
+        
+        # Instruction to close
+        self.lbl_close = QLabel("Tap anywhere to close")
+        self.lbl_close.setAlignment(Qt.AlignCenter)
+        self.lbl_close.setStyleSheet("font-size: 14px; color: #697d6a; border: none; font-style: italic;")
+        box_layout.addWidget(self.lbl_close)
+        
+        self.layout.addWidget(self.box)
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 180)) # 70% opacity black background
+        
+    def mousePressEvent(self, event):
+        self.hide()
+        
+    def show_popup(self, title: str, content: str):
+        self.lbl_title.setText(title)
+        self.lbl_content.setText(content)
+        self.raise_()
+        self.show()
 
 class SpinnerWidget(QWidget):
     """A custom widget that draws a smooth, rotating loading circle."""
@@ -734,7 +787,7 @@ class RockDetailPage(QWidget):
     def __init__(self):
         super().__init__()
         self.setStyleSheet("""
-            background-color: #f5f6f4;
+            background-color: #cbd2c5;
             color: #344f41;
             font-family: "Courier New";
         """)
@@ -744,12 +797,12 @@ class RockDetailPage(QWidget):
 
         self.lbl_title = QLabel("Rock Detail")
         self.lbl_title.setAlignment(Qt.AlignCenter)
-        self.lbl_title.setStyleSheet("font-size: 24px; font-weight: 700; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
+        self.lbl_title.setStyleSheet("background-color: #f5f6f4; font-size: 24px; font-weight: 700; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
         layout.addWidget(self.lbl_title)
 
         self.lbl_time = QLabel("")
         self.lbl_time.setAlignment(Qt.AlignCenter)
-        self.lbl_time.setStyleSheet("font-size: 16px; font-weight: 600;")
+        self.lbl_time.setStyleSheet("background-color: #f5f6f4; font-size: 16px; font-weight: 600;")
         layout.addWidget(self.lbl_time)
 
         images_row = QHBoxLayout()
@@ -770,13 +823,13 @@ class RockDetailPage(QWidget):
 
         self.lbl_info = QLabel("")
         self.lbl_info.setWordWrap(True)
-        self.lbl_info.setStyleSheet("font-size: 18px; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
+        self.lbl_info.setStyleSheet("background-color: #f5f6f4; font-size: 18px; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
         layout.addWidget(self.lbl_info, stretch=2)
 
-        # --- NEW: Summary Header with Re-Summarize Button ---
+        # --- Summary Header with Re-Summarize Button ---
         summary_header_layout = QHBoxLayout()
         self.lbl_summary_title = QLabel("AI Summary:")
-        self.lbl_summary_title.setStyleSheet("font-size: 18px; font-weight: 700;")
+        self.lbl_summary_title.setStyleSheet("background-color: #f5f6f4; font-size: 18px; font-weight: 700;")
         
         self.btn_force_summary = QPushButton("RE-SUMMARIZE")
         self.btn_force_summary.setFixedSize(140, 30)
@@ -785,34 +838,74 @@ class RockDetailPage(QWidget):
             QPushButton:hover { background-color: #b8d2ea; }
         """)
         
-        summary_header_layout.addWidget(self.lbl_summary_title)
-        summary_header_layout.addStretch(1)
+        summary_header_layout.addWidget(self.lbl_summary_title, stretch=1)
+        summary_header_layout.addSpacing(10)
         summary_header_layout.addWidget(self.btn_force_summary)
         layout.addLayout(summary_header_layout)
 
-        # --- SUMMARY TABLE SETUP ---
-        self.summary_text = QTextEdit()
-        self.summary_text.setReadOnly(True)
-        self.summary_text.setMinimumHeight(180)
-        self.summary_text.setStyleSheet("""
-            QTextEdit {
-                font-size: 16px;
-                border: 2px solid #697d6a;
-                border-radius: 8px;
-                background-color: #eef2eb;
-                padding: 4px;
-            }
-        """)
-        layout.addWidget(self.summary_text)
-        # ---------------------------
+        # --- NEW: 2x3 BUTTON GRID FOR JOYSTICK SNAP NAVIGATION ---
+        self.summary_buttons_widget = QWidget()
+        self.summary_grid = QGridLayout(self.summary_buttons_widget)
+        self.summary_grid.setSpacing(8)
+        self.summary_grid.setContentsMargins(0, 0, 0, 0)
+        
+        self.summary_data = {}
+        self.summary_buttons = {}
+        
+        # We use slightly shortened names for the buttons so they fit beautifully on a 480px screen
+        self.categories = [
+            ("Appearance", "Color & Appearance"), 
+            ("Mineralogy", "Mineralogy & Composition"), 
+            ("Texture", "Texture & Structure"),
+            ("Weathering", "Weathering & Alteration"), 
+            ("Dimensions", "Dimensions & Weight"), 
+            ("Other", "Field Context & Sampling Notes")
+        ]
+        
+        for i, (short_name, full_name) in enumerate(self.categories):
+            btn = QPushButton(short_name)
+            btn.setMinimumHeight(65)
+            # CHANGED: Bumped font-size to 20px and added a subtle background contrast
+            btn.setStyleSheet("""
+                QPushButton { 
+                    background-color: #a8bbaa; 
+                    color: #344f41; 
+                    font-weight: bold; 
+                    font-size: 20px; 
+                    border-radius: 8px; 
+                    border: 2px solid #344f41; 
+                }
+                QPushButton:hover { background-color: #617c32; color: white; }
+            """)
+            # Wire the button to pop open the overlay
+            btn.clicked.connect(lambda checked=False, cat=full_name: self._show_category_popup(cat))
+            
+            # divmod(i, 3) beautifully calculates the row and column for a 3-column grid!
+            row, col = divmod(i, 3)
+            self.summary_grid.addWidget(btn, row, col)
+            self.summary_buttons[full_name] = btn
+            self.summary_data[full_name] = "Not specified."
+            
+        layout.addWidget(self.summary_buttons_widget)
+        # --------------------------------------------------------
+
+        # --- NEW: The hidden loading label ---
+        self.lbl_summary_loading = QLabel("Generating AI summary...")
+        self.lbl_summary_loading.setAlignment(Qt.AlignCenter)
+        self.lbl_summary_loading.setStyleSheet("font-size: 18px; font-style: italic; color: #344f41; background-color: transparent;")
+        self.lbl_summary_loading.setMinimumHeight(140) # Keeps the page from shrinking when the grid vanishes
+        layout.addWidget(self.lbl_summary_loading)
+        self.lbl_summary_loading.hide()
+        # -------------------------------------
 
         self.lbl_notes_title = QLabel("Associated Voice Notes:")
-        self.lbl_notes_title.setStyleSheet("font-size: 18px; font-weight: 700;")
+        self.lbl_notes_title.setStyleSheet("background-color: #f5f6f4; font-size: 18px; font-weight: 700;")
         layout.addWidget(self.lbl_notes_title)
 
         self.notes_text = QTextEdit()
         self.notes_text.setReadOnly(True)
         self.notes_text.setStyleSheet("""
+            background-color: #f5f6f4;
             font-size: 16px;
             border: 2px solid #cbd2c5;
             border-radius: 8px;
@@ -823,6 +916,15 @@ class RockDetailPage(QWidget):
         self.btn_back = big_button("Back")
         layout.addWidget(self.btn_back)
         self._current_rock_id = None
+
+        # Initialize the popup hidden on top of everything
+        self.popup_overlay = SummaryPopupOverlay(self)
+        self.popup_overlay.hide()
+
+    def resizeEvent(self, event):
+        if hasattr(self, 'popup_overlay'):
+            self.popup_overlay.setGeometry(self.rect())
+        super().resizeEvent(event)
 
     def _parse_summary_to_table_data(self, summary: str) -> list[tuple[str, str]]:
         """Parses the bulleted AI string into Key/Value pairs."""
@@ -847,23 +949,37 @@ class RockDetailPage(QWidget):
                 
         return parsed_data
 
-    def _populate_table(self, data: list[tuple[str, str]]) -> None:
-        """Builds a strict HTML grid table for flawless word wrapping."""
-        # Use 'table_html' so we don't shadow the imported 'html' module!
-        table_html = '<table width="100%" border="1" cellspacing="0" cellpadding="8" bordercolor="#cbd2c5">'
-        
-        for key, value in data:
-            table_html += '<tr>'
-            # Left Column (35% width, bold, top-aligned)
-            table_html += f'<td width="35%" valign="top"><b>{html.escape(key)}:</b></td>'
-            # Right Column (65% width, normal text, top-aligned)
-            table_html += f'<td width="65%" valign="top">{html.escape(value)}</td>'
-            table_html += '</tr>'
+    def _show_category_popup(self, category: str):
+        # Triggered when a grid button is clicked
+        content = self.summary_data.get(category, "No data available.")
+        self.popup_overlay.show_popup(category, content)
+
+    def _populate_buttons(self, data: list[tuple[str, str]]) -> None:
+        """Loads the parsed AI summary data into the button memory dictionary."""
+        # 1. Reset everything to defaults
+        for cat in self.summary_data.keys():
+            self.summary_data[cat] = "Not specified."
             
-        table_html += '</table>'
-        
-        # Inject the HTML table into the text widget
-        self.summary_text.setHtml(table_html)
+        # 2. Check if the AI is currently thinking
+        is_generating = any("Generating" in v for k, v in data)
+        if is_generating:
+            # Hide the buttons, show the label, and disable the RE-SUMMARIZE button!
+            self.summary_buttons_widget.hide()
+            self.lbl_summary_loading.show()
+            self.btn_force_summary.setEnabled(False) 
+            return
+            
+        # 3. AI is done! Restore visibility and re-enable the button
+        self.lbl_summary_loading.hide()
+        self.summary_buttons_widget.show()
+        self.btn_force_summary.setEnabled(True)
+            
+        # 4. Map the AI output securely to the exact buttons
+        for key, val in data:
+            for full_name in self.summary_data.keys():
+                # We match based on the first word to ensure it syncs perfectly
+                if key.split()[0].lower() in full_name.lower():
+                    self.summary_data[full_name] = val
 
     def set_entry(self, entry, associated_notes=None, ai_summary: str = "Generating AI summary...") -> None:
         self._current_rock_id = entry.rock_id
@@ -898,7 +1014,7 @@ class RockDetailPage(QWidget):
         
         # --- NEW: Parse and populate the table instead of HTML ---
         table_data = self._parse_summary_to_table_data(ai_summary)
-        self._populate_table(table_data)
+        self._populate_buttons(table_data)
         # ---------------------------------------------------------
 
         # --- Populate Voice Notes ---
@@ -917,7 +1033,7 @@ class RockDetailPage(QWidget):
     def set_ai_summary(self, rock_id: str, summary: str) -> None:
         if self._current_rock_id == rock_id:
             table_data = self._parse_summary_to_table_data(summary)
-            self._populate_table(table_data)
+            self._populate_buttons(table_data)
 
 
 class VoiceNoteDetailPage(QWidget):
@@ -934,7 +1050,7 @@ class VoiceNoteDetailPage(QWidget):
 
         self.lbl_title = QLabel("Voice Note")
         self.lbl_title.setAlignment(Qt.AlignCenter)
-        self.lbl_title.setStyleSheet("font-size: 24px; font-weight: 700; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
+        self.lbl_title.setStyleSheet("background-color: #f5f6f4; font-size: 24px; font-weight: 700; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
         
         layout.addWidget(self.lbl_title)
 
@@ -1160,7 +1276,7 @@ class AppWindow(QMainWindow):
         notes = getattr(self.rock_detail, "_current_associated_notes", None)
         if entry and notes:
             table_data = self.rock_detail._parse_summary_to_table_data("Generating AI summary...")
-            self.rock_detail._populate_table(table_data)
+            self.rock_detail._populate_buttons(table_data)
             
             self.vm.request_rock_summary(entry, notes, force=True)   
    
