@@ -179,6 +179,41 @@ class HomePage(QWidget):
             color: #cad2c5;
         """)
 
+        # --- NEW: iPhone-Style Status Bar ---
+        status_widget = QWidget()
+        status_widget.setStyleSheet("background: transparent;")
+        status_layout = QHBoxLayout(status_widget)
+        status_layout.setContentsMargins(5, 5, 5, 0)
+        
+        self.lbl_time = QLabel("00:00")
+        self.lbl_time.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
+        
+        self.lbl_date = QLabel("Mon, Jan 1")
+        self.lbl_date.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
+        self.lbl_date.setAlignment(Qt.AlignCenter)
+        
+        self.lbl_battery = QLabel("100% 🔋")
+        self.lbl_battery.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
+        self.lbl_battery.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        
+        status_layout.addWidget(self.lbl_time)
+        status_layout.addStretch(1)
+        status_layout.addWidget(self.lbl_date)
+        status_layout.addStretch(1)
+        status_layout.addWidget(self.lbl_battery)
+        
+        # Adding Qt.AlignTop forces the widget to glue itself to the absolute top of the screen!
+        layout.addWidget(status_widget, 0, Qt.AlignTop)
+        
+        # Add a small spacer so the logo doesn't crash into the top bar
+        layout.addStretch(1)
+        # ------------------------------------
+
+        self.status_timer = QTimer(self)
+        self.status_timer.timeout.connect(self._update_status)
+        self.status_timer.start(1000)
+        self._update_status()
+
         logo = QLabel()
         pixmap = QPixmap(img_path)
         logo.setStyleSheet("background: transparent; border: none;")
@@ -186,8 +221,8 @@ class HomePage(QWidget):
         logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
 
-        # font = QFont("Arial", 18)
-        # font.setBold(True)
+        layout.addStretch(1)
+
         self.btn_classify = big_button("Classify Rock")
         self.btn_voice = big_button("Voice to Text")
         self.btn_trip = big_button(" View Trip Notes")
@@ -202,9 +237,45 @@ class HomePage(QWidget):
         layout.addWidget(self.btn_classify)
         layout.addWidget(self.btn_voice)
         layout.addWidget(self.btn_trip)
-        # layout.addStretch(1)
         layout.addSpacing(60)
         layout.addWidget(self.btn_quit)
+
+    def _update_status(self):
+        """Fetches the live system time, locks to West Coast, and gets battery percentage."""
+        import datetime
+        
+        # 1. Safely update Time & Date
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo("America/Los_Angeles")
+        except Exception:
+            # Bulletproof fallback to West Coast offset if the timezone database is missing!
+            tz = datetime.timezone(datetime.timedelta(hours=-7))
+            
+        now = datetime.datetime.now(tz)
+        
+        # %Y adds the 4-digit year. .replace() gracefully removes the leading zero from days 1-9.
+        date_str = now.strftime("%A, %b %d, %Y").replace(" 0", " ")
+        time_str = now.strftime("%I:%M %p").lstrip("0")
+        
+        self.lbl_time.setText(time_str)
+        self.lbl_date.setText(date_str)
+        
+        # 2. Safely update Battery
+        try:
+            import psutil
+            battery = psutil.sensors_battery()
+            if battery:
+                percent = int(battery.percent)
+                is_plugged = battery.power_plugged
+                icon = "🔋"
+                self.lbl_battery.setText(f"{percent}% {icon}")
+            else:
+                self.lbl_battery.setText("Power Connected") # Desktop fallback
+        except Exception as e:
+            # If psutil crashes entirely, gracefully show N/A without breaking the clock
+            self.lbl_battery.setText("Battery N/A")
+            print(f"Battery fetch error: {e}")
 
 
 class LoadingPage(QWidget):
