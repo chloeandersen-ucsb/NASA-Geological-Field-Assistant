@@ -18,12 +18,16 @@ ENV/
 *.swo
 *~
 
+.env
+
 # OS
 .DS_Store
 Thumbs.db
 
 # Project specific
 ML-classifications/camera-pipeline/images
+ML-classifications/images_processed
+ML-classifications/metadata
 *.log
 rock-volume/outputs/
 *.pt
