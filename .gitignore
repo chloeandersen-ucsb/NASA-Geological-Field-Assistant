@@ -1,1 +1,6 @@
+**/__pycache__/
+*.pyc
+*.pt
+ML-classifications/camera-pipeline/images/
+voiceNotes/data/
 led-display/models/
