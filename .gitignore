@@ -19,6 +19,7 @@ ENV/
 *~
 
 .env
+.claude
 
 # OS
 .DS_Store
@@ -28,6 +29,7 @@ Thumbs.db
 ML-classifications/camera-pipeline/images
 ML-classifications/images_processed
 ML-classifications/metadata
+led-display/sage_data
 *.log
 rock-volume/outputs/
 *.pt

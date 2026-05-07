@@ -122,7 +122,7 @@ def get_rocknet_weights_path() -> Path:
     env_path = os.environ.get("SAGE_ROCKNET_WEIGHTS")
     if env_path:
         return Path(env_path).absolute()
-    return get_ml_classifications_dir() / "best_rocknet.pt"
+    return get_ml_classifications_dir() / "best_rocknet_v2.pt"
 
 
 def get_voice_to_text_script_path() -> Path:
