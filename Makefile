@@ -1,4 +1,4 @@
-.PHONY: help setup install-fonts run run-raw run-base run-base-raw run-mock run-mock-ml clean check
+.PHONY: help setup run run-raw run-base run-base-raw run-mock run-mock-ml clean check
 
 # Project configuration
 PYTHON := python3
@@ -17,31 +17,6 @@ else
 endif
 
 
-install-fonts:
-	@echo "Installing UI fonts (Inter + DM Mono)..."
-	@mkdir -p ~/.local/share/fonts
-ifeq ($(IS_JETSON),1)
-	@sudo apt-get install -y fonts-inter 2>/dev/null || echo "  fonts-inter not in apt, installing manually..."
-	@fc-list | grep -qi "Inter" || ( \
-		echo "  Downloading Inter..." && \
-		wget -q -O /tmp/inter.zip "https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip" && \
-		unzip -q -o /tmp/inter.zip "*.ttf" -d ~/.local/share/fonts/ && \
-		rm /tmp/inter.zip )
-else
-	@fc-list | grep -qi "Inter" || ( \
-		echo "  Downloading Inter..." && \
-		curl -sL -o /tmp/inter.zip "https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip" && \
-		unzip -q -o /tmp/inter.zip "*.ttf" -d ~/.local/share/fonts/ && \
-		rm /tmp/inter.zip )
-endif
-	@fc-list | grep -qi "DM Mono" || ( \
-		echo "  Downloading DM Mono..." && \
-		curl -sL -o /tmp/dmmono.zip "https://fonts.google.com/download?family=DM+Mono" && \
-		unzip -q -o /tmp/dmmono.zip -d ~/.local/share/fonts/dmmono/ && \
-		rm /tmp/dmmono.zip )
-	@fc-cache -f -v > /dev/null
-	@echo "Fonts installed."
-
 setup:
 	@echo "Setting up SAGE project dependencies..."
 	@echo "Platform: $(JETSON_DETECT)"
@@ -55,14 +30,12 @@ ifeq ($(IS_JETSON),1)
 	@echo "Creating data directory: $(SAGE_STORE_DIR)"
 	@sudo mkdir -p $(SAGE_STORE_DIR)
 	@sudo chown $$USER:$$USER $(SAGE_STORE_DIR)
-	@$(MAKE) install-fonts
 	@echo "Setup complete for Jetson"
 else
 	@echo "Installing dependencies for development platform..."
 	@pip3 install -r requirements.txt
 	@echo "Downloading SAM model if needed"
 	@cd $(PROJECT_ROOT) && $(PYTHON) rock-volume/download_sam.py
-	@$(MAKE) install-fonts
 	@echo "Setup complete"
 endif
 
