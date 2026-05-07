@@ -1,6 +1,50 @@
-**/__pycache__/
-*.pyc
-*.pt
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment / secrets
+.env
+.claude
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific - device-only data
 ML-classifications/camera-pipeline/images/
+ML-classifications/images_processed/
+ML-classifications/metadata/
+led-display/sage_data/
 voiceNotes/data/
+rock-volume/outputs/
+
+# Models / large files
 led-display/models/
+ML-classifications/models/
+*.pt
+*.gguf
+*.nemo
+
+# Logs
+*.log
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
