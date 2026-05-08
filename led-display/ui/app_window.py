@@ -374,8 +374,8 @@ class ClassifiedPage(QWidget):
             font-family: "Courier New";
         """)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(10)
+        layout.setContentsMargins(15, 10, 15, 10)
+        layout.setSpacing(6)
 
         # Title
         self.lbl_label = QLabel("LABEL")
@@ -386,24 +386,7 @@ class ClassifiedPage(QWidget):
         )
         layout.addWidget(self.lbl_label)
 
-        # Confidence / volume row
-        info_row = QHBoxLayout()
-        self.lbl_conf = QLabel("Confidence: --")
-        self.lbl_conf.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.lbl_conf.setStyleSheet("font-size: 15px; color: #555;")
-        self.lbl_volume = QLabel("Volume: --")
-        self.lbl_volume.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.lbl_volume.setStyleSheet("font-size: 15px;")
-        self.lbl_extra = QLabel("")
-        self.lbl_extra.setAlignment(Qt.AlignCenter)
-        self.lbl_extra.setStyleSheet("font-size: 15px;")
-        info_row.addWidget(self.lbl_conf)
-        info_row.addStretch()
-        info_row.addWidget(self.lbl_volume)
-        layout.addLayout(info_row)
-        layout.addWidget(self.lbl_extra)
-
-        # Images
+        # Images (moved up, right after title)
         images_row = QHBoxLayout()
         images_row.setSpacing(10)
         self.lbl_image = QLabel()
@@ -420,7 +403,24 @@ class ClassifiedPage(QWidget):
         )
         images_row.addWidget(self.lbl_image, stretch=1)
         images_row.addWidget(self.lbl_side_image, stretch=1)
-        layout.addLayout(images_row, stretch=2)
+        layout.addLayout(images_row, stretch=1)
+
+        # Confidence / volume row
+        info_row = QHBoxLayout()
+        self.lbl_conf = QLabel("Confidence: --")
+        self.lbl_conf.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.lbl_conf.setStyleSheet("font-size: 14px; color: #555;")
+        self.lbl_volume = QLabel("Volume: --")
+        self.lbl_volume.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.lbl_volume.setStyleSheet("font-size: 14px;")
+        self.lbl_extra = QLabel("")
+        self.lbl_extra.setAlignment(Qt.AlignCenter)
+        self.lbl_extra.setStyleSheet("font-size: 13px;")
+        info_row.addWidget(self.lbl_conf)
+        info_row.addStretch()
+        info_row.addWidget(self.lbl_volume)
+        layout.addLayout(info_row)
+        layout.addWidget(self.lbl_extra)
 
         # Features box
         self.features_container = QWidget()
@@ -430,12 +430,13 @@ class ClassifiedPage(QWidget):
         self.features_layout = QVBoxLayout(self.features_container)
         self.features_layout.setSpacing(3)
         self.features_layout.setContentsMargins(10, 8, 10, 8)
-        layout.addWidget(self.features_container, stretch=2)
+        layout.addWidget(self.features_container, stretch=3)
 
         # Alternatives
         self.lbl_alternatives = QLabel("")
         self.lbl_alternatives.setAlignment(Qt.AlignCenter)
-        self.lbl_alternatives.setStyleSheet("font-size: 14px; color: #888;")
+        self.lbl_alternatives.setWordWrap(True)
+        self.lbl_alternatives.setStyleSheet("font-size: 12px; color: #888;")
         layout.addWidget(self.lbl_alternatives)
 
         # Voice widget + buttons
@@ -1781,14 +1782,14 @@ class AppWindow(QMainWindow):
                 conf = int(feat_data["confidence"] * 100)
 
                 feat_lbl = QLabel(f"{feat_name.replace('_', ' ').title()}: {value}  ({conf}%)")
-                feat_lbl.setAlignment(Qt.AlignRight)
+                feat_lbl.setAlignment(Qt.AlignLeft)
                 feat_lbl.setStyleSheet("font-size: 16px; border: none; background: transparent;")
                 self.classified.features_layout.addWidget(feat_lbl)
 
                 note = note_by_feature.get(feat_name, "")
                 if note:
                     note_lbl = QLabel(note)
-                    note_lbl.setAlignment(Qt.AlignRight)
+                    note_lbl.setAlignment(Qt.AlignLeft)
                     note_lbl.setWordWrap(True)
                     note_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
                     note_lbl.setStyleSheet("font-size: 13px; color: #888; border: none; background: transparent;")
