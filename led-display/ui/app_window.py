@@ -404,11 +404,11 @@ class ClassifiedPage(QWidget):
 
         self.lbl_conf = QLabel("Confidence: --")
         self.lbl_conf.setAlignment(Qt.AlignCenter)
-        self.lbl_conf.setStyleSheet("font-size: 25px; color: #666;") #color = white
+        self.lbl_conf.setStyleSheet("font-size: 17px; color: #666;")
 
         self.lbl_volume = QLabel("Volume = --")
         self.lbl_volume.setAlignment(Qt.AlignCenter)
-        self.lbl_volume.setStyleSheet("font-size: 20px;")
+        self.lbl_volume.setStyleSheet("font-size: 17px;")
 
         # self.lbl_top2 = QLabel("")
         # self.lbl_top2.setAlignment(Qt.AlignCenter)
@@ -418,25 +418,9 @@ class ClassifiedPage(QWidget):
         # self.lbl_top3.setAlignment(Qt.AlignCenter)
         # self.lbl_top3.setStyleSheet("font-size: 20px;")
 
-        self.extra_results_widget = QWidget()
-        self.extra_grid = QGridLayout(self.extra_results_widget)
-        self.extra_grid.setAlignment(Qt.AlignCenter)
-        # self.extra_grid.setContentsMargins(100, 0, 100, 0) # Adjust margins to control width
-        
-        # Create the sub-labels
-        self.lbl_rank2 = QLabel(""); self.lbl_name2 = QLabel(""); self.lbl_perc2 = QLabel("")
-        self.lbl_rank3 = QLabel(""); self.lbl_name3 = QLabel(""); self.lbl_perc3 = QLabel("")
-
-        # Style and Add to Grid
-        sub_style = "font-size: 20px;"
-        for i, lbl in enumerate([self.lbl_rank2, self.lbl_name2, self.lbl_perc2, 
-                                 self.lbl_rank3, self.lbl_name3, self.lbl_perc3]):
-            lbl.setStyleSheet(sub_style)
-            # Row 0 for 2nd, Row 1 for 3rd
-            row = i // 3
-            col = i % 3
-            alignment = [Qt.AlignLeft, Qt.AlignCenter, Qt.AlignRight][col]
-            self.extra_grid.addWidget(lbl, row, col, alignment)
+        self.lbl_alternatives = QLabel("")
+        self.lbl_alternatives.setAlignment(Qt.AlignCenter)
+        self.lbl_alternatives.setStyleSheet("font-size: 15px; color: #888;")
 
         self.lbl_extra = QLabel("")
         self.lbl_extra.setAlignment(Qt.AlignCenter)
@@ -481,17 +465,22 @@ class ClassifiedPage(QWidget):
         # Assemble main layout
         self.main_layout.addWidget(self.lbl_label)
         self.main_layout.addWidget(self.lbl_conf)
-        self.main_layout.addSpacing(10)
+        self.main_layout.addSpacing(2)
         self.main_layout.addWidget(self.lbl_volume)
         self.main_layout.addWidget(self.lbl_extra)
-        self.main_layout.addSpacing(10)
 
-        self.main_layout.addWidget(self.extra_results_widget)
+        vol_line = QFrame()
+        vol_line.setFrameShape(QFrame.HLine)
+        vol_line.setStyleSheet("color: #aaa; margin: 4px 20px;")
+        self.main_layout.addWidget(vol_line)
+
+        self.main_layout.addWidget(self.lbl_alternatives)
+        self.main_layout.addSpacing(4)
 
         self.features_container = QWidget()
         self.features_layout = QVBoxLayout(self.features_container)
-        self.features_layout.setSpacing(4)
-        self.features_layout.setContentsMargins(0, 0, 0, 0)
+        self.features_layout.setSpacing(2)
+        self.features_layout.setContentsMargins(10, 0, 10, 0)
         self.main_layout.addWidget(self.features_container)
 
         self.main_layout.addStretch(1)
@@ -1763,30 +1752,20 @@ class AppWindow(QMainWindow):
         top3 = None
         if result.raw and isinstance(result.raw, dict):
             top3 = result.raw.get("top3", [])
-        
+
+        alt_parts = []
         if top3 and len(top3) >= 2:
-            label2 = top3[1].get("label", "")
             conf2 = float(top3[1].get("confidence", 0.0))
             if conf2 > 0:
-                self.classified.lbl_rank2.setText("2nd:")
-                self.classified.lbl_name2.setText(top3[1].get("label", "").upper())
-                self.classified.lbl_perc2.setText(f"({int(float(top3[1]['confidence']) * 100)}%)")
-            else:
-                for lbl in [self.classified.lbl_rank2, self.classified.lbl_name2, self.classified.lbl_perc2]: lbl.setText("")
-        else:
-            for lbl in [self.classified.lbl_rank2, self.classified.lbl_name2, self.classified.lbl_perc2]: lbl.setText("")
-        
+                alt_parts.append(f"{top3[1].get('label', '').upper()} (conf: {int(conf2 * 100)}%)")
         if top3 and len(top3) >= 3:
-            label3 = top3[2].get("label", "")
             conf3 = float(top3[2].get("confidence", 0.0))
             if conf3 > 0:
-                self.classified.lbl_rank3.setText("3rd:")
-                self.classified.lbl_name3.setText(top3[2].get("label", "").upper())
-                self.classified.lbl_perc3.setText(f"({int(float(top3[2]['confidence']) * 100)}%)")
-            else:
-                for lbl in [self.classified.lbl_rank3, self.classified.lbl_name3, self.classified.lbl_perc3]: lbl.setText("")
+                alt_parts.append(f"{top3[2].get('label', '').upper()} (conf: {int(conf3 * 100)}%)")
+        if alt_parts:
+            self.classified.lbl_alternatives.setText("Alternatively: " + ",  ".join(alt_parts))
         else:
-            for lbl in [self.classified.lbl_rank3, self.classified.lbl_name3, self.classified.lbl_perc3]: lbl.setText("")
+            self.classified.lbl_alternatives.setText("")
 
         raw = result.raw or {}
         features = raw.get("features") or {}
@@ -1800,22 +1779,30 @@ class AppWindow(QMainWindow):
 
         if show_features and features:
             note_by_feature = {n["feature"]: n["note"] for n in geo_notes}
-            for feat_name, feat_data in features.items():
-                if not feat_data.get("display"):
-                    continue
+            displayed = [
+                (feat_name, feat_data)
+                for feat_name, feat_data in features.items()
+                if feat_data.get("display")
+            ]
+            for idx, (feat_name, feat_data) in enumerate(displayed):
                 value = feat_data["value"]
                 conf = int(feat_data["confidence"] * 100)
-                row = QLabel(f"{feat_name.replace('_', ' ').title()}: {value} ({conf}%)")
+                row = QLabel(f"{feat_name.replace('_', ' ').title()}: {value}  (conf: {conf}%)")
                 row.setAlignment(Qt.AlignCenter)
-                row.setStyleSheet("font-size: 18px;")
+                row.setStyleSheet("font-size: 17px;")
                 self.classified.features_layout.addWidget(row)
                 note = note_by_feature.get(feat_name, "")
                 if note:
                     note_lbl = QLabel(note)
                     note_lbl.setAlignment(Qt.AlignCenter)
                     note_lbl.setWordWrap(True)
-                    note_lbl.setStyleSheet("font-size: 14px; color: #888;")
+                    note_lbl.setStyleSheet("font-size: 13px; color: #999;")
                     self.classified.features_layout.addWidget(note_lbl)
+                if idx < len(displayed) - 1:
+                    sep = QFrame()
+                    sep.setFrameShape(QFrame.HLine)
+                    sep.setStyleSheet("color: #ccc; margin: 2px 40px;")
+                    self.classified.features_layout.addWidget(sep)
 
         extras = []
         if result.estimated_weight is not None:
