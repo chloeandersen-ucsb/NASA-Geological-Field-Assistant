@@ -433,8 +433,8 @@ class ClassifiedPage(QWidget):
             "background-color: #f5f6f4; border: 2px solid #697d6a; border-radius: 8px;"
         )
         self.features_layout = QVBoxLayout(self.features_container)
-        self.features_layout.setSpacing(3)
-        self.features_layout.setContentsMargins(10, 8, 10, 8)
+        self.features_layout.setSpacing(4)
+        self.features_layout.setContentsMargins(10, 15, 10, 15)
         layout.addWidget(self.features_container, stretch=1)
 
         # Alternatives
@@ -1789,8 +1789,8 @@ class AppWindow(QMainWindow):
                 feat_lbl = QLabel(f"{feat_name.replace('_', ' ').title()}: {value}  ({conf}%)")
                 feat_lbl.setAlignment(Qt.AlignLeft)
                 feat_lbl.setWordWrap(True)
-                feat_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
-                feat_lbl.setStyleSheet("font-size: 16px; border: none; background: transparent;")
+                feat_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
+                feat_lbl.setStyleSheet("font-size: 14px; border: none; background: transparent; font-weight: bold;")
                 self.classified.features_layout.addWidget(feat_lbl)
 
                 note = note_by_feature.get(feat_name, "")
@@ -1798,8 +1798,8 @@ class AppWindow(QMainWindow):
                     note_lbl = QLabel(note)
                     note_lbl.setAlignment(Qt.AlignLeft)
                     note_lbl.setWordWrap(True)
-                    note_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
-                    note_lbl.setStyleSheet("font-size: 13px; color: #888; border: none; background: transparent;")
+                    note_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
+                    note_lbl.setStyleSheet("font-size: 11px; color: #888; border: none; background: transparent; font-weight: normal;")
                     self.classified.features_layout.addWidget(note_lbl)
 
                 if idx < len(displayed) - 1:
