@@ -487,6 +487,13 @@ class ClassifiedPage(QWidget):
         self.main_layout.addSpacing(10)
 
         self.main_layout.addWidget(self.extra_results_widget)
+
+        self.features_container = QWidget()
+        self.features_layout = QVBoxLayout(self.features_container)
+        self.features_layout.setSpacing(4)
+        self.features_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.addWidget(self.features_container)
+
         self.main_layout.addStretch(1)
         
 
@@ -1780,6 +1787,35 @@ class AppWindow(QMainWindow):
                 for lbl in [self.classified.lbl_rank3, self.classified.lbl_name3, self.classified.lbl_perc3]: lbl.setText("")
         else:
             for lbl in [self.classified.lbl_rank3, self.classified.lbl_name3, self.classified.lbl_perc3]: lbl.setText("")
+
+        raw = result.raw or {}
+        features = raw.get("features") or {}
+        geo_notes = raw.get("geology_notes") or []
+        show_features = raw.get("ui", {}).get("show_features", False)
+
+        while self.classified.features_layout.count():
+            child = self.classified.features_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        if show_features and features:
+            note_by_feature = {n["feature"]: n["note"] for n in geo_notes}
+            for feat_name, feat_data in features.items():
+                if not feat_data.get("display"):
+                    continue
+                value = feat_data["value"]
+                conf = int(feat_data["confidence"] * 100)
+                row = QLabel(f"{feat_name.replace('_', ' ').title()}: {value} ({conf}%)")
+                row.setAlignment(Qt.AlignCenter)
+                row.setStyleSheet("font-size: 18px;")
+                self.classified.features_layout.addWidget(row)
+                note = note_by_feature.get(feat_name, "")
+                if note:
+                    note_lbl = QLabel(note)
+                    note_lbl.setAlignment(Qt.AlignCenter)
+                    note_lbl.setWordWrap(True)
+                    note_lbl.setStyleSheet("font-size: 14px; color: #888;")
+                    self.classified.features_layout.addWidget(note_lbl)
 
         extras = []
         if result.estimated_weight is not None:
