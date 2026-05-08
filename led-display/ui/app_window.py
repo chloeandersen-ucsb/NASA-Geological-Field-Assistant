@@ -1204,11 +1204,9 @@ class AppWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.stack.setMinimumSize(0, 0)
         self.stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-        # Thin navbar that occupies real layout space — no overlap with pages
         self.status_widget = QWidget()
         self.status_widget.setFixedHeight(28)
-        self.status_widget.setStyleSheet("background-color: #b5bdae;")
+        self.status_widget.setStyleSheet("background-color: transparent;")
         status_layout = QHBoxLayout(self.status_widget)
         status_layout.setContentsMargins(8, 2, 8, 2)
 
