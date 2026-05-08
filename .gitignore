@@ -18,6 +18,7 @@ ENV/
 *.swo
 *~
 
+# Environment / secrets
 .env
 .claude
 
@@ -33,14 +34,20 @@ led-display/sage_data/missions.json
 led-display/sage_data/rocks.jsonl
 led-display/sage_data/voice_notes.jsonl
 *.log
+voiceNotes/data/
 rock-volume/outputs/
+
+# Models / large files
+led-display/models/
+ML-classifications/models/
 *.pt
-voiceNotes/data
+*.gguf
+*.nemo
+
+# Logs
+*.log
 
 # Distribution / packaging
 dist/
 build/
 *.egg-info/
-*.gguf
-led-display/models/
-led-display/models/

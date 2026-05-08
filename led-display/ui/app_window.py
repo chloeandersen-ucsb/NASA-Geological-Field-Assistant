@@ -10,15 +10,16 @@ from PySide6.QtGui import QImage
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
-img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
+# img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
+img_path = project_root/ "led-display" / "ui" / "newlogo.png"
 
 
 from PySide6.QtCore import Qt, QTimer, Signal, QPoint
 from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor, QTextCursor
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QStackedWidget, QMessageBox,
-    QWidget, QVBoxLayout, QLabel, QPushButton,
-    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout, QDialog
+    QApplication, QWidget, QVBoxLayout, QLabel, QPushButton, QMainWindow, QStackedWidget,
+    QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout, QDialog,
+    QFrame
 )
 
 import importlib.util, pathlib
@@ -31,6 +32,143 @@ JoystickNavigator = _mod.JoystickNavigator
 import connector
 from core.viewmodel import AppStateType, ClassificationResult, MissionSummary, TripSummary
 
+class SummaryPopupOverlay(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False) # Blocks clicks to the background!
+        
+        self.layout = QVBoxLayout(self)
+        self.layout.setAlignment(Qt.AlignCenter)
+        
+        # The white/light popup box
+        self.box = QWidget()
+        self.box.setFixedSize(400, 300)
+        self.box.setStyleSheet("background-color: #cbd2c5; border: 3px solid #344f41; border-radius: 12px;")        
+        box_layout = QVBoxLayout(self.box)
+        
+        self.lbl_title = QLabel("Category")
+        self.lbl_title.setAlignment(Qt.AlignCenter)
+        self.lbl_title.setStyleSheet("font-size: 20px; font-weight: bold; color: #344f41; border: none; padding-bottom: 5px;")
+        box_layout.addWidget(self.lbl_title)
+        
+        # A nice divider line
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setStyleSheet("background-color: #697d6a; border: none;")
+        divider.setFixedHeight(2)
+        box_layout.addWidget(divider)
+        
+        self.lbl_content = QLabel("Content goes here...")
+        self.lbl_content.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.lbl_content.setWordWrap(True)
+        self.lbl_content.setStyleSheet("font-size: 18px; color: #344f41; border: none; margin-top: 5px;")
+        box_layout.addWidget(self.lbl_content, stretch=1)
+        
+        # Instruction to close
+        self.lbl_close = QLabel("Tap anywhere to close")
+        self.lbl_close.setAlignment(Qt.AlignCenter)
+        self.lbl_close.setStyleSheet("font-size: 14px; color: #697d6a; border: none; font-style: italic;")
+        box_layout.addWidget(self.lbl_close)
+        
+        self.layout.addWidget(self.box)
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 180)) # 70% opacity black background
+        
+    def mousePressEvent(self, event):
+        self.hide()
+        
+    def show_popup(self, title: str, content: str):
+        self.lbl_title.setText(title)
+        self.lbl_content.setText(content)
+        self.raise_()
+        self.show()
+
+class SpinnerWidget(QWidget):
+    """A custom widget that draws a smooth, rotating loading circle."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.angle = 0
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._rotate)
+        
+    def _rotate(self):
+        self.angle = (self.angle + 15) % 360  # Spin speed
+        self.update()
+        
+    def start(self):
+        self.timer.start(30) # 30ms for smooth 60fps rotation
+        self.show()
+        
+    def stop(self):
+        self.timer.stop()
+        self.hide()
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # 1. Draw the dim background track
+        pen = QPen(QColor(255, 255, 255, 50)) 
+        pen.setWidth(6)
+        painter.setPen(pen)
+        painter.drawArc(self.rect().adjusted(6, 6, -6, -6), 0, 360 * 16)
+        
+        # 2. Draw the bright spinning part
+        pen = QPen(QColor("#a88b5c")) # Matches your accent color
+        pen.setWidth(6)
+        pen.setCapStyle(Qt.RoundCap)
+        painter.setPen(pen)
+        painter.drawArc(self.rect().adjusted(6, 6, -6, -6), -self.angle * 16, 120 * 16)
+
+
+class LoadingOverlay(QWidget):
+    """A semi-transparent overlay that blocks clicks and animates text."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False) # Blocks clicks to the page underneath!
+        
+        self.layout = QVBoxLayout(self)
+        self.layout.setAlignment(Qt.AlignCenter)
+        
+        # Add the spinning circle
+        self.spinner = SpinnerWidget()
+        self.spinner.setFixedSize(60, 60)
+        
+        # Add the animated text label
+        self.lbl_text = QLabel("Finalizing Transcript")
+        self.lbl_text.setStyleSheet("color: white; font-size: 22px; font-weight: bold; background: transparent;")
+        self.lbl_text.setAlignment(Qt.AlignCenter)
+        
+        self.layout.addWidget(self.spinner, 0, Qt.AlignCenter)
+        self.layout.addSpacing(15)
+        self.layout.addWidget(self.lbl_text, 0, Qt.AlignCenter)
+        
+        # Ellipsis Animation Timer
+        self.dot_count = 0
+        self.text_timer = QTimer(self)
+        self.text_timer.timeout.connect(self._animate_text)
+        
+    def _animate_text(self):
+        self.dot_count = (self.dot_count + 1) % 4
+        dots = "." * self.dot_count
+        self.lbl_text.setText(f"Finalizing Transcript{dots}")
+        
+    def paintEvent(self, event):
+        # Fill the entire screen with 60% opacity black
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 160)) 
+        
+    def start(self):
+        self.show()
+        self.spinner.start()
+        self.text_timer.start(350) # Ticks exactly every 0.25 seconds!
+        
+    def stop(self):
+        self.hide()
+        self.spinner.stop()
+        self.text_timer.stop()
 
 def big_button(text: str) -> QPushButton:
     b = QPushButton(text)
@@ -49,15 +187,18 @@ class HomePage(QWidget):
             color: #cad2c5;
         """)
 
+        # Add a small spacer so the logo doesn't crash into the top
+        layout.addStretch(1)
+
         logo = QLabel()
         pixmap = QPixmap(img_path)
         logo.setStyleSheet("background: transparent; border: none;")
-        logo.setPixmap(pixmap.scaled(400, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setPixmap(pixmap.scaled(500, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
 
-        # font = QFont("Arial", 18)
-        # font.setBold(True)
+        layout.addStretch(1)
+
         self.btn_classify = big_button("Classify Rock")
         self.btn_voice = big_button("Voice to Text")
         self.btn_trip = big_button(" View Trip Notes")
@@ -72,7 +213,6 @@ class HomePage(QWidget):
         layout.addWidget(self.btn_classify)
         layout.addWidget(self.btn_voice)
         layout.addWidget(self.btn_trip)
-        # layout.addStretch(1)
         layout.addSpacing(60)
         layout.addWidget(self.btn_quit)
 
@@ -473,6 +613,14 @@ class VoicePage(QWidget):
 
         layout.addLayout(row)
 
+        self.loading_overlay = LoadingOverlay(self)
+        self.loading_overlay.hide()
+
+    def resizeEvent(self, event):
+        # Force the overlay to always match the exact size of the VoicePage
+        self.loading_overlay.setGeometry(self.rect())
+        super().resizeEvent(event)
+
 
 class TripLoadPage(QWidget):
     def __init__(self):
@@ -649,7 +797,7 @@ class RockDetailPage(QWidget):
     def __init__(self):
         super().__init__()
         self.setStyleSheet("""
-            background-color: #f5f6f4;
+            background-color: #cbd2c5;
             color: #344f41;
             font-family: "Courier New";
         """)
@@ -659,12 +807,12 @@ class RockDetailPage(QWidget):
 
         self.lbl_title = QLabel("Rock Detail")
         self.lbl_title.setAlignment(Qt.AlignCenter)
-        self.lbl_title.setStyleSheet("font-size: 24px; font-weight: 700; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
+        self.lbl_title.setStyleSheet("background-color: #f5f6f4; font-size: 24px; font-weight: 700; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
         layout.addWidget(self.lbl_title)
 
         self.lbl_time = QLabel("")
         self.lbl_time.setAlignment(Qt.AlignCenter)
-        self.lbl_time.setStyleSheet("font-size: 16px; font-weight: 600;")
+        self.lbl_time.setStyleSheet("background-color: #f5f6f4; font-size: 16px; font-weight: 600;")
         layout.addWidget(self.lbl_time)
 
         images_row = QHBoxLayout()
@@ -685,13 +833,13 @@ class RockDetailPage(QWidget):
 
         self.lbl_info = QLabel("")
         self.lbl_info.setWordWrap(True)
-        self.lbl_info.setStyleSheet("font-size: 18px; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
+        self.lbl_info.setStyleSheet("background-color: #f5f6f4; font-size: 18px; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
         layout.addWidget(self.lbl_info, stretch=2)
 
-        # --- NEW: Summary Header with Re-Summarize Button ---
+        # --- Summary Header with Re-Summarize Button ---
         summary_header_layout = QHBoxLayout()
         self.lbl_summary_title = QLabel("AI Summary:")
-        self.lbl_summary_title.setStyleSheet("font-size: 18px; font-weight: 700;")
+        self.lbl_summary_title.setStyleSheet("background-color: #f5f6f4; font-size: 18px; font-weight: 700;")
         
         self.btn_force_summary = QPushButton("RE-SUMMARIZE")
         self.btn_force_summary.setFixedSize(140, 30)
@@ -700,34 +848,74 @@ class RockDetailPage(QWidget):
             QPushButton:hover { background-color: #b8d2ea; }
         """)
         
-        summary_header_layout.addWidget(self.lbl_summary_title)
-        summary_header_layout.addStretch(1)
+        summary_header_layout.addWidget(self.lbl_summary_title, stretch=1)
+        summary_header_layout.addSpacing(10)
         summary_header_layout.addWidget(self.btn_force_summary)
         layout.addLayout(summary_header_layout)
 
-        # --- SUMMARY TABLE SETUP ---
-        self.summary_text = QTextEdit()
-        self.summary_text.setReadOnly(True)
-        self.summary_text.setMinimumHeight(180)
-        self.summary_text.setStyleSheet("""
-            QTextEdit {
-                font-size: 16px;
-                border: 2px solid #697d6a;
-                border-radius: 8px;
-                background-color: #eef2eb;
-                padding: 4px;
-            }
-        """)
-        layout.addWidget(self.summary_text)
-        # ---------------------------
+        # --- NEW: 2x3 BUTTON GRID FOR JOYSTICK SNAP NAVIGATION ---
+        self.summary_buttons_widget = QWidget()
+        self.summary_grid = QGridLayout(self.summary_buttons_widget)
+        self.summary_grid.setSpacing(8)
+        self.summary_grid.setContentsMargins(0, 0, 0, 0)
+        
+        self.summary_data = {}
+        self.summary_buttons = {}
+        
+        # We use slightly shortened names for the buttons so they fit beautifully on a 480px screen
+        self.categories = [
+            ("Appearance", "Color & Appearance"), 
+            ("Mineralogy", "Mineralogy & Composition"), 
+            ("Texture", "Texture & Structure"),
+            ("Weathering", "Weathering & Alteration"), 
+            ("Dimensions", "Dimensions & Weight"), 
+            ("Other", "Field Context & Sampling Notes")
+        ]
+        
+        for i, (short_name, full_name) in enumerate(self.categories):
+            btn = QPushButton(short_name)
+            btn.setMinimumHeight(65)
+            # CHANGED: Bumped font-size to 20px and added a subtle background contrast
+            btn.setStyleSheet("""
+                QPushButton { 
+                    background-color: #a8bbaa; 
+                    color: #344f41; 
+                    font-weight: bold; 
+                    font-size: 20px; 
+                    border-radius: 8px; 
+                    border: 2px solid #344f41; 
+                }
+                QPushButton:hover { background-color: #617c32; color: white; }
+            """)
+            # Wire the button to pop open the overlay
+            btn.clicked.connect(lambda checked=False, cat=full_name: self._show_category_popup(cat))
+            
+            # divmod(i, 3) beautifully calculates the row and column for a 3-column grid!
+            row, col = divmod(i, 3)
+            self.summary_grid.addWidget(btn, row, col)
+            self.summary_buttons[full_name] = btn
+            self.summary_data[full_name] = "Not specified."
+            
+        layout.addWidget(self.summary_buttons_widget)
+        # --------------------------------------------------------
+
+        # --- NEW: The hidden loading label ---
+        self.lbl_summary_loading = QLabel("Generating AI summary...")
+        self.lbl_summary_loading.setAlignment(Qt.AlignCenter)
+        self.lbl_summary_loading.setStyleSheet("font-size: 18px; font-style: italic; color: #344f41; background-color: transparent;")
+        self.lbl_summary_loading.setMinimumHeight(140) # Keeps the page from shrinking when the grid vanishes
+        layout.addWidget(self.lbl_summary_loading)
+        self.lbl_summary_loading.hide()
+        # -------------------------------------
 
         self.lbl_notes_title = QLabel("Associated Voice Notes:")
-        self.lbl_notes_title.setStyleSheet("font-size: 18px; font-weight: 700;")
+        self.lbl_notes_title.setStyleSheet("background-color: #f5f6f4; font-size: 18px; font-weight: 700;")
         layout.addWidget(self.lbl_notes_title)
 
         self.notes_text = QTextEdit()
         self.notes_text.setReadOnly(True)
         self.notes_text.setStyleSheet("""
+            background-color: #f5f6f4;
             font-size: 16px;
             border: 2px solid #cbd2c5;
             border-radius: 8px;
@@ -738,6 +926,15 @@ class RockDetailPage(QWidget):
         self.btn_back = big_button("Back")
         layout.addWidget(self.btn_back)
         self._current_rock_id = None
+
+        # Initialize the popup hidden on top of everything
+        self.popup_overlay = SummaryPopupOverlay(self)
+        self.popup_overlay.hide()
+
+    def resizeEvent(self, event):
+        if hasattr(self, 'popup_overlay'):
+            self.popup_overlay.setGeometry(self.rect())
+        super().resizeEvent(event)
 
     def _parse_summary_to_table_data(self, summary: str) -> list[tuple[str, str]]:
         """Parses the bulleted AI string into Key/Value pairs."""
@@ -762,23 +959,37 @@ class RockDetailPage(QWidget):
                 
         return parsed_data
 
-    def _populate_table(self, data: list[tuple[str, str]]) -> None:
-        """Builds a strict HTML grid table for flawless word wrapping."""
-        # Use 'table_html' so we don't shadow the imported 'html' module!
-        table_html = '<table width="100%" border="1" cellspacing="0" cellpadding="8" bordercolor="#cbd2c5">'
-        
-        for key, value in data:
-            table_html += '<tr>'
-            # Left Column (35% width, bold, top-aligned)
-            table_html += f'<td width="35%" valign="top"><b>{html.escape(key)}:</b></td>'
-            # Right Column (65% width, normal text, top-aligned)
-            table_html += f'<td width="65%" valign="top">{html.escape(value)}</td>'
-            table_html += '</tr>'
+    def _show_category_popup(self, category: str):
+        # Triggered when a grid button is clicked
+        content = self.summary_data.get(category, "No data available.")
+        self.popup_overlay.show_popup(category, content)
+
+    def _populate_buttons(self, data: list[tuple[str, str]]) -> None:
+        """Loads the parsed AI summary data into the button memory dictionary."""
+        # 1. Reset everything to defaults
+        for cat in self.summary_data.keys():
+            self.summary_data[cat] = "Not specified."
             
-        table_html += '</table>'
-        
-        # Inject the HTML table into the text widget
-        self.summary_text.setHtml(table_html)
+        # 2. Check if the AI is currently thinking
+        is_generating = any("Generating" in v for k, v in data)
+        if is_generating:
+            # Hide the buttons, show the label, and disable the RE-SUMMARIZE button!
+            self.summary_buttons_widget.hide()
+            self.lbl_summary_loading.show()
+            self.btn_force_summary.setEnabled(False) 
+            return
+            
+        # 3. AI is done! Restore visibility and re-enable the button
+        self.lbl_summary_loading.hide()
+        self.summary_buttons_widget.show()
+        self.btn_force_summary.setEnabled(True)
+            
+        # 4. Map the AI output securely to the exact buttons
+        for key, val in data:
+            for full_name in self.summary_data.keys():
+                # We match based on the first word to ensure it syncs perfectly
+                if key.split()[0].lower() in full_name.lower():
+                    self.summary_data[full_name] = val
 
     def set_entry(self, entry, associated_notes=None, ai_summary: str = "Generating AI summary...") -> None:
         self._current_rock_id = entry.rock_id
@@ -813,7 +1024,7 @@ class RockDetailPage(QWidget):
         
         # --- NEW: Parse and populate the table instead of HTML ---
         table_data = self._parse_summary_to_table_data(ai_summary)
-        self._populate_table(table_data)
+        self._populate_buttons(table_data)
         # ---------------------------------------------------------
 
         # --- Populate Voice Notes ---
@@ -832,7 +1043,7 @@ class RockDetailPage(QWidget):
     def set_ai_summary(self, rock_id: str, summary: str) -> None:
         if self._current_rock_id == rock_id:
             table_data = self._parse_summary_to_table_data(summary)
-            self._populate_table(table_data)
+            self._populate_buttons(table_data)
 
 
 class VoiceNoteDetailPage(QWidget):
@@ -849,7 +1060,7 @@ class VoiceNoteDetailPage(QWidget):
 
         self.lbl_title = QLabel("Voice Note")
         self.lbl_title.setAlignment(Qt.AlignCenter)
-        self.lbl_title.setStyleSheet("font-size: 24px; font-weight: 700; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
+        self.lbl_title.setStyleSheet("background-color: #f5f6f4; font-size: 24px; font-weight: 700; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
         
         layout.addWidget(self.lbl_title)
 
@@ -895,6 +1106,8 @@ class ExpandingVoiceWidget(QWidget):
         self.trigger_btn.setFixedSize(50, 50)
         self.trigger_btn.setStyleSheet("background-color: #344f41; color: white; border-radius: 25px; font-size: 20px;")
         self.main_layout.addWidget(self.trigger_btn)
+        self._panel_visible = False
+        self.trigger_btn.clicked.connect(self._toggle_panel)
 
         self.button_container = QWidget()
         self.container_layout = QHBoxLayout(self.button_container)
@@ -956,12 +1169,18 @@ class ExpandingVoiceWidget(QWidget):
         btn.setStyleSheet(f"background-color: {color}; color: white; border-radius: 5px; font-size: 12px;")
         return btn
 
+    def _toggle_panel(self):
+        self._panel_visible = not self._panel_visible
+        self.button_container.setVisible(self._panel_visible)
+
     def enterEvent(self, event):
-        self.button_container.show()
+        if not self._panel_visible:
+            self.button_container.show()
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        self.button_container.hide()
+        if not self._panel_visible:
+            self.button_container.hide()
         super().leaveEvent(event)
 
 class AppWindow(QMainWindow):
@@ -982,11 +1201,41 @@ class AppWindow(QMainWindow):
             font-weight: bold;
         """)
 
-
+        # Stack is the central widget, exactly like general-ml
         self.stack = QStackedWidget()
         self.stack.setMinimumSize(0, 0)
         self.stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setCentralWidget(self.stack)
+
+        # --- GLOBAL STATUS BAR (floating overlay — consumes no layout space) ---
+        self.status_widget = QWidget(self.stack)
+        self.status_widget.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.status_widget.setStyleSheet("background: transparent;")
+        status_layout = QHBoxLayout(self.status_widget)
+        status_layout.setContentsMargins(5, 5, 5, 0)
+
+        self.lbl_time = QLabel("00:00")
+        self.lbl_time.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
+
+        self.lbl_date = QLabel("Mon, Jan 1")
+        self.lbl_date.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
+        self.lbl_date.setAlignment(Qt.AlignCenter)
+
+        self.lbl_battery = QLabel("100% 🔋")
+        self.lbl_battery.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
+        self.lbl_battery.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        status_layout.addWidget(self.lbl_time)
+        status_layout.addStretch(1)
+        status_layout.addWidget(self.lbl_date)
+        status_layout.addStretch(1)
+        status_layout.addWidget(self.lbl_battery)
+
+        # Start global timer
+        self.status_timer = QTimer(self)
+        self.status_timer.timeout.connect(self._update_status)
+        self.status_timer.start(1000)
+        self._update_status()
 
         self.home = HomePage()
         self.loading = LoadingPage()
@@ -1066,7 +1315,7 @@ class AppWindow(QMainWindow):
         if context_words:
             self.voice.lbl_context.setText(f"Context: {context_words}")
         else:
-            self.voice.lbl_context.setText("Context: None")
+            self.voice.lbl_context.setText("Context: None (Default)")
     
     def _on_reset_context_clicked(self) -> None:
         self.vm.reset_voice_context()
@@ -1077,10 +1326,10 @@ class AppWindow(QMainWindow):
         entry = getattr(self.rock_detail, "_current_rock_entry", None)
         notes = getattr(self.rock_detail, "_current_associated_notes", None)
         if entry and notes:
-            # Show a loading message
-            self.rock_detail.summary_text.setHtml(self.rock_detail._format_ai_summary_html("Generating AI summary..."))
-            # Force the ViewModel to bypass the cache
-            self.vm.request_rock_summary(entry, notes, force=True)    
+            table_data = self.rock_detail._parse_summary_to_table_data("Generating AI summary...")
+            self.rock_detail._populate_buttons(table_data)
+            
+            self.vm.request_rock_summary(entry, notes, force=True)   
    
     def _update_voice_buttons(self, mode: str) -> None:
         """Dynamically hides/shows Voice to Text buttons based on the current phase."""
@@ -1090,11 +1339,14 @@ class AppWindow(QMainWindow):
         for b in [v.btn_start, v.btn_stop, v.btn_redo, v.btn_save, v.btn_delete, v.btn_reset, v.btn_cancel]:
             b.hide()
             
+        # Ensure overlay is hidden by default
+        if mode != "formatting":
+            v.loading_overlay.stop()
+            
         # 2. Show only what belongs in the current phase
         if mode == "initial":
             v.btn_start.show()
             v.btn_cancel.show()
-            # Only show reset if they are currently latched to a specific rock context
             active_rock = getattr(self.vm, "active_rock_id", None)
             if active_rock and active_rock != "ORPHAN":
                 v.btn_reset.show()
@@ -1102,6 +1354,10 @@ class AppWindow(QMainWindow):
         elif mode == "recording":
             v.btn_stop.setText("Stop")
             v.btn_stop.show()
+            
+        elif mode == "formatting":
+            # Fire up the gray screen, spinner, and animated text!
+            v.loading_overlay.start()
             
         elif mode == "review":
             v.btn_stop.setText("Edit")
@@ -1269,6 +1525,13 @@ class AppWindow(QMainWindow):
             sim_w, sim_h = 480, 800 
             self.setFixedSize(sim_w, sim_h)
 
+    def resizeEvent(self, event):
+        if hasattr(self, 'status_widget'):
+            h = self.status_widget.sizeHint().height()
+            self.status_widget.setGeometry(0, 0, self.stack.width(), h)
+            self.status_widget.raise_()
+        super().resizeEvent(event)
+
     def _quit_application(self) -> None:
         self.joystick.stop()
         self.close()
@@ -1337,6 +1600,7 @@ class AppWindow(QMainWindow):
         self.vm.classification_changed.connect(self._on_classification)
         self.vm.volume_display_changed.connect(self._on_volume_display)
         self.vm.transcription_changed.connect(self._on_transcription)
+        self.vm.transcription_formatted.connect(self._on_transcription_formatted)
         self.vm.mission_name_transcription_changed.connect(self._on_mission_name_transcription)
         self.vm.rock_summary_changed.connect(self._on_rock_summary_changed)
         self.vm.trip_changed.connect(self._on_trip)
@@ -1368,6 +1632,15 @@ class AppWindow(QMainWindow):
         self.mission_keyboard.key_pressed.connect(self._on_mission_key_pressed)
         self.mission_create.text.textChanged.connect(self._update_mission_create_button)
         self._update_mission_create_button()
+
+    def _on_transcription_formatted(self):
+        """Called when the LLM finishes formatting the text."""
+        if self.stack.currentWidget() == self.voice:
+            # Turn off the overlay and show the buttons!
+            if not self.vm.transcription_text.strip():
+                self._update_voice_buttons("initial")
+            else:
+                self._update_voice_buttons("review")
         
     def _on_camera_frame(self, image: QImage) -> None:
         if self.vm.state == AppStateType.CAMERA_PREVIEW:
@@ -1616,7 +1889,7 @@ class AppWindow(QMainWindow):
 
     def _render_mission_detail(self, mission_summary: MissionSummary) -> None:
         from PySide6.QtWidgets import QListWidgetItem
-
+        self.joystick._page_memory.pop(id(self.mission_detail), None)
         self.mission_detail._summary = mission_summary
         self.mission_detail._timeline_data = []
         self.mission_detail.list.clear()
@@ -1654,11 +1927,51 @@ class AppWindow(QMainWindow):
             row_layout = QHBoxLayout(widget)
             row_layout.setContentsMargins(5, 2, 5, 2)
 
-            lbl = QLabel(display_text)
-            lbl.setStyleSheet("font-size: 16px;")
-            lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            # lbl = QLabel(display_text)
+            # lbl.setStyleSheet("font-size: 16px;")
+            # lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+
+            # dot_btn = QPushButton("⋮")
+            # dot_btn.setFixedSize(30, 30)
+            # dot_btn.setStyleSheet("""
+            #     QPushButton { font-size: 24px; font-weight: bold; border: none; background: transparent; color: #344f41; }
+            #     QPushButton::menu-indicator { image: none; width: 0px; }
+            # """)
+            # self._attach_timeline_menu_to_button(dot_btn, item)
+
+            # row_layout.addWidget(lbl, stretch=1)
+            # row_layout.addWidget(dot_btn)
+
+            # AFTER:
+            row_btn = QPushButton()
+            row_btn.setObjectName("joystick_skip")
+            row_btn.setText("")  # we use a QLabel inside for rich text
+            row_btn.setStyleSheet("""
+                QPushButton {
+                    font-size: 16px;
+                    text-align: left;
+                    border: none;
+                    background: transparent;
+                    padding: 4px 0px;
+                }
+                QPushButton:hover { background-color: rgba(52, 79, 65, 0.08); border-radius: 4px; }
+            """)
+            row_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+            # Use a QLabel inside the button for rich HTML text
+            inner_lbl = QLabel(display_text)
+            inner_lbl.setStyleSheet("font-size: 16px; background: transparent; border: none;")
+            inner_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            inner_layout = QHBoxLayout(row_btn)
+            inner_layout.setContentsMargins(4, 0, 4, 0)
+            inner_layout.addWidget(inner_lbl)
+
+            # Wire the row button to the same logic as itemClicked
+            captured_item = item  # capture for lambda
+            row_btn.clicked.connect(lambda checked=False, i=captured_item: self._on_timeline_item_activated(i))
 
             dot_btn = QPushButton("⋮")
+            dot_btn.setObjectName("joystick_skip")
             dot_btn.setFixedSize(30, 30)
             dot_btn.setStyleSheet("""
                 QPushButton { font-size: 24px; font-weight: bold; border: none; background: transparent; color: #344f41; }
@@ -1666,8 +1979,9 @@ class AppWindow(QMainWindow):
             """)
             self._attach_timeline_menu_to_button(dot_btn, item)
 
-            row_layout.addWidget(lbl, stretch=1)
+            row_layout.addWidget(row_btn, stretch=1)
             row_layout.addWidget(dot_btn)
+            #AFTER
 
             list_item.setSizeHint(widget.sizeHint())
             self.mission_detail.list.setItemWidget(list_item, widget)
@@ -1676,6 +1990,7 @@ class AppWindow(QMainWindow):
     def _on_trip(self, summary: TripSummary) -> None:
         self._stop_rock_assignment()
         self.trip.list.clear()
+        self.joystick._page_memory.pop(id(self.trip), None)
         self.trip._summary = summary
         self.trip._missions_data = summary.missions
 
@@ -1705,19 +2020,46 @@ class AppWindow(QMainWindow):
             row_layout = QHBoxLayout(widget)
             row_layout.setContentsMargins(5, 2, 5, 2)
 
-            lbl = QLabel(display_text)
-            lbl.setStyleSheet("font-size: 16px;")
-            lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            # lbl = QLabel(display_text)
+            # lbl.setStyleSheet("font-size: 16px;")
+            # lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
 
+            # dot_btn = QPushButton("⋮")
+            # dot_btn.setFixedSize(30, 30)
+            # dot_btn.setStyleSheet("""
+            #     QPushButton { font-size: 24px; font-weight: bold; border: none; background: transparent; color: #344f41; }
+            #     QPushButton::menu-indicator { image: none; width: 0px; }
+            # """)
+            # self._attach_mission_menu_to_button(dot_btn, mission_summary)
+
+            # row_layout.addWidget(lbl, stretch=1)
+            # AFTER in _on_trip:
+            row_btn = QPushButton()
+            row_btn.setObjectName("joystick_skip")
+            inner_lbl = QLabel(display_text)
+            inner_lbl.setStyleSheet("font-size: 16px; background: transparent; border: none;")
+            inner_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            inner_layout = QHBoxLayout(row_btn)
+            inner_layout.setContentsMargins(4, 0, 4, 0)
+            inner_layout.addWidget(inner_lbl)
+            row_btn.setStyleSheet("""
+                QPushButton { border: none; background: transparent; padding: 4px 0px; }
+                QPushButton:hover { background-color: rgba(52, 79, 65, 0.08); border-radius: 4px; }
+            """)
+            row_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            captured_summary = mission_summary
+            row_btn.clicked.connect(lambda checked=False, ms=captured_summary: self._open_mission_detail(ms))
+            
             dot_btn = QPushButton("⋮")
             dot_btn.setFixedSize(30, 30)
+            dot_btn.setObjectName("joystick_skip")
             dot_btn.setStyleSheet("""
                 QPushButton { font-size: 24px; font-weight: bold; border: none; background: transparent; color: #344f41; }
                 QPushButton::menu-indicator { image: none; width: 0px; }
             """)
             self._attach_mission_menu_to_button(dot_btn, mission_summary)
 
-            row_layout.addWidget(lbl, stretch=1)
+            row_layout.addWidget(row_btn, stretch=1)
             row_layout.addWidget(dot_btn)
 
             list_item.setSizeHint(widget.sizeHint())
@@ -1947,51 +2289,98 @@ class AppWindow(QMainWindow):
         if 0 <= index < len(self.trip._missions_data):
             self._open_mission_detail(self.trip._missions_data[index])
 
+    def _on_timeline_item_activated(self, item_dict: dict) -> None:
+        """Shared logic for clicking a timeline row (via list click or joystick button)."""
+        if getattr(self, "_assigning_note_ts", None) is not None:
+            if item_dict["type"] == "rock":
+                self.vm.assign_note_to_rock(self._assigning_note_ts, item_dict["data"].rock_id)
+            self._stop_rock_assignment()
+            return
+
+        if item_dict["type"] == "rock":
+            entry = item_dict["data"]
+            associated_notes = []
+            mission_summary = self.mission_detail._summary
+            rocks_sorted = sorted(mission_summary.rocks, key=lambda r: r.ts)
+
+            next_rock_ts = float('inf')
+            for r in rocks_sorted:
+                if r.ts > entry.ts:
+                    next_rock_ts = r.ts
+                    break
+
+            for n in mission_summary.voice_notes:
+                note_ts = n.get("ts", 0)
+                explicit_rock_id = n.get("rock_id")
+                if explicit_rock_id == entry.rock_id:
+                    associated_notes.append(n)
+                elif explicit_rock_id is None:
+                    if entry.ts <= note_ts < next_rock_ts:
+                        if n.get("session_id") == entry.session_id:
+                            associated_notes.append(n)
+
+            associated_notes.sort(key=lambda x: x.get("ts", 0))
+            initial_summary = "Generating AI summary..." if associated_notes else "No associated recordings to summarize yet."
+            self.rock_detail.set_entry(entry, associated_notes, ai_summary=initial_summary)
+            self.vm.request_rock_summary(entry, associated_notes)
+            self.stack.setCurrentWidget(self.rock_detail)
+
+        else:
+            note = item_dict["data"]
+            self.voice_note_detail.set_note(note)
+            self.stack.setCurrentWidget(self.voice_note_detail)
+
+
     def _on_timeline_clicked(self, item) -> None:
         index = self.mission_detail.list.row(item)
         if 0 <= index < len(self.mission_detail._timeline_data):
-            item_dict = self.mission_detail._timeline_data[index]
+            self._on_timeline_item_activated(self.mission_detail._timeline_data[index])
+    
+    # def _on_timeline_clicked(self, item) -> None:
+    #     index = self.mission_detail.list.row(item)
+    #     if 0 <= index < len(self.mission_detail._timeline_data):
+    #         item_dict = self.mission_detail._timeline_data[index]
             
-            if getattr(self, "_assigning_note_ts", None) is not None:
-                if item_dict["type"] == "rock":
-                    self.vm.assign_note_to_rock(self._assigning_note_ts, item_dict["data"].rock_id)
-                self._stop_rock_assignment()
-                return
+    #         if getattr(self, "_assigning_note_ts", None) is not None:
+    #             if item_dict["type"] == "rock":
+    #                 self.vm.assign_note_to_rock(self._assigning_note_ts, item_dict["data"].rock_id)
+    #             self._stop_rock_assignment()
+    #             return
             
-            if item_dict["type"] == "rock":
-                entry = item_dict["data"]
-                associated_notes = []
-                mission_summary = self.mission_detail._summary
-                rocks_sorted = sorted(mission_summary.rocks, key=lambda r: r.ts)
+    #         if item_dict["type"] == "rock":
+    #             entry = item_dict["data"]
+    #             associated_notes = []
+    #             mission_summary = self.mission_detail._summary
+    #             rocks_sorted = sorted(mission_summary.rocks, key=lambda r: r.ts)
                 
-                next_rock_ts = float('inf')
-                for r in rocks_sorted:
-                    if r.ts > entry.ts:
-                        next_rock_ts = r.ts
-                        break
+    #             next_rock_ts = float('inf')
+    #             for r in rocks_sorted:
+    #                 if r.ts > entry.ts:
+    #                     next_rock_ts = r.ts
+    #                     break
                         
-                for n in mission_summary.voice_notes:
-                    note_ts = n.get("ts", 0)
-                    explicit_rock_id = n.get("rock_id")
+    #             for n in mission_summary.voice_notes:
+    #                 note_ts = n.get("ts", 0)
+    #                 explicit_rock_id = n.get("rock_id")
                     
-                    if explicit_rock_id == entry.rock_id:
-                        associated_notes.append(n)
-                    elif explicit_rock_id is None:
-                        if entry.ts <= note_ts < next_rock_ts:
-                            if n.get("session_id") == entry.session_id:
-                                associated_notes.append(n)
+    #                 if explicit_rock_id == entry.rock_id:
+    #                     associated_notes.append(n)
+    #                 elif explicit_rock_id is None:
+    #                     if entry.ts <= note_ts < next_rock_ts:
+    #                         if n.get("session_id") == entry.session_id:
+    #                             associated_notes.append(n)
                 
-                associated_notes.sort(key=lambda x: x.get("ts", 0))
+    #             associated_notes.sort(key=lambda x: x.get("ts", 0))
 
-                initial_summary = "Generating AI summary..." if associated_notes else "No associated recordings to summarize yet."
-                self.rock_detail.set_entry(entry, associated_notes, ai_summary=initial_summary)
-                self.vm.request_rock_summary(entry, associated_notes)
-                self.stack.setCurrentWidget(self.rock_detail)
+    #             initial_summary = "Generating AI summary..." if associated_notes else "No associated recordings to summarize yet."
+    #             self.rock_detail.set_entry(entry, associated_notes, ai_summary=initial_summary)
+    #             self.vm.request_rock_summary(entry, associated_notes)
+    #             self.stack.setCurrentWidget(self.rock_detail)
                 
-            else:
-                note = item_dict["data"]
-                self.voice_note_detail.set_note(note)
-                self.stack.setCurrentWidget(self.voice_note_detail)
+    #         else:
+    #             note = item_dict["data"]
+    #             self.voice_note_detail.set_note(note)
+    #             self.stack.setCurrentWidget(self.voice_note_detail)
 
     def _on_create_mission_clicked(self) -> None:
         self.vm.stop_mission_name_recording(abort=True)
@@ -2032,7 +2421,7 @@ class AppWindow(QMainWindow):
             
             # If we are actually looking at the voice page, update the layout
             if self.stack.currentWidget() == self.voice:
-                self._update_voice_buttons("review")
+                self._update_voice_buttons("formatting")
 
     def _on_mission_name_recording_status_changed(self, is_recording: bool):
         if is_recording:
@@ -2041,6 +2430,37 @@ class AppWindow(QMainWindow):
             self.mission_create.lbl_recording_status.setText("Typing mode")
         else:
             self.mission_create.lbl_recording_status.setText("Recording stopped")
+
+    def _update_status(self):
+        """Fetches the live system time, locks to West Coast, and gets battery percentage."""
+        import datetime
+        
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo("America/Los_Angeles")
+        except Exception:
+            tz = datetime.timezone(datetime.timedelta(hours=-7))
+            
+        now = datetime.datetime.now(tz)
+        
+        date_str = now.strftime("%A, %b %d, %Y").replace(" 0", " ")
+        time_str = now.strftime("%I:%M %p").lstrip("0")
+        
+        self.lbl_time.setText(time_str)
+        self.lbl_date.setText(date_str)
+        
+        try:
+            import psutil
+            battery = psutil.sensors_battery()
+            if battery:
+                percent = int(battery.percent)
+                is_plugged = battery.power_plugged
+                icon = "⚡" if is_plugged else "🔋"
+                self.lbl_battery.setText(f"{percent}% {icon}")
+            else:
+                self.lbl_battery.setText("Power Connected") 
+        except Exception as e:
+            self.lbl_battery.setText("Battery N/A")
             
 
 class Keyboard(QDialog):
@@ -2169,4 +2589,6 @@ class Keyboard(QDialog):
         elif self.shift_state == 2:
             self.btn_shift.setText("⇪") # Caps lock icon
             self.btn_shift.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #4a90e2; color: white;")
+
+    
                 
