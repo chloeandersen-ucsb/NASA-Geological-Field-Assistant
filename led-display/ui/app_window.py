@@ -386,9 +386,14 @@ class ClassifiedPage(QWidget):
         )
         layout.addWidget(self.lbl_label)
 
-        # Images (moved up, right after title)
-        images_row = QHBoxLayout()
+        # Images (fixed height so they don't compete with the features box)
+        images_wrapper = QWidget()
+        images_wrapper.setMaximumHeight(120)
+        images_wrapper.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        images_wrapper.setStyleSheet("background: transparent;")
+        images_row = QHBoxLayout(images_wrapper)
         images_row.setSpacing(10)
+        images_row.setContentsMargins(0, 0, 0, 0)
         self.lbl_image = QLabel()
         self.lbl_image.setAlignment(Qt.AlignCenter)
         self.lbl_image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -403,7 +408,7 @@ class ClassifiedPage(QWidget):
         )
         images_row.addWidget(self.lbl_image, stretch=1)
         images_row.addWidget(self.lbl_side_image, stretch=1)
-        layout.addLayout(images_row, stretch=1)
+        layout.addWidget(images_wrapper)
 
         # Confidence / volume row
         info_row = QHBoxLayout()
@@ -430,7 +435,7 @@ class ClassifiedPage(QWidget):
         self.features_layout = QVBoxLayout(self.features_container)
         self.features_layout.setSpacing(3)
         self.features_layout.setContentsMargins(10, 8, 10, 8)
-        layout.addWidget(self.features_container, stretch=3)
+        layout.addWidget(self.features_container, stretch=1)
 
         # Alternatives
         self.lbl_alternatives = QLabel("")
@@ -1783,6 +1788,8 @@ class AppWindow(QMainWindow):
 
                 feat_lbl = QLabel(f"{feat_name.replace('_', ' ').title()}: {value}  ({conf}%)")
                 feat_lbl.setAlignment(Qt.AlignLeft)
+                feat_lbl.setWordWrap(True)
+                feat_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
                 feat_lbl.setStyleSheet("font-size: 16px; border: none; background: transparent;")
                 self.classified.features_layout.addWidget(feat_lbl)
 
