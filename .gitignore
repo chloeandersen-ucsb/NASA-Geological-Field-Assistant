@@ -30,7 +30,9 @@ Thumbs.db
 ML-classifications/camera-pipeline/images/
 ML-classifications/images_processed/
 ML-classifications/metadata/
-led-display/sage_data/
+led-display/sage_data/missions.json
+led-display/sage_data/rocks.jsonl
+led-display/sage_data/voice_notes.jsonl
 voiceNotes/data/
 rock-volume/outputs/
 
