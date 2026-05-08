@@ -110,7 +110,7 @@ def get_data_store_dir() -> Path:
 
 def get_rocknet_script_path() -> Path:
     """Get the path to rocknet_infer.py script."""
-    return get_ml_classifications_dir() / "rocknet_infer.py"
+    return get_ml_classifications_dir() / "scripts/rocknet_infer.py"
 
 
 def get_rocknet_weights_path() -> Path:
@@ -122,7 +122,7 @@ def get_rocknet_weights_path() -> Path:
     env_path = os.environ.get("SAGE_ROCKNET_WEIGHTS")
     if env_path:
         return Path(env_path).absolute()
-    return get_ml_classifications_dir() / "best_rocknet.pt"
+    return get_ml_classifications_dir() / "models/best_rocknet_v2.pt"
 
 
 def get_voice_to_text_script_path() -> Path:
@@ -131,7 +131,7 @@ def get_voice_to_text_script_path() -> Path:
 
 def get_camera_script_path() -> Path:
     """Get the path to camera capture script. """
-    return get_ml_classifications_dir() / "camera-pipeline" / "capture.py"
+    return get_ml_classifications_dir() / "scripts" / "capture.py"
 
 def get_mock_camera_script_path() -> Path:
     """Get the path to mock_camera_capture script."""

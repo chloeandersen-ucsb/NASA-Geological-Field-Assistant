@@ -26,13 +26,14 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Project specific - device-only data
-ML-classifications/camera-pipeline/images/
-ML-classifications/images_processed/
-ML-classifications/metadata/
+# Project specific
+ML-classifications/camera-pipeline/images
+ML-classifications/images_processed
+ML-classifications/metadata
 led-display/sage_data/missions.json
 led-display/sage_data/rocks.jsonl
 led-display/sage_data/voice_notes.jsonl
+*.log
 voiceNotes/data/
 rock-volume/outputs/
 
