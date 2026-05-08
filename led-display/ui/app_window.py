@@ -368,65 +368,80 @@ class ClassifiedPage(QWidget):
     def __init__(self, vm):
         super().__init__()
         self.vm = vm
-        # Main layout for the whole page
-        self.main_layout = QVBoxLayout(self)
-        # self.main_layout.setSpacing(5)
-        # self.main_layout.setContentsMargins(15, 15, 15, 15)
-        self.main_layout.addStretch(1)
-        
-        self.image_container = QWidget()
-        # self.image_container.setFixedSize(600, 900)
-        self.image_container.setStyleSheet("background-color: transparent;")
-        container_layout = QHBoxLayout(self.image_container)
-        # container_layout.addSpacing(50)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        self.lbl_image = QLabel()
-        self.lbl_image.setAlignment(Qt.AlignCenter)
-        self.lbl_image.setStyleSheet("background-color: transparent; border: none;")
-        self.lbl_image.setFixedSize(200, 150)
-        self.lbl_image.setScaledContents(True)
-        self.lbl_side_image = QLabel()
-        self.lbl_side_image.setAlignment(Qt.AlignCenter)
-        self.lbl_side_image.setStyleSheet("background-color: transparent; border: none;")
-        self.lbl_side_image.setFixedSize(200, 150)
-        self.lbl_side_image.setScaledContents(True)
-        container_layout.addWidget(self.lbl_image)
-        container_layout.addWidget(self.lbl_side_image)
-        self.main_layout.addWidget(self.image_container, 0, Qt.AlignCenter)
-        self.main_layout.addStretch(1)
+        self.setStyleSheet("""
+            background-color: #cbd2c5;
+            color: #344f41;
+            font-family: "Courier New";
+        """)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
 
-        # Result Labels
+        # Title
         self.lbl_label = QLabel("LABEL")
         self.lbl_label.setAlignment(Qt.AlignCenter)
-        self.lbl_label.setStyleSheet("font-size: 28px; font-weight: 700;")
-        self.lbl_label.setStyleSheet("font-size: 24px; font-weight: 700; margin-top: 5px;")
-        
+        self.lbl_label.setStyleSheet(
+            "background-color: #f5f6f4; font-size: 24px; font-weight: 700;"
+            " border: 2px solid #697d6a; border-radius: 8px; padding: 8px;"
+        )
+        layout.addWidget(self.lbl_label)
 
+        # Confidence / volume row
+        info_row = QHBoxLayout()
         self.lbl_conf = QLabel("Confidence: --")
-        self.lbl_conf.setAlignment(Qt.AlignCenter)
-        self.lbl_conf.setStyleSheet("font-size: 17px; color: #666;")
-
-        self.lbl_volume = QLabel("Volume = --")
-        self.lbl_volume.setAlignment(Qt.AlignCenter)
-        self.lbl_volume.setStyleSheet("font-size: 17px;")
-
-        # self.lbl_top2 = QLabel("")
-        # self.lbl_top2.setAlignment(Qt.AlignCenter)
-        # self.lbl_top2.setStyleSheet("font-size: 20px;")
-
-        # self.lbl_top3 = QLabel("")
-        # self.lbl_top3.setAlignment(Qt.AlignCenter)
-        # self.lbl_top3.setStyleSheet("font-size: 20px;")
-
-        self.lbl_alternatives = QLabel("")
-        self.lbl_alternatives.setAlignment(Qt.AlignCenter)
-        self.lbl_alternatives.setStyleSheet("font-size: 15px; color: #888;")
-
+        self.lbl_conf.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.lbl_conf.setStyleSheet("font-size: 15px; color: #555;")
+        self.lbl_volume = QLabel("Volume: --")
+        self.lbl_volume.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.lbl_volume.setStyleSheet("font-size: 15px;")
         self.lbl_extra = QLabel("")
         self.lbl_extra.setAlignment(Qt.AlignCenter)
-        self.lbl_extra.setStyleSheet("font-size: 20px;")
+        self.lbl_extra.setStyleSheet("font-size: 15px;")
+        info_row.addWidget(self.lbl_conf)
+        info_row.addStretch()
+        info_row.addWidget(self.lbl_volume)
+        layout.addLayout(info_row)
+        layout.addWidget(self.lbl_extra)
 
-        self.mic_ctrl = ExpandingVoiceWidget(self.vm, self) 
+        # Images
+        images_row = QHBoxLayout()
+        images_row.setSpacing(10)
+        self.lbl_image = QLabel()
+        self.lbl_image.setAlignment(Qt.AlignCenter)
+        self.lbl_image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.lbl_image.setStyleSheet(
+            "background-color: #222; border: 3px solid #344f41; border-radius: 6px;"
+        )
+        self.lbl_side_image = QLabel()
+        self.lbl_side_image.setAlignment(Qt.AlignCenter)
+        self.lbl_side_image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.lbl_side_image.setStyleSheet(
+            "background-color: #222; border: 3px solid #344f41; border-radius: 6px;"
+        )
+        images_row.addWidget(self.lbl_image, stretch=1)
+        images_row.addWidget(self.lbl_side_image, stretch=1)
+        layout.addLayout(images_row, stretch=2)
+
+        # Features box
+        self.features_container = QWidget()
+        self.features_container.setStyleSheet(
+            "background-color: #f5f6f4; border: 2px solid #697d6a; border-radius: 8px;"
+        )
+        self.features_layout = QVBoxLayout(self.features_container)
+        self.features_layout.setSpacing(3)
+        self.features_layout.setContentsMargins(10, 8, 10, 8)
+        layout.addWidget(self.features_container, stretch=2)
+
+        # Alternatives
+        self.lbl_alternatives = QLabel("")
+        self.lbl_alternatives.setAlignment(Qt.AlignCenter)
+        self.lbl_alternatives.setStyleSheet("font-size: 14px; color: #888;")
+        layout.addWidget(self.lbl_alternatives)
+
+        # Voice widget + buttons
+        self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
+        layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
+        layout.addSpacing(10)
 
         self.btn_reclassify = big_button("Reclassify")
         self.btn_reclassify.setStyleSheet("""
@@ -461,37 +476,9 @@ class ClassifiedPage(QWidget):
                 background-color: #f5f6f4;
             }
         """)
-
-        # Assemble main layout
-        self.main_layout.addWidget(self.lbl_label)
-        self.main_layout.addWidget(self.lbl_conf)
-        self.main_layout.addSpacing(2)
-        self.main_layout.addWidget(self.lbl_volume)
-        self.main_layout.addWidget(self.lbl_extra)
-
-        vol_line = QFrame()
-        vol_line.setFrameShape(QFrame.HLine)
-        vol_line.setStyleSheet("color: #aaa; margin: 4px 20px;")
-        self.main_layout.addWidget(vol_line)
-
-        self.main_layout.addWidget(self.lbl_alternatives)
-        self.main_layout.addSpacing(4)
-
-        self.features_container = QWidget()
-        self.features_layout = QVBoxLayout(self.features_container)
-        self.features_layout.setSpacing(2)
-        self.features_layout.setContentsMargins(10, 0, 10, 0)
-        self.main_layout.addWidget(self.features_container)
-
-        self.main_layout.addStretch(1)
-        
-
-        self.main_layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
-        self.main_layout.addSpacing(15)
-
-        self.main_layout.addWidget(self.btn_reclassify)
-        self.main_layout.addWidget(self.btn_save)
-        self.main_layout.addWidget(self.btn_delete)
+        layout.addWidget(self.btn_reclassify)
+        layout.addWidget(self.btn_save)
+        layout.addWidget(self.btn_delete)
         
 
 
@@ -1751,7 +1738,12 @@ class AppWindow(QMainWindow):
 
         top3 = None
         if result.raw and isinstance(result.raw, dict):
-            top3 = result.raw.get("top3", [])
+            top3 = result.raw.get("top3") or None
+            if not top3:
+                scores = result.raw.get("primary", {}).get("scores", {})
+                if scores:
+                    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+                    top3 = [{"label": k, "confidence": v} for k, v in sorted_scores[:3]]
 
         alt_parts = []
         if top3 and len(top3) >= 2:
@@ -1787,22 +1779,28 @@ class AppWindow(QMainWindow):
             for idx, (feat_name, feat_data) in enumerate(displayed):
                 value = feat_data["value"]
                 conf = int(feat_data["confidence"] * 100)
-                row = QLabel(f"{feat_name.replace('_', ' ').title()}: {value}  (conf: {conf}%)")
-                row.setAlignment(Qt.AlignCenter)
-                row.setStyleSheet("font-size: 17px;")
-                self.classified.features_layout.addWidget(row)
+
+                feat_lbl = QLabel(f"{feat_name.replace('_', ' ').title()}: {value}  ({conf}%)")
+                feat_lbl.setAlignment(Qt.AlignRight)
+                feat_lbl.setStyleSheet("font-size: 16px; border: none; background: transparent;")
+                self.classified.features_layout.addWidget(feat_lbl)
+
                 note = note_by_feature.get(feat_name, "")
                 if note:
                     note_lbl = QLabel(note)
-                    note_lbl.setAlignment(Qt.AlignCenter)
+                    note_lbl.setAlignment(Qt.AlignRight)
                     note_lbl.setWordWrap(True)
-                    note_lbl.setStyleSheet("font-size: 13px; color: #999;")
+                    note_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
+                    note_lbl.setStyleSheet("font-size: 13px; color: #888; border: none; background: transparent;")
                     self.classified.features_layout.addWidget(note_lbl)
+
                 if idx < len(displayed) - 1:
                     sep = QFrame()
                     sep.setFrameShape(QFrame.HLine)
-                    sep.setStyleSheet("color: #ccc; margin: 2px 40px;")
+                    sep.setFixedHeight(1)
+                    sep.setStyleSheet("background-color: #ccc;")
                     self.classified.features_layout.addWidget(sep)
+                    self.classified.features_layout.addSpacing(6)
 
         extras = []
         if result.estimated_weight is not None:
