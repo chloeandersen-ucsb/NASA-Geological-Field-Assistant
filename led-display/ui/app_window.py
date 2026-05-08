@@ -10,13 +10,14 @@ from PySide6.QtGui import QImage
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
-img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
+# img_path = project_root/ "led-display" / "ui" / "sage-logo-wcbg.png"
+img_path = project_root/ "led-display" / "ui" / "newlogo.png"
 
 
 from PySide6.QtCore import Qt, QTimer, Signal, QPoint
 from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPainter, QPen, QColor, QTextCursor
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QPushButton, QMainWindow, QStackedWidget,
+    QApplication, QWidget, QVBoxLayout, QLabel, QPushButton, QMainWindow, QStackedWidget,
     QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout, QDialog,
     QFrame
 )
@@ -192,7 +193,7 @@ class HomePage(QWidget):
         logo = QLabel()
         pixmap = QPixmap(img_path)
         logo.setStyleSheet("background: transparent; border: none;")
-        logo.setPixmap(pixmap.scaled(400, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setPixmap(pixmap.scaled(500, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
 
@@ -1105,6 +1106,8 @@ class ExpandingVoiceWidget(QWidget):
         self.trigger_btn.setFixedSize(50, 50)
         self.trigger_btn.setStyleSheet("background-color: #344f41; color: white; border-radius: 25px; font-size: 20px;")
         self.main_layout.addWidget(self.trigger_btn)
+        self._panel_visible = False
+        self.trigger_btn.clicked.connect(self._toggle_panel)
 
         self.button_container = QWidget()
         self.container_layout = QHBoxLayout(self.button_container)
@@ -1166,12 +1169,18 @@ class ExpandingVoiceWidget(QWidget):
         btn.setStyleSheet(f"background-color: {color}; color: white; border-radius: 5px; font-size: 12px;")
         return btn
 
+    def _toggle_panel(self):
+        self._panel_visible = not self._panel_visible
+        self.button_container.setVisible(self._panel_visible)
+
     def enterEvent(self, event):
-        self.button_container.show()
+        if not self._panel_visible:
+            self.button_container.show()
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        self.button_container.hide()
+        if not self._panel_visible:
+            self.button_container.hide()
         super().leaveEvent(event)
 
 class AppWindow(QMainWindow):
@@ -1192,50 +1201,41 @@ class AppWindow(QMainWindow):
             font-weight: bold;
         """)
 
-        # --- NEW: Master Layout for the whole app ---
-        self.main_widget = QWidget()
-        self.setCentralWidget(self.main_widget)
-        self.main_layout = QVBoxLayout(self.main_widget)
-        self.main_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.setSpacing(0)
+        # Stack is the central widget, exactly like general-ml
+        self.stack = QStackedWidget()
+        self.stack.setMinimumSize(0, 0)
+        self.stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setCentralWidget(self.stack)
 
-        # --- GLOBAL STATUS BAR ---
-        self.status_widget = QWidget()
+        # --- GLOBAL STATUS BAR (floating overlay — consumes no layout space) ---
+        self.status_widget = QWidget(self.stack)
+        self.status_widget.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.status_widget.setStyleSheet("background: transparent;")
         status_layout = QHBoxLayout(self.status_widget)
         status_layout.setContentsMargins(5, 5, 5, 0)
-        
+
         self.lbl_time = QLabel("00:00")
         self.lbl_time.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
-        
+
         self.lbl_date = QLabel("Mon, Jan 1")
         self.lbl_date.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
         self.lbl_date.setAlignment(Qt.AlignCenter)
-        
+
         self.lbl_battery = QLabel("100% 🔋")
         self.lbl_battery.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
         self.lbl_battery.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        
+
         status_layout.addWidget(self.lbl_time)
         status_layout.addStretch(1)
         status_layout.addWidget(self.lbl_date)
         status_layout.addStretch(1)
         status_layout.addWidget(self.lbl_battery)
-        
-        self.main_layout.addWidget(self.status_widget, 0, Qt.AlignTop)
 
         # Start global timer
         self.status_timer = QTimer(self)
         self.status_timer.timeout.connect(self._update_status)
         self.status_timer.start(1000)
-        self._update_status() 
-        # ---------------------------
-
-        # The deck of cards (StackedWidget) now goes BELOW the status bar
-        self.stack = QStackedWidget()
-        self.stack.setMinimumSize(0, 0)
-        self.stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.main_layout.addWidget(self.stack, stretch=1)
+        self._update_status()
 
         self.home = HomePage()
         self.loading = LoadingPage()
@@ -1524,6 +1524,13 @@ class AppWindow(QMainWindow):
             self.showNormal()
             sim_w, sim_h = 480, 800 
             self.setFixedSize(sim_w, sim_h)
+
+    def resizeEvent(self, event):
+        if hasattr(self, 'status_widget'):
+            h = self.status_widget.sizeHint().height()
+            self.status_widget.setGeometry(0, 0, self.stack.width(), h)
+            self.status_widget.raise_()
+        super().resizeEvent(event)
 
     def _quit_application(self) -> None:
         self.joystick.stop()
@@ -1882,7 +1889,7 @@ class AppWindow(QMainWindow):
 
     def _render_mission_detail(self, mission_summary: MissionSummary) -> None:
         from PySide6.QtWidgets import QListWidgetItem
-
+        self.joystick._page_memory.pop(id(self.mission_detail), None)
         self.mission_detail._summary = mission_summary
         self.mission_detail._timeline_data = []
         self.mission_detail.list.clear()
@@ -1920,11 +1927,51 @@ class AppWindow(QMainWindow):
             row_layout = QHBoxLayout(widget)
             row_layout.setContentsMargins(5, 2, 5, 2)
 
-            lbl = QLabel(display_text)
-            lbl.setStyleSheet("font-size: 16px;")
-            lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            # lbl = QLabel(display_text)
+            # lbl.setStyleSheet("font-size: 16px;")
+            # lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+
+            # dot_btn = QPushButton("⋮")
+            # dot_btn.setFixedSize(30, 30)
+            # dot_btn.setStyleSheet("""
+            #     QPushButton { font-size: 24px; font-weight: bold; border: none; background: transparent; color: #344f41; }
+            #     QPushButton::menu-indicator { image: none; width: 0px; }
+            # """)
+            # self._attach_timeline_menu_to_button(dot_btn, item)
+
+            # row_layout.addWidget(lbl, stretch=1)
+            # row_layout.addWidget(dot_btn)
+
+            # AFTER:
+            row_btn = QPushButton()
+            row_btn.setObjectName("joystick_skip")
+            row_btn.setText("")  # we use a QLabel inside for rich text
+            row_btn.setStyleSheet("""
+                QPushButton {
+                    font-size: 16px;
+                    text-align: left;
+                    border: none;
+                    background: transparent;
+                    padding: 4px 0px;
+                }
+                QPushButton:hover { background-color: rgba(52, 79, 65, 0.08); border-radius: 4px; }
+            """)
+            row_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+            # Use a QLabel inside the button for rich HTML text
+            inner_lbl = QLabel(display_text)
+            inner_lbl.setStyleSheet("font-size: 16px; background: transparent; border: none;")
+            inner_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            inner_layout = QHBoxLayout(row_btn)
+            inner_layout.setContentsMargins(4, 0, 4, 0)
+            inner_layout.addWidget(inner_lbl)
+
+            # Wire the row button to the same logic as itemClicked
+            captured_item = item  # capture for lambda
+            row_btn.clicked.connect(lambda checked=False, i=captured_item: self._on_timeline_item_activated(i))
 
             dot_btn = QPushButton("⋮")
+            dot_btn.setObjectName("joystick_skip")
             dot_btn.setFixedSize(30, 30)
             dot_btn.setStyleSheet("""
                 QPushButton { font-size: 24px; font-weight: bold; border: none; background: transparent; color: #344f41; }
@@ -1932,8 +1979,9 @@ class AppWindow(QMainWindow):
             """)
             self._attach_timeline_menu_to_button(dot_btn, item)
 
-            row_layout.addWidget(lbl, stretch=1)
+            row_layout.addWidget(row_btn, stretch=1)
             row_layout.addWidget(dot_btn)
+            #AFTER
 
             list_item.setSizeHint(widget.sizeHint())
             self.mission_detail.list.setItemWidget(list_item, widget)
@@ -1942,6 +1990,7 @@ class AppWindow(QMainWindow):
     def _on_trip(self, summary: TripSummary) -> None:
         self._stop_rock_assignment()
         self.trip.list.clear()
+        self.joystick._page_memory.pop(id(self.trip), None)
         self.trip._summary = summary
         self.trip._missions_data = summary.missions
 
@@ -1971,19 +2020,46 @@ class AppWindow(QMainWindow):
             row_layout = QHBoxLayout(widget)
             row_layout.setContentsMargins(5, 2, 5, 2)
 
-            lbl = QLabel(display_text)
-            lbl.setStyleSheet("font-size: 16px;")
-            lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            # lbl = QLabel(display_text)
+            # lbl.setStyleSheet("font-size: 16px;")
+            # lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
 
+            # dot_btn = QPushButton("⋮")
+            # dot_btn.setFixedSize(30, 30)
+            # dot_btn.setStyleSheet("""
+            #     QPushButton { font-size: 24px; font-weight: bold; border: none; background: transparent; color: #344f41; }
+            #     QPushButton::menu-indicator { image: none; width: 0px; }
+            # """)
+            # self._attach_mission_menu_to_button(dot_btn, mission_summary)
+
+            # row_layout.addWidget(lbl, stretch=1)
+            # AFTER in _on_trip:
+            row_btn = QPushButton()
+            row_btn.setObjectName("joystick_skip")
+            inner_lbl = QLabel(display_text)
+            inner_lbl.setStyleSheet("font-size: 16px; background: transparent; border: none;")
+            inner_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            inner_layout = QHBoxLayout(row_btn)
+            inner_layout.setContentsMargins(4, 0, 4, 0)
+            inner_layout.addWidget(inner_lbl)
+            row_btn.setStyleSheet("""
+                QPushButton { border: none; background: transparent; padding: 4px 0px; }
+                QPushButton:hover { background-color: rgba(52, 79, 65, 0.08); border-radius: 4px; }
+            """)
+            row_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            captured_summary = mission_summary
+            row_btn.clicked.connect(lambda checked=False, ms=captured_summary: self._open_mission_detail(ms))
+            
             dot_btn = QPushButton("⋮")
             dot_btn.setFixedSize(30, 30)
+            dot_btn.setObjectName("joystick_skip")
             dot_btn.setStyleSheet("""
                 QPushButton { font-size: 24px; font-weight: bold; border: none; background: transparent; color: #344f41; }
                 QPushButton::menu-indicator { image: none; width: 0px; }
             """)
             self._attach_mission_menu_to_button(dot_btn, mission_summary)
 
-            row_layout.addWidget(lbl, stretch=1)
+            row_layout.addWidget(row_btn, stretch=1)
             row_layout.addWidget(dot_btn)
 
             list_item.setSizeHint(widget.sizeHint())
@@ -2213,51 +2289,98 @@ class AppWindow(QMainWindow):
         if 0 <= index < len(self.trip._missions_data):
             self._open_mission_detail(self.trip._missions_data[index])
 
+    def _on_timeline_item_activated(self, item_dict: dict) -> None:
+        """Shared logic for clicking a timeline row (via list click or joystick button)."""
+        if getattr(self, "_assigning_note_ts", None) is not None:
+            if item_dict["type"] == "rock":
+                self.vm.assign_note_to_rock(self._assigning_note_ts, item_dict["data"].rock_id)
+            self._stop_rock_assignment()
+            return
+
+        if item_dict["type"] == "rock":
+            entry = item_dict["data"]
+            associated_notes = []
+            mission_summary = self.mission_detail._summary
+            rocks_sorted = sorted(mission_summary.rocks, key=lambda r: r.ts)
+
+            next_rock_ts = float('inf')
+            for r in rocks_sorted:
+                if r.ts > entry.ts:
+                    next_rock_ts = r.ts
+                    break
+
+            for n in mission_summary.voice_notes:
+                note_ts = n.get("ts", 0)
+                explicit_rock_id = n.get("rock_id")
+                if explicit_rock_id == entry.rock_id:
+                    associated_notes.append(n)
+                elif explicit_rock_id is None:
+                    if entry.ts <= note_ts < next_rock_ts:
+                        if n.get("session_id") == entry.session_id:
+                            associated_notes.append(n)
+
+            associated_notes.sort(key=lambda x: x.get("ts", 0))
+            initial_summary = "Generating AI summary..." if associated_notes else "No associated recordings to summarize yet."
+            self.rock_detail.set_entry(entry, associated_notes, ai_summary=initial_summary)
+            self.vm.request_rock_summary(entry, associated_notes)
+            self.stack.setCurrentWidget(self.rock_detail)
+
+        else:
+            note = item_dict["data"]
+            self.voice_note_detail.set_note(note)
+            self.stack.setCurrentWidget(self.voice_note_detail)
+
+
     def _on_timeline_clicked(self, item) -> None:
         index = self.mission_detail.list.row(item)
         if 0 <= index < len(self.mission_detail._timeline_data):
-            item_dict = self.mission_detail._timeline_data[index]
+            self._on_timeline_item_activated(self.mission_detail._timeline_data[index])
+    
+    # def _on_timeline_clicked(self, item) -> None:
+    #     index = self.mission_detail.list.row(item)
+    #     if 0 <= index < len(self.mission_detail._timeline_data):
+    #         item_dict = self.mission_detail._timeline_data[index]
             
-            if getattr(self, "_assigning_note_ts", None) is not None:
-                if item_dict["type"] == "rock":
-                    self.vm.assign_note_to_rock(self._assigning_note_ts, item_dict["data"].rock_id)
-                self._stop_rock_assignment()
-                return
+    #         if getattr(self, "_assigning_note_ts", None) is not None:
+    #             if item_dict["type"] == "rock":
+    #                 self.vm.assign_note_to_rock(self._assigning_note_ts, item_dict["data"].rock_id)
+    #             self._stop_rock_assignment()
+    #             return
             
-            if item_dict["type"] == "rock":
-                entry = item_dict["data"]
-                associated_notes = []
-                mission_summary = self.mission_detail._summary
-                rocks_sorted = sorted(mission_summary.rocks, key=lambda r: r.ts)
+    #         if item_dict["type"] == "rock":
+    #             entry = item_dict["data"]
+    #             associated_notes = []
+    #             mission_summary = self.mission_detail._summary
+    #             rocks_sorted = sorted(mission_summary.rocks, key=lambda r: r.ts)
                 
-                next_rock_ts = float('inf')
-                for r in rocks_sorted:
-                    if r.ts > entry.ts:
-                        next_rock_ts = r.ts
-                        break
+    #             next_rock_ts = float('inf')
+    #             for r in rocks_sorted:
+    #                 if r.ts > entry.ts:
+    #                     next_rock_ts = r.ts
+    #                     break
                         
-                for n in mission_summary.voice_notes:
-                    note_ts = n.get("ts", 0)
-                    explicit_rock_id = n.get("rock_id")
+    #             for n in mission_summary.voice_notes:
+    #                 note_ts = n.get("ts", 0)
+    #                 explicit_rock_id = n.get("rock_id")
                     
-                    if explicit_rock_id == entry.rock_id:
-                        associated_notes.append(n)
-                    elif explicit_rock_id is None:
-                        if entry.ts <= note_ts < next_rock_ts:
-                            if n.get("session_id") == entry.session_id:
-                                associated_notes.append(n)
+    #                 if explicit_rock_id == entry.rock_id:
+    #                     associated_notes.append(n)
+    #                 elif explicit_rock_id is None:
+    #                     if entry.ts <= note_ts < next_rock_ts:
+    #                         if n.get("session_id") == entry.session_id:
+    #                             associated_notes.append(n)
                 
-                associated_notes.sort(key=lambda x: x.get("ts", 0))
+    #             associated_notes.sort(key=lambda x: x.get("ts", 0))
 
-                initial_summary = "Generating AI summary..." if associated_notes else "No associated recordings to summarize yet."
-                self.rock_detail.set_entry(entry, associated_notes, ai_summary=initial_summary)
-                self.vm.request_rock_summary(entry, associated_notes)
-                self.stack.setCurrentWidget(self.rock_detail)
+    #             initial_summary = "Generating AI summary..." if associated_notes else "No associated recordings to summarize yet."
+    #             self.rock_detail.set_entry(entry, associated_notes, ai_summary=initial_summary)
+    #             self.vm.request_rock_summary(entry, associated_notes)
+    #             self.stack.setCurrentWidget(self.rock_detail)
                 
-            else:
-                note = item_dict["data"]
-                self.voice_note_detail.set_note(note)
-                self.stack.setCurrentWidget(self.voice_note_detail)
+    #         else:
+    #             note = item_dict["data"]
+    #             self.voice_note_detail.set_note(note)
+    #             self.stack.setCurrentWidget(self.voice_note_detail)
 
     def _on_create_mission_clicked(self) -> None:
         self.vm.stop_mission_name_recording(abort=True)

@@ -190,6 +190,7 @@ class JoystickNavigator(QObject):
         self._focused_list: Optional[QListWidget] = None
         self._focused_list_row: int = -1
         self._focused_list_original_style: str = ""
+        self._page_memory: dict = {}
 
         self._thread = QThread(self)
         self._worker = _JoystickWorker(bus, addr)
@@ -254,10 +255,43 @@ class JoystickNavigator(QObject):
             self._clear_list_highlight()
             self._focused_list_original_style = lst.styleSheet()
             self._focused_list = lst
+        if self._focused_list_row >= 0 and self._focused_list_row != row:
+            prev_item = lst.item(self._focused_list_row)
+            if prev_item:
+                prev_widget = lst.itemWidget(prev_item)
+                if prev_widget:
+                    prev_widget.setStyleSheet("")
         self._focused_list_row = row
         lst.setCurrentRow(row)
         lst.scrollToItem(lst.item(row))
         lst.setFocus(Qt.OtherFocusReason)
+        item = lst.item(row)
+        if item:
+            widget = lst.itemWidget(item)
+            if widget:
+                widget.setStyleSheet(
+                    f"background-color: {HIGHLIGHT_BG};"
+                    f"border: 2px solid {HIGHLIGHT_BOR};"
+                    f"border-radius: 4px;"
+                )
+    
+    def _clear_list_highlight(self):
+        if self._focused_list is not None:
+            try:
+                # Clear the highlighted item widget
+                if self._focused_list_row >= 0:
+                    item = self._focused_list.item(self._focused_list_row)
+                    if item:
+                        widget = self._focused_list.itemWidget(item)
+                        if widget:
+                            widget.setStyleSheet("")
+                self._focused_list.clearSelection()
+                self._focused_list.setStyleSheet(self._focused_list_original_style)
+            except RuntimeError:
+                pass
+            self._focused_list = None
+            self._focused_list_row = -1
+            self._focused_list_original_style = ""
 
     # ── Widget discovery ─────────────────────────────────────────────────────
 
@@ -267,30 +301,72 @@ class JoystickNavigator(QObject):
         return self.window.stack.currentWidget()
 
     def _buttons_on_page(self) -> list:
+        # from PySide6.QtWidgets import QListWidget
         page = self._get_page()
         if page is None:
             return []
+
+        # list_viewports = set()
+        # for lst in page.findChildren(QListWidget):
+        #     vp = lst.viewport()
+        #     if vp:
+        #         list_viewports.add(vp)
+
+        # def is_inside_list(widget):
+        #     p = widget.parent()
+        #     while p is not None:
+        #         if p in list_viewports:
+        #             return True
+        #         p = p.parent()
+        #     return False
+
         results = []
+
+        # for w in page.findChildren(QPushButton):
+        #     if not w.isVisible():
+        #         continue
+        #     if not w.isEnabled():
+        #         continue
+        #     if is_inside_list(w):
+        #         continue
+        #     results.append(w)
+
         for w in page.findChildren(QPushButton):
-            if w.isVisible() and w.isEnabled():
+            if w.isVisible() and w.isEnabled() and w.objectName() != "joystick_skip":
                 results.append(w)
+
+        #HERE
+        # from PySide6.QtWidgets import QListWidget
+        # for lst in page.findChildren(QListWidget):
+        #     viewport = lst.viewport()
+        #     if viewport:
+        #         for w in viewport.findChildren(QPushButton):
+        #             if w.isVisible() and w.isEnabled() and w not in results:
+        #                 results.append(w)
 
         def sort_key(w):
             pos = w.mapTo(page, w.rect().center())
             return (pos.y() // 50, pos.x())
 
         results.sort(key=sort_key)
+        # DEBUG
+        # for i, b in enumerate(results):
+        #         pos = b.mapTo(page, b.rect().center())
+        #         print(f"  [{i}] '{b.text()[:20]}' objName='{b.objectName()}' y={pos.y()}", file=sys.stderr)
         return results
 
     def _lists_on_page(self) -> list:
+        from PySide6.QtCore import QPoint
         page = self._get_page()
         if page is None:
             return []
         results = []
         for w in page.findChildren(QListWidget):
+            print(f"  LIST: visible={w.isVisible()} count={w.count()}", file=sys.stderr)
             if w.isVisible() and w.count() > 0:
                 results.append(w)
-        results.sort(key=lambda w: w.mapTo(page, w.rect().center()).y())
+        # results.sort(key=lambda w: w.mapTo(page, w.rect().center()).y())
+        results.sort(key=lambda w: w.mapTo(page, QPoint(0, 0)).y())
         return results
 
     def _focused_btn_index(self, buttons: list) -> int:
@@ -332,7 +408,9 @@ class JoystickNavigator(QObject):
             self._highlight_btn(buttons[0])
             return
 
-        list_y = lst.mapTo(page, lst.rect().center()).y()
+        # list_y = lst.mapTo(page, lst.rect().center()).y()
+        from PySide6.QtCore import QPoint
+        list_y = lst.mapTo(page, QPoint(0, 0)).y() + lst.height() // 2
 
         if direction == -1:
             candidates = [b for b in buttons if self._btn_y(b) < list_y]
@@ -373,7 +451,9 @@ class JoystickNavigator(QObject):
         )
         for lst in self._lists_on_page():
             page = self._get_page()
-            list_y = lst.mapTo(page, lst.rect().center()).y()
+            # list_y = lst.mapTo(page, lst.rect().center()).y()
+            from PySide6.QtCore import QPoint
+            list_y = lst.mapTo(page, QPoint(0, 0)).y() + lst.height() // 2  
             if list_y < cur_y:
                 if prev_row_y is None or list_y > prev_row_y:
                     self._enter_list(lst, from_top=False)
@@ -430,7 +510,11 @@ class JoystickNavigator(QObject):
         )
         for lst in self._lists_on_page():
             page = self._get_page()
-            list_y = lst.mapTo(page, lst.rect().center()).y()
+            # list_y = lst.mapTo(page, lst.rect().center()).y()
+            from PySide6.QtCore import QPoint
+            list_y = lst.mapTo(page, QPoint(0, 0)).y() + lst.height() // 2
+
+            print(f"  MOVE_DOWN: cur_y={cur_y} list_y={list_y} next_row_y={next_row_y}", file=sys.stderr)
             if list_y > cur_y:
                 if next_row_y is None or list_y < next_row_y:
                     self._enter_list(lst, from_top=True)
@@ -528,6 +612,15 @@ class JoystickNavigator(QObject):
             item = lst.item(row)
             if item:
                 lst.itemClicked.emit(item)
+                # Fire the row_btn (the main action button) for this list item
+                # widget = lst.itemWidget(item)
+                # if widget:
+                #     for btn in widget.findChildren(QPushButton):
+                #         if btn.objectName() != "joystick_skip":
+                #             btn.click()
+                #             return
+                # # Fallback to itemClicked signal
+                # lst.itemClicked.emit(item)
             return
 
         if self._focused_btn is not None:
@@ -540,10 +633,85 @@ class JoystickNavigator(QObject):
         if buttons:
             self._highlight_btn(buttons[0])
 
+    def _move_right(self):
+        if self._in_list():
+            self._exit_list_to_buttons(1)
+            # # Fire the dot_btn (joystick_skip) for the focused row
+            # lst = self._focused_list
+            # row = self._focused_list_row
+            # item = lst.item(row)
+            # if item:
+            #     widget = lst.itemWidget(item)
+            #     if widget:
+            #         for btn in widget.findChildren(QPushButton):
+            #             if btn.objectName() == "joystick_skip":
+            #                 btn.click()
+            #                 return
+            return  # no dot button found, do nothing
+
+        buttons = self._buttons_on_page()
+        if not buttons:
+            return
+        idx = self._focused_btn_index(buttons)
+        if idx == -1:
+            self._highlight_btn(buttons[0])
+            return
+
+        cur_row = self._btn_row(buttons[idx])
+        cur_x = self._btn_x(buttons[idx])
+
+        same_row_right = [
+            i for i, b in enumerate(buttons)
+            if self._btn_row(b) == cur_row and self._btn_x(b) > cur_x
+        ]
+        if same_row_right:
+            self._highlight_btn(buttons[same_row_right[0]])
+        else:
+            same_row = [i for i, b in enumerate(buttons) if self._btn_row(b) == cur_row]
+            self._highlight_btn(buttons[same_row[0]])
+
+    def _save_position(self):
+        """Save current focus position for the current page."""
+        page = self._get_page()
+        if page is None:
+            return
+        if self._focused_list is not None:
+            self._page_memory[id(page)] = ("list", self._focused_list, self._focused_list_row)
+        elif self._focused_btn is not None:
+            self._page_memory[id(page)] = ("btn", self._focused_btn, None)
+    
     def _on_page_changed(self, _index: int):
+        self._save_position()
         QTimer.singleShot(100, self._focus_first)
 
     def _focus_first(self):
+        page = self._get_page()
+        if page is None:
+            return
+
+        # Try to restore saved position for this page
+        saved = self._page_memory.get(id(page))
+        if saved:
+            kind = saved[0]
+            self._clear_btn_highlight()
+            self._clear_list_highlight()
+            if kind == "list":
+                _, lst, row = saved
+                # Verify the list still exists and has that row
+                try:
+                    if lst.isVisible() and row < lst.count():
+                        self._highlight_list_row(lst, row)
+                        return
+                except RuntimeError:
+                    pass
+            elif kind == "btn":
+                _, btn, _ = saved
+                try:
+                    if btn.isVisible() and btn.isEnabled():
+                        self._highlight_btn(btn)
+                        return
+                except RuntimeError:
+                    pass
         self._clear_btn_highlight()
         self._clear_list_highlight()
         buttons = self._buttons_on_page()
