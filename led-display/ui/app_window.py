@@ -1201,18 +1201,16 @@ class AppWindow(QMainWindow):
             font-weight: bold;
         """)
 
-        # Stack is the central widget, exactly like general-ml
         self.stack = QStackedWidget()
         self.stack.setMinimumSize(0, 0)
         self.stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setCentralWidget(self.stack)
 
-        # --- GLOBAL STATUS BAR (floating overlay — consumes no layout space) ---
-        self.status_widget = QWidget(self.stack)
-        self.status_widget.setAttribute(Qt.WA_TransparentForMouseEvents)
-        self.status_widget.setStyleSheet("background: transparent;")
+        # Thin navbar that occupies real layout space — no overlap with pages
+        self.status_widget = QWidget()
+        self.status_widget.setFixedHeight(28)
+        self.status_widget.setStyleSheet("background-color: #b5bdae;")
         status_layout = QHBoxLayout(self.status_widget)
-        status_layout.setContentsMargins(5, 5, 5, 0)
+        status_layout.setContentsMargins(8, 2, 8, 2)
 
         self.lbl_time = QLabel("00:00")
         self.lbl_time.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
@@ -1230,6 +1228,15 @@ class AppWindow(QMainWindow):
         status_layout.addWidget(self.lbl_date)
         status_layout.addStretch(1)
         status_layout.addWidget(self.lbl_battery)
+
+        # Container: navbar on top, stack below
+        _container = QWidget()
+        _container_layout = QVBoxLayout(_container)
+        _container_layout.setContentsMargins(0, 0, 0, 0)
+        _container_layout.setSpacing(0)
+        _container_layout.addWidget(self.status_widget)
+        _container_layout.addWidget(self.stack)
+        self.setCentralWidget(_container)
 
         # Start global timer
         self.status_timer = QTimer(self)
@@ -1524,13 +1531,6 @@ class AppWindow(QMainWindow):
             self.showNormal()
             sim_w, sim_h = 480, 800 
             self.setFixedSize(sim_w, sim_h)
-
-    def resizeEvent(self, event):
-        if hasattr(self, 'status_widget'):
-            h = self.status_widget.sizeHint().height()
-            self.status_widget.setGeometry(0, 0, self.stack.width(), h)
-            self.status_widget.raise_()
-        super().resizeEvent(event)
 
     def _quit_application(self) -> None:
         self.joystick.stop()
