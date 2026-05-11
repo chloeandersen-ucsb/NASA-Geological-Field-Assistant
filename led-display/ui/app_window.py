@@ -368,81 +368,86 @@ class ClassifiedPage(QWidget):
     def __init__(self, vm):
         super().__init__()
         self.vm = vm
-        # Main layout for the whole page
-        self.main_layout = QVBoxLayout(self)
-        # self.main_layout.setSpacing(5)
-        # self.main_layout.setContentsMargins(15, 15, 15, 15)
-        self.main_layout.addStretch(1)
-        
-        self.image_container = QWidget()
-        # self.image_container.setFixedSize(600, 900)
-        self.image_container.setStyleSheet("background-color: transparent;")
-        container_layout = QHBoxLayout(self.image_container)
-        # container_layout.addSpacing(50)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        self.lbl_image = QLabel()
-        self.lbl_image.setAlignment(Qt.AlignCenter)
-        self.lbl_image.setStyleSheet("background-color: transparent; border: none;")
-        self.lbl_image.setFixedSize(200, 150)
-        self.lbl_image.setScaledContents(True)
-        self.lbl_side_image = QLabel()
-        self.lbl_side_image.setAlignment(Qt.AlignCenter)
-        self.lbl_side_image.setStyleSheet("background-color: transparent; border: none;")
-        self.lbl_side_image.setFixedSize(200, 150)
-        self.lbl_side_image.setScaledContents(True)
-        container_layout.addWidget(self.lbl_image)
-        container_layout.addWidget(self.lbl_side_image)
-        self.main_layout.addWidget(self.image_container, 0, Qt.AlignCenter)
-        self.main_layout.addStretch(1)
+        self.setStyleSheet("""
+            background-color: #cbd2c5;
+            color: #344f41;
+            font-family: "Courier New";
+        """)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 10, 15, 10)
+        layout.setSpacing(6)
 
-        # Result Labels
+        # Title
         self.lbl_label = QLabel("LABEL")
         self.lbl_label.setAlignment(Qt.AlignCenter)
-        self.lbl_label.setStyleSheet("font-size: 28px; font-weight: 700;")
-        self.lbl_label.setStyleSheet("font-size: 24px; font-weight: 700; margin-top: 5px;")
-        
+        self.lbl_label.setStyleSheet(
+            "background-color: #f5f6f4; font-size: 24px; font-weight: 700;"
+            " border: 2px solid #697d6a; border-radius: 8px; padding: 8px;"
+        )
+        layout.addWidget(self.lbl_label)
 
+        # Images (fixed height so they don't compete with the features box)
+        images_wrapper = QWidget()
+        images_wrapper.setMaximumHeight(120)
+        images_wrapper.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        images_wrapper.setStyleSheet("background: transparent;")
+        images_row = QHBoxLayout(images_wrapper)
+        images_row.setSpacing(10)
+        images_row.setContentsMargins(0, 0, 0, 0)
+        self.lbl_image = QLabel()
+        self.lbl_image.setAlignment(Qt.AlignCenter)
+        self.lbl_image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.lbl_image.setStyleSheet(
+            "background-color: #222; border: 3px solid #344f41; border-radius: 6px;"
+        )
+        self.lbl_side_image = QLabel()
+        self.lbl_side_image.setAlignment(Qt.AlignCenter)
+        self.lbl_side_image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.lbl_side_image.setStyleSheet(
+            "background-color: #222; border: 3px solid #344f41; border-radius: 6px;"
+        )
+        images_row.addWidget(self.lbl_image, stretch=1)
+        images_row.addWidget(self.lbl_side_image, stretch=1)
+        layout.addWidget(images_wrapper)
+
+        # Confidence / volume row
+        info_row = QHBoxLayout()
         self.lbl_conf = QLabel("Confidence: --")
-        self.lbl_conf.setAlignment(Qt.AlignCenter)
-        self.lbl_conf.setStyleSheet("font-size: 25px; color: #666;") #color = white
-
-        self.lbl_volume = QLabel("Volume = --")
-        self.lbl_volume.setAlignment(Qt.AlignCenter)
-        self.lbl_volume.setStyleSheet("font-size: 20px;")
-
-        # self.lbl_top2 = QLabel("")
-        # self.lbl_top2.setAlignment(Qt.AlignCenter)
-        # self.lbl_top2.setStyleSheet("font-size: 20px;")
-
-        # self.lbl_top3 = QLabel("")
-        # self.lbl_top3.setAlignment(Qt.AlignCenter)
-        # self.lbl_top3.setStyleSheet("font-size: 20px;")
-
-        self.extra_results_widget = QWidget()
-        self.extra_grid = QGridLayout(self.extra_results_widget)
-        self.extra_grid.setAlignment(Qt.AlignCenter)
-        # self.extra_grid.setContentsMargins(100, 0, 100, 0) # Adjust margins to control width
-        
-        # Create the sub-labels
-        self.lbl_rank2 = QLabel(""); self.lbl_name2 = QLabel(""); self.lbl_perc2 = QLabel("")
-        self.lbl_rank3 = QLabel(""); self.lbl_name3 = QLabel(""); self.lbl_perc3 = QLabel("")
-
-        # Style and Add to Grid
-        sub_style = "font-size: 20px;"
-        for i, lbl in enumerate([self.lbl_rank2, self.lbl_name2, self.lbl_perc2, 
-                                 self.lbl_rank3, self.lbl_name3, self.lbl_perc3]):
-            lbl.setStyleSheet(sub_style)
-            # Row 0 for 2nd, Row 1 for 3rd
-            row = i // 3
-            col = i % 3
-            alignment = [Qt.AlignLeft, Qt.AlignCenter, Qt.AlignRight][col]
-            self.extra_grid.addWidget(lbl, row, col, alignment)
-
+        self.lbl_conf.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.lbl_conf.setStyleSheet("font-size: 14px; color: #555;")
+        self.lbl_volume = QLabel("Volume: --")
+        self.lbl_volume.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.lbl_volume.setStyleSheet("font-size: 14px;")
         self.lbl_extra = QLabel("")
         self.lbl_extra.setAlignment(Qt.AlignCenter)
-        self.lbl_extra.setStyleSheet("font-size: 20px;")
+        self.lbl_extra.setStyleSheet("font-size: 13px;")
+        info_row.addWidget(self.lbl_conf)
+        info_row.addStretch()
+        info_row.addWidget(self.lbl_volume)
+        layout.addLayout(info_row)
+        layout.addWidget(self.lbl_extra)
 
-        self.mic_ctrl = ExpandingVoiceWidget(self.vm, self) 
+        # Features box
+        self.features_container = QWidget()
+        self.features_container.setStyleSheet(
+            "background-color: #f5f6f4; border: 2px solid #697d6a; border-radius: 8px;"
+        )
+        self.features_layout = QVBoxLayout(self.features_container)
+        self.features_layout.setSpacing(4)
+        self.features_layout.setContentsMargins(10, 15, 10, 15)
+        layout.addWidget(self.features_container, stretch=1)
+
+        # Alternatives
+        self.lbl_alternatives = QLabel("")
+        self.lbl_alternatives.setAlignment(Qt.AlignCenter)
+        self.lbl_alternatives.setWordWrap(True)
+        self.lbl_alternatives.setStyleSheet("font-size: 12px; color: #888;")
+        layout.addWidget(self.lbl_alternatives)
+
+        # Voice widget + buttons
+        self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
+        layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
+        layout.addSpacing(10)
 
         self.btn_reclassify = big_button("Reclassify")
         self.btn_reclassify.setStyleSheet("""
@@ -477,25 +482,9 @@ class ClassifiedPage(QWidget):
                 background-color: #f5f6f4;
             }
         """)
-
-        # Assemble main layout
-        self.main_layout.addWidget(self.lbl_label)
-        self.main_layout.addWidget(self.lbl_conf)
-        self.main_layout.addSpacing(10)
-        self.main_layout.addWidget(self.lbl_volume)
-        self.main_layout.addWidget(self.lbl_extra)
-        self.main_layout.addSpacing(10)
-
-        self.main_layout.addWidget(self.extra_results_widget)
-        self.main_layout.addStretch(1)
-        
-
-        self.main_layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
-        self.main_layout.addSpacing(15)
-
-        self.main_layout.addWidget(self.btn_reclassify)
-        self.main_layout.addWidget(self.btn_save)
-        self.main_layout.addWidget(self.btn_delete)
+        layout.addWidget(self.btn_reclassify)
+        layout.addWidget(self.btn_save)
+        layout.addWidget(self.btn_delete)
         
 
 
@@ -1755,31 +1744,71 @@ class AppWindow(QMainWindow):
 
         top3 = None
         if result.raw and isinstance(result.raw, dict):
-            top3 = result.raw.get("top3", [])
-        
+            top3 = result.raw.get("top3") or None
+            if not top3:
+                scores = result.raw.get("primary", {}).get("scores", {})
+                if scores:
+                    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+                    top3 = [{"label": k, "confidence": v} for k, v in sorted_scores[:3]]
+
+        alt_parts = []
         if top3 and len(top3) >= 2:
-            label2 = top3[1].get("label", "")
             conf2 = float(top3[1].get("confidence", 0.0))
             if conf2 > 0:
-                self.classified.lbl_rank2.setText("2nd:")
-                self.classified.lbl_name2.setText(top3[1].get("label", "").upper())
-                self.classified.lbl_perc2.setText(f"({int(float(top3[1]['confidence']) * 100)}%)")
-            else:
-                for lbl in [self.classified.lbl_rank2, self.classified.lbl_name2, self.classified.lbl_perc2]: lbl.setText("")
-        else:
-            for lbl in [self.classified.lbl_rank2, self.classified.lbl_name2, self.classified.lbl_perc2]: lbl.setText("")
-        
+                alt_parts.append(f"{top3[1].get('label', '').upper()} (conf: {int(conf2 * 100)}%)")
         if top3 and len(top3) >= 3:
-            label3 = top3[2].get("label", "")
             conf3 = float(top3[2].get("confidence", 0.0))
             if conf3 > 0:
-                self.classified.lbl_rank3.setText("3rd:")
-                self.classified.lbl_name3.setText(top3[2].get("label", "").upper())
-                self.classified.lbl_perc3.setText(f"({int(float(top3[2]['confidence']) * 100)}%)")
-            else:
-                for lbl in [self.classified.lbl_rank3, self.classified.lbl_name3, self.classified.lbl_perc3]: lbl.setText("")
+                alt_parts.append(f"{top3[2].get('label', '').upper()} (conf: {int(conf3 * 100)}%)")
+        if alt_parts:
+            self.classified.lbl_alternatives.setText("Alternatively: " + ",  ".join(alt_parts))
         else:
-            for lbl in [self.classified.lbl_rank3, self.classified.lbl_name3, self.classified.lbl_perc3]: lbl.setText("")
+            self.classified.lbl_alternatives.setText("")
+
+        raw = result.raw or {}
+        features = raw.get("features") or {}
+        geo_notes = raw.get("geology_notes") or []
+        show_features = raw.get("ui", {}).get("show_features", False)
+
+        while self.classified.features_layout.count():
+            child = self.classified.features_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        if show_features and features:
+            note_by_feature = {n["feature"]: n["note"] for n in geo_notes}
+            displayed = [
+                (feat_name, feat_data)
+                for feat_name, feat_data in features.items()
+                if feat_data.get("display")
+            ]
+            for idx, (feat_name, feat_data) in enumerate(displayed):
+                value = feat_data["value"]
+                conf = int(feat_data["confidence"] * 100)
+
+                feat_lbl = QLabel(f"{feat_name.replace('_', ' ').title()}: {value}  ({conf}%)")
+                feat_lbl.setAlignment(Qt.AlignLeft)
+                feat_lbl.setWordWrap(True)
+                feat_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
+                feat_lbl.setStyleSheet("font-size: 14px; border: none; background: transparent; font-weight: bold;")
+                self.classified.features_layout.addWidget(feat_lbl)
+
+                note = note_by_feature.get(feat_name, "")
+                if note:
+                    note_lbl = QLabel(note)
+                    note_lbl.setAlignment(Qt.AlignLeft)
+                    note_lbl.setWordWrap(True)
+                    note_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
+                    note_lbl.setStyleSheet("font-size: 11px; color: #888; border: none; background: transparent; font-weight: normal;")
+                    self.classified.features_layout.addWidget(note_lbl)
+
+                if idx < len(displayed) - 1:
+                    sep = QFrame()
+                    sep.setFrameShape(QFrame.HLine)
+                    sep.setFixedHeight(1)
+                    sep.setStyleSheet("background-color: #ccc;")
+                    self.classified.features_layout.addWidget(sep)
+                    self.classified.features_layout.addSpacing(6)
 
         extras = []
         if result.estimated_weight is not None:
