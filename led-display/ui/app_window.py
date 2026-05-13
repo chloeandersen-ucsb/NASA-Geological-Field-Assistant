@@ -826,27 +826,43 @@ class RockDetailPage(QWidget):
         layout.addWidget(self.lbl_info, stretch=2)
 
         # --- Summary Header with Re-Summarize Button ---
+        summary_box = QFrame()
+        summary_box.setStyleSheet("""
+            QFrame {
+                background-color: #f5f6f4;
+                # border: 2px solid #697d6a;
+                # border-radius: 8px;
+                # padding: 8px;
+            }
+        """)
+        summary_box_layout = QVBoxLayout(summary_box)
+        summary_box_layout.setContentsMargins(8, 8, 8, 8)
+        summary_box_layout.setSpacing(6)
+
         summary_header_layout = QHBoxLayout()
         self.lbl_summary_title = QLabel("AI Summary:")
-        self.lbl_summary_title.setStyleSheet("background-color: #f5f6f4; font-size: 18px; font-weight: 700;")
+        self.lbl_summary_title.setStyleSheet("background-color: #f5f6f4; font-size: 18px; font-weight: 700")
         
         self.btn_force_summary = QPushButton("RE-SUMMARIZE")
         self.btn_force_summary.setFixedSize(140, 30)
         self.btn_force_summary.setStyleSheet("""
-            QPushButton { background-color: #95b7dc; color: #385573; font-weight: bold; border-radius: 6px; font-size: 14px; }
-            QPushButton:hover { background-color: #b8d2ea; }
+            QPushButton { background-color: #f5f6f4; color: #385573; font-weight: bold; border-radius: 5px; font-size: 18px; }
+            QPushButton:hover { background-color: #617c32; }
         """)
         
         summary_header_layout.addWidget(self.lbl_summary_title, stretch=1)
         summary_header_layout.addSpacing(10)
         summary_header_layout.addWidget(self.btn_force_summary)
-        layout.addLayout(summary_header_layout)
+        # layout.addLayout(summary_header_layout)
+        summary_box_layout.addLayout(summary_header_layout)
 
         # --- NEW: 2x3 BUTTON GRID FOR JOYSTICK SNAP NAVIGATION ---
         self.summary_buttons_widget = QWidget()
         self.summary_grid = QGridLayout(self.summary_buttons_widget)
-        self.summary_grid.setSpacing(8)
+        self.summary_grid.setSpacing(5)
         self.summary_grid.setContentsMargins(0, 0, 0, 0)
+
+        summary_header_layout.addWidget(self.summary_buttons_widget)
         
         self.summary_data = {}
         self.summary_buttons = {}
@@ -863,15 +879,15 @@ class RockDetailPage(QWidget):
         
         for i, (short_name, full_name) in enumerate(self.categories):
             btn = QPushButton(short_name)
-            btn.setMinimumHeight(65)
+            btn.setMinimumHeight(25)
             # CHANGED: Bumped font-size to 20px and added a subtle background contrast
             btn.setStyleSheet("""
                 QPushButton { 
-                    background-color: #a8bbaa; 
+                    background-color: #cbd2c5; 
                     color: #344f41; 
                     font-weight: bold; 
-                    font-size: 20px; 
-                    border-radius: 8px; 
+                    font-size: 15px; 
+                    border-radius: 3px; 
                     border: 2px solid #344f41; 
                 }
                 QPushButton:hover { background-color: #617c32; color: white; }
@@ -884,8 +900,10 @@ class RockDetailPage(QWidget):
             self.summary_grid.addWidget(btn, row, col)
             self.summary_buttons[full_name] = btn
             self.summary_data[full_name] = "Not specified."
-            
-        layout.addWidget(self.summary_buttons_widget)
+        
+        summary_box_layout.addWidget(self.summary_buttons_widget)
+
+        layout.addWidget(summary_box)
         # --------------------------------------------------------
 
         # --- NEW: The hidden loading label ---
@@ -897,9 +915,9 @@ class RockDetailPage(QWidget):
         self.lbl_summary_loading.hide()
         # -------------------------------------
 
-        self.lbl_notes_title = QLabel("Associated Voice Notes:")
-        self.lbl_notes_title.setStyleSheet("background-color: #f5f6f4; font-size: 18px; font-weight: 700;")
-        layout.addWidget(self.lbl_notes_title)
+        # self.lbl_notes_title = QLabel("Associated Voice Notes:")
+        # self.lbl_notes_title.setStyleSheet("background-color: #f5f6f4; font-size: 18px; font-weight: 700;")
+        # layout.addWidget(self.lbl_notes_title)
 
         self.notes_text = QTextEdit()
         self.notes_text.setReadOnly(True)
@@ -1359,6 +1377,10 @@ class AppWindow(QMainWindow):
             v.btn_redo.show()
             v.btn_save.show()
             v.btn_delete.show()
+            
+        if hasattr(self, 'joystick'):
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(50, self.joystick._focus_first)
 
     def _start_rock_assignment(self, note_ts):
         """Kicks off the jiggle animation and waits for a rock click."""
@@ -2482,10 +2504,10 @@ class AppWindow(QMainWindow):
             if battery:
                 percent = int(battery.percent)
                 is_plugged = battery.power_plugged
-                icon = "⚡" if is_plugged else "🔋"
+                icon = "🔋"
                 self.lbl_battery.setText(f"{percent}% {icon}")
             else:
-                self.lbl_battery.setText("Power Connected") 
+                self.lbl_battery.setText("100% 🔋") 
         except Exception as e:
             self.lbl_battery.setText("Battery N/A")
             

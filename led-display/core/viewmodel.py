@@ -1415,6 +1415,9 @@ class ViewModel(QObject):
         if self._was_session_finalized:
             return
         if not final_text or not final_text.strip() or "No audio recorded" in final_text:
+            self.transcription_text = ""
+            self.transcription_changed.emit("")
+            self.transcription_formatted.emit()
             return
         
         print(f"[VIEWMODEL] CLEANUP: Replacing live text with final version", file=sys.stderr)
