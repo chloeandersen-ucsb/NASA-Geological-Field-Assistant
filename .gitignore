@@ -33,3 +33,7 @@ voiceNotes/data
 dist/
 build/
 *.egg-info/
+
+# GroundUI Testing
+sample_groundui_folder/
+sage_ground_data/
