@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Geological Field Assistant - Post Mission Review</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="top-nav panel">
+      <div class="top-nav-left">
+        <h1>Geological Field Assistant - Post Mission Review</h1>
+      </div>
+      <div class="top-nav-center">
+        <label for="missionSelect">Mission</label>
+        <select id="missionSelect"></select>
+      </div>
+      <div class="top-nav-right">
+        <button type="button" class="btn btn-theme-toggle" id="themeToggleBtn" title="Toggle theme">☀️</button>
+        <button type="button" class="btn btn-primary" id="importDatasetBtn">Import Mission Folder</button>
+      </div>
+    </header>
+
+    <input id="datasetFileInput" type="file" accept="application/json,.json" webkitdirectory directory multiple hidden />
+
+    <div class="work-grid">
+      <aside class="panel mission-panel">
+        <div class="panel-header">
+          <h2>Mission Explorer</h2>
+        </div>
+        <div class="search-wrap">
+          <input id="sampleSearch" type="text" placeholder="Search sample or timestamp" />
+        </div>
+        <div class="filter-grid">
+          <div class="filter-field">
+            <label for="classificationFilter">Classification</label>
+            <select id="classificationFilter"></select>
+          </div>
+          <div class="filter-field">
+            <label for="volumeFilter">Volume Range</label>
+            <select id="volumeFilter">
+              <option value="all">All</option>
+              <option value="small">0-120 cm3</option>
+              <option value="medium">120-220 cm3</option>
+              <option value="large">220+ cm3</option>
+            </select>
+          </div>
+          <div class="filter-field">
+            <label for="dateFilter">Date</label>
+            <select id="dateFilter"></select>
+          </div>
+        </div>
+        <div class="tree-wrap" id="missionTree"></div>
+      </aside>
+
+      <main class="panel viewer-panel">
+        <div class="panel-header">
+          <h2>Sample Viewer</h2>
+        </div>
+
+        <section id="sampleViewSection" class="sample-view">
+          <div class="sample-info-strip" id="sampleInfoStrip"></div>
+
+          <div class="image-grid">
+            <article class="image-card">
+              <div class="image-card-head">
+                <h3>Top View</h3>
+                <div class="control-row">
+                  <button type="button" class="mini-btn" id="topZoomOut">-</button>
+                  <button type="button" class="mini-btn" id="topZoomIn">+</button>
+                </div>
+              </div>
+              <div class="image-frame">
+                <img id="topViewImage" alt="Top view sample" />
+              </div>
+            </article>
+
+            <article class="image-card">
+              <div class="image-card-head">
+                <h3>Side View</h3>
+                <div class="control-row">
+                  <button type="button" class="mini-btn" id="sideZoomOut">-</button>
+                  <button type="button" class="mini-btn" id="sideZoomIn">+</button>
+                </div>
+              </div>
+              <div class="image-frame">
+                <img id="sideViewImage" alt="Side view sample" />
+              </div>
+            </article>
+          </div>
+        </section>
+
+      </main>
+
+      <aside class="panel metadata-panel">
+        <div class="panel-header">
+          <h2>Metadata & Analytical Output</h2>
+        </div>
+
+        <section class="meta-section">
+          <h3>Sample Metadata</h3>
+          <div class="kv-grid" id="sampleMetadataGrid"></div>
+        </section>
+
+        <section class="meta-section">
+          <h3>Voice Transcript</h3>
+          <div class="kv-grid" id="transcriptMetadataGrid"></div>
+          <div id="transcriptContent" class="transcript-content hidden">
+            <h3>Transcript</h3>
+            <div class="transcript-text"></div>
+          </div>
+        </section>
+
+        <section class="meta-section">
+          <h3>Rock Classification (Read Only)</h3>
+          <div class="kv-grid" id="classificationGrid"></div>
+        </section>
+
+      </aside>
+    </div>
+
+    <section class="panel strip-panel">
+      <div class="strip-head">
+        <h2>Chronological Sample Strip</h2>
+        <div class="sort-controls">
+          <label for="stripSort">Sort By</label>
+          <select id="stripSort">
+            <option value="timestamp">Timestamp</option>
+            <option value="volume">Volume</option>
+            <option value="classification">Classification</option>
+          </select>
+        </div>
+      </div>
+      <div class="sample-strip" id="sampleStrip"></div>
+    </section>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
