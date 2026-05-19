@@ -811,17 +811,17 @@ class RockDetailPage(QWidget):
         images_row.setSpacing(10)
         self.lbl_top = QLabel()
         self.lbl_top.setAlignment(Qt.AlignCenter)
-        self.lbl_top.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.lbl_top.setStyleSheet("background-color: #222; border: 3px solid #344f41; border-radius: 6px;")
+        self.lbl_top.setFixedSize(200, 150)
+        self.lbl_top.setStyleSheet("background-color: #222;")
 
         self.lbl_side = QLabel()
         self.lbl_side.setAlignment(Qt.AlignCenter)
-        self.lbl_side.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.lbl_side.setStyleSheet("background-color: #222; border: 3px solid #344f41; border-radius: 6px;")
+        self.lbl_side.setFixedSize(200, 150)
+        self.lbl_side.setStyleSheet("background-color: #222;")
 
-        images_row.addWidget(self.lbl_top, stretch=1)
-        images_row.addWidget(self.lbl_side, stretch=1)
-        layout.addLayout(images_row, stretch=2)
+        images_row.addWidget(self.lbl_top)
+        images_row.addWidget(self.lbl_side)
+        layout.addLayout(images_row)
 
         self.lbl_info = QLabel("")
         self.lbl_info.setWordWrap(True)
@@ -844,8 +844,8 @@ class RockDetailPage(QWidget):
         summary_box_layout.setSpacing(6)
 
         summary_header_layout = QHBoxLayout()
-        self.lbl_summary_title = QLabel("AI Summary:")
-        self.lbl_summary_title.setStyleSheet("background-color: #f5f6f4; font-size: 18px; font-weight: 700")
+        self.lbl_summary_title = QLabel("Summary:")
+        self.lbl_summary_title.setStyleSheet("background-color: #f5f6f4; font-size: 18px; font-weight: 700; border-radius: 5px")
         
         self.btn_force_summary = QPushButton("RE-SUMMARIZE")
         self.btn_force_summary.setFixedSize(140, 30)
@@ -871,7 +871,6 @@ class RockDetailPage(QWidget):
         self.summary_data = {}
         self.summary_buttons = {}
         
-        # We use slightly shortened names for the buttons so they fit beautifully on a 480px screen
         self.categories = [
             ("Appearance", "Color & Appearance"), 
             ("Mineralogy", "Mineralogy & Composition"), 
@@ -883,16 +882,15 @@ class RockDetailPage(QWidget):
         
         for i, (short_name, full_name) in enumerate(self.categories):
             btn = QPushButton(short_name)
-            btn.setMinimumHeight(25)
-            # CHANGED: Bumped font-size to 20px and added a subtle background contrast
+            btn.setMinimumHeight(35)
             btn.setStyleSheet("""
-                QPushButton { 
-                    background-color: #cbd2c5; 
-                    color: #344f41; 
-                    font-weight: bold; 
-                    font-size: 15px; 
-                    border-radius: 3px; 
-                    border: 2px solid #344f41; 
+                QPushButton {
+                    background-color: #cbd2c5;
+                    color: #344f41;
+                    font-weight: bold;
+                    font-size: 17px;
+                    border-radius: 3px;
+                    border: 2px solid #344f41;
                 }
                 QPushButton:hover { background-color: #617c32; color: white; }
             """)
