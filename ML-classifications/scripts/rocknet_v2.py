@@ -164,9 +164,11 @@ GEOLOGY_NOTES: dict[str, str] = {
         "Angular clasts indicate minimal transport and mechanical fragmentation at or near the source.",
 
     "breccia_sorting_poor":
+        "Wide range of clast sizes indicates rapid deposition with minimal sorting processes.",
     "breccia_sorting_well":
-
+        "Relatively uniform clast sizes indicate some degree of transport-driven sorting.",
     "breccia_support_fabric_matrix_supported":
+    
         "Matrix-supported fabric indicates fine material dominates and separates larger clasts.",
     "breccia_support_fabric_clast_supported":
         "Clast-supported fabric indicates large fragments are in contact, suggesting collapse or rockfall origin.",
