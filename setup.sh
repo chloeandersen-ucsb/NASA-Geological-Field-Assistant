@@ -32,10 +32,8 @@ rotate_screen() {
     fi
 
     local min_dim_mm
-    min_dim_mm=$(xrandr 2>/dev/null | awk '/ connected/{
-        match($0, /([0-9]+)mm x ([0-9]+)mm/, a)
-        if (a[1]+0 > 0) { print (a[1] < a[2] ? a[1] : a[2]); exit }
-    }')
+    min_dim_mm=$(xrandr 2>/dev/null | grep ' connected' | grep -o '[0-9]*mm x [0-9]*mm' | \
+        awk -F'[^0-9]+' '{w=$1+0; h=$2+0; print (w<h?w:h)}')
 
     if [[ "$output" == DSI* ]] || { [[ -n "$min_dim_mm" ]] && (( min_dim_mm < 120 )); }; then
         echo "[sage] Small display detected ($output, min dim: ${min_dim_mm:-unknown}mm) — rotating inverted"
