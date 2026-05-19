@@ -432,10 +432,11 @@ class ClassifiedPage(QWidget):
         self.features_container.setStyleSheet(
             "background-color: #f5f6f4; border: 2px solid #697d6a; border-radius: 8px;"
         )
+        self.features_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
         self.features_layout = QVBoxLayout(self.features_container)
         self.features_layout.setSpacing(4)
         self.features_layout.setContentsMargins(10, 15, 10, 15)
-        layout.addWidget(self.features_container, stretch=1)
+        layout.addWidget(self.features_container)
 
         # Alternatives
         self.lbl_alternatives = QLabel("")
@@ -453,7 +454,7 @@ class ClassifiedPage(QWidget):
         self.btn_reclassify.setStyleSheet("""
             QPushButton {
                 background-color: #95b7dc;
-                font-size: 22px;
+                font-size: 20px;
                 color: #385573;
             }
             QPushButton:hover {
@@ -464,7 +465,7 @@ class ClassifiedPage(QWidget):
         self.btn_save.setStyleSheet("""
             QPushButton {
                 background-color: #617c32;
-                font-size: 22px;
+                font-size: 20px;
                 color: #f5f6f4;
             }
             QPushButton:hover {
@@ -475,7 +476,7 @@ class ClassifiedPage(QWidget):
         self.btn_delete.setStyleSheet("""
             QPushButton {
                 background-color: #313940;
-                font-size: 22px;
+                font-size: 20px;
                 color: #f5f6f4;
             }
             QPushButton:hover {
