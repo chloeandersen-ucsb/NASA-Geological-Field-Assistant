@@ -104,7 +104,7 @@ main() {
     install_if_needed
     rotate_screen
     cd "$SCRIPT_DIR"
-    exec make run
+    exec sudo -u "${SUDO_USER:-$USER}" make run
 }
 
 main "$@"
