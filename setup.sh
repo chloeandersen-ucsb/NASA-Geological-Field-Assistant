@@ -9,7 +9,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AUTOSTART_FILE="$HOME/.config/autostart/sage.desktop"
+REAL_USER="${SUDO_USER:-$USER}"
+REAL_HOME=$(eval echo "~$REAL_USER")
+AUTOSTART_FILE="$REAL_HOME/.config/autostart/sage.desktop"
 SLEEP_HOOK="/lib/systemd/system-sleep/sage-wakeup"
 
 is_jetson() {
