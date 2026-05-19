@@ -560,7 +560,7 @@ class TripLoadPage(QWidget):
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
         layout.addWidget(title)
 
-        self.btn_create_new_mission = QPushButton("Create New Mission")
+        self.btn_create_new_mission = mission_button("Create New Mission")
         layout.addWidget(self.btn_create_new_mission)
 
         # --- Delete All Button ---
