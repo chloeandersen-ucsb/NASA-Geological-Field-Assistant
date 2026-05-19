@@ -42,8 +42,10 @@ endif
 run:
 	@echo "Platform: $(JETSON_DETECT)"
 	@echo "Data directory: $(SAGE_STORE_DIR)"
+	@echo "Mode: Base NeMo model"
 	@cd "$(LED_DISPLAY_DIR)" && \
 		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
+		export SAGE_USE_BASE_MODEL=1 && \
 		export JETSON_PLATFORM=$(IS_JETSON) && \
 		$(PYTHON) main.py
 
@@ -54,16 +56,6 @@ run-raw:
 	@cd "$(LED_DISPLAY_DIR)" && \
 		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
 		export SAGE_RAW_ASR=1 && \
-		export JETSON_PLATFORM=$(IS_JETSON) && \
-		$(PYTHON) main.py
-
-run-base:
-	@echo "Platform: $(JETSON_DETECT)"
-	@echo "Data directory: $(SAGE_STORE_DIR)"
-	@echo "Mode: Base NeMo model"
-	@cd "$(LED_DISPLAY_DIR)" && \
-		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
-		export SAGE_USE_BASE_MODEL=1 && \
 		export JETSON_PLATFORM=$(IS_JETSON) && \
 		$(PYTHON) main.py
 
