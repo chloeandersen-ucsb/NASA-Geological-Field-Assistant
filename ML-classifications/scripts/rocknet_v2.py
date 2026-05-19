@@ -316,7 +316,7 @@ class RockNetV2(nn.Module):
 
         self.backbone = timm.create_model(
             "convnext_tiny",
-            pretrained=True,
+            pretrained=False,
             features_only=True,
             out_indices=(2, 3),   # C3: 384ch, C4: 768ch
         )
