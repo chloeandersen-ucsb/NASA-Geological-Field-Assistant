@@ -64,11 +64,14 @@ class SummaryPopupOverlay(QWidget):
         self.lbl_content.setStyleSheet("font-size: 18px; color: #344f41; border: none; margin-top: 5px;")
         box_layout.addWidget(self.lbl_content, stretch=1)
         
-        # Instruction to close
-        self.lbl_close = QLabel("Tap anywhere to close")
-        self.lbl_close.setAlignment(Qt.AlignCenter)
-        self.lbl_close.setStyleSheet("font-size: 14px; color: #697d6a; border: none; font-style: italic;")
-        box_layout.addWidget(self.lbl_close)
+        self.btn_cancel = QPushButton("Cancel")
+        self.btn_cancel.setFixedHeight(36)
+        self.btn_cancel.setStyleSheet("""
+            QPushButton { background-color: #697d6a; color: #f5f6f4; font-size: 16px; font-weight: bold; border-radius: 6px; border: none; }
+            QPushButton:hover { background-color: #344f41; }
+        """)
+        self.btn_cancel.clicked.connect(self.hide)
+        box_layout.addWidget(self.btn_cancel)
         
         self.layout.addWidget(self.box)
         
@@ -822,8 +825,9 @@ class RockDetailPage(QWidget):
 
         self.lbl_info = QLabel("")
         self.lbl_info.setWordWrap(True)
+        self.lbl_info.setFixedHeight(60)
         self.lbl_info.setStyleSheet("background-color: #f5f6f4; font-size: 18px; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
-        layout.addWidget(self.lbl_info, stretch=2)
+        layout.addWidget(self.lbl_info)
 
         # --- Summary Header with Re-Summarize Button ---
         summary_box = QFrame()
