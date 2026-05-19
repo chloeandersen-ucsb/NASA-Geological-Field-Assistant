@@ -170,12 +170,6 @@ class LoadingOverlay(QWidget):
         self.spinner.stop()
         self.text_timer.stop()
 
-def big_button(text: str) -> QPushButton:
-    b = QPushButton(text)
-    b.setMinimumHeight(70)
-    b.setStyleSheet("font-size: 20px;")
-    return b
-
 def back_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(50)
@@ -227,7 +221,7 @@ def quit_button(text: str) -> QPushButton:
 def mission_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(50)
-    b.setStyleSheet("font-size: 18px; background-color: #cad2c5; color: #344f41;")
+    b.setStyleSheet("font-size: 22px; background-color: #cad2c5; color: #344f41;")
     return b
 
 
@@ -968,7 +962,7 @@ class VoiceNoteDetailPage(QWidget):
         """)
         layout.addWidget(self.text, stretch=1)
 
-        self.btn_back = big_button("Back")
+        self.btn_back = back_button("Back")
         layout.addWidget(self.btn_back)
 
     def set_note(self, note: dict) -> None:
