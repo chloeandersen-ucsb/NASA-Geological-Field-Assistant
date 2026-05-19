@@ -31,8 +31,18 @@ rotate_screen() {
         return
     fi
 
-    echo "[sage] Rotating $output to inverted"
-    xrandr --output "$output" --rotate inverted
+    local min_dim_mm
+    min_dim_mm=$(xrandr 2>/dev/null | awk '/ connected/{
+        match($0, /([0-9]+)mm x ([0-9]+)mm/, a)
+        if (a[1]+0 > 0) { print (a[1] < a[2] ? a[1] : a[2]); exit }
+    }')
+
+    if [[ "$output" == DSI* ]] || { [[ -n "$min_dim_mm" ]] && (( min_dim_mm < 120 )); }; then
+        echo "[sage] Small display detected ($output, min dim: ${min_dim_mm:-unknown}mm) — rotating inverted"
+        xrandr --output "$output" --rotate inverted
+    else
+        echo "[sage] Large display detected ($output, min dim: ${min_dim_mm:-unknown}mm) — skipping rotation"
+    fi
 }
 
 install_autostart() {
