@@ -19,7 +19,7 @@ from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPain
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton, QMainWindow, QStackedWidget,
     QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout, QDialog,
-    QFrame
+    QFrame, QMessageBox
 )
 
 import importlib.util, pathlib

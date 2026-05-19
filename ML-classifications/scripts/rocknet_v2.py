@@ -109,71 +109,68 @@ def label_to_idx(feat: str, value_or_entry, labeling_classes: list[str]) -> int:
 GEOLOGY_NOTES: dict[str, str] = {
     # BASALT ─────────────────────────────────────────────────────────────────
     "basalt_groundmass_texture_aphanitic":
-        "Rapid cooling; crystals too small to resolve.",
+        "Fine-grained groundmass indicates rapid cooling with crystals too small to resolve.",
     "basalt_groundmass_texture_medium_grained":
-        "Slower cooling; partial crystal growth visible.",
+        "Visible grains suggest slower cooling than aphanitic basalt, allowing partial crystal growth.",
     "basalt_groundmass_texture_phaneritic":
-        "Slow cooling or pre-eruption crystal accumulation.",
+        "Coarser grain size indicates slower cooling or crystal accumulation prior to eruption.",
 
     "basalt_vesicularity_low":
-        "Few vesicles; limited volatile exsolution.",
+        "Sparse vesicles indicate limited volatile exsolution during solidification.",
     "basalt_vesicularity_moderate":
-        "Some bubbles preserved during cooling.",
+        "Moderate vesicles reflect partial gas escape with some bubbles preserved during cooling.",
     "basalt_vesicularity_high":
-        "Volatile-rich magma; rapid degassing on eruption.",
+        "Abundant vesicles indicate volatile-rich magma and rapid degassing during eruption.",
 
     "basalt_luster_dull":
-        "Fine-grained or weathered surface.",
+        "Dull surface is typical of fine-grained or weathered basalt with minimal crystal faces.",
     "basalt_luster_moderate":
-        "Partial crystalline faces or minor glass.",
+        "Moderate reflectivity indicates partial crystalline faces or minor glass content.",
     "basalt_luster_metallic":
-        "Glassy phases or ilmenite-rich surfaces.",
+        "Metallic luster suggests glassy phases or reflective ilmenite-rich mineral surfaces.",
 
     "basalt_phenocryst_hint_n/a":
-        "No phenocrysts; uniformly fine-grained lava.",
+        "No visible phenocrysts suggests a uniformly fine-grained or rapidly cooled lava.",
     "basalt_phenocryst_hint_olivine_like":
-        "Rounded green grains; olivine phenocrysts.",
+        "Rounded greenish grains are consistent with olivine phenocrysts crystallized prior to eruption.",
     "basalt_phenocryst_hint_pyroxene_like":
-        "Dark blocky crystals; pyroxene phenocrysts.",
+        "Dark blocky crystals are consistent with pyroxene phenocrysts formed during magma evolution.",
 
     # ANORTHOSITE ─────────────────────────────────────────────────────────────
     "anorthosite_crystal_fabric_equigranular":
-        "Uniform grain sizes; stable plutonic cooling.",
+        "Uniform crystal sizes indicate stable cooling conditions and a well-equilibrated plutonic texture.",
     "anorthosite_crystal_fabric_polygonal":
-        "Interlocking polygonal grains; solid-state recrystallization.",
+        "Polygonal interlocking grains reflect recrystallization and textural equilibration under solid-state conditions.",
 
     "anorthosite_brightness_moderate":
-        "Feldspar-dominated with minor mafic phases.",
+        "Moderate brightness reflects a feldspar-dominated composition with minor mafic phases.",
     "anorthosite_brightness_high":
-        "Plagioclase-rich; minimal dark minerals.",
+        "High brightness indicates a plagioclase-rich composition with minimal dark mineral content.",
 
     "anorthosite_surface_character_weathered":
-        "Alteration or microfracturing visible.",
+        "Weathered surface suggests alteration, microfracturing, or fine-grained secondary products.",
     "anorthosite_surface_character_vitreous":
-        "Fresh plagioclase faces; minimal weathering.",
+        "Vitreous surfaces indicate fresh crystal faces or minimal weathering of plagioclase grains.",
 
     "anorthosite_mafic_content_hint_low":
-        "Few dark minerals; mostly plagioclase.",
+        "Minor dark minerals suggest limited mafic inclusions within a predominantly plagioclase matrix.",
     "anorthosite_mafic_content_hint_moderate":
-        "Noticeable mafics; mixed lithology.",
+        "Noticeable mafic content indicates deviation from pure anorthosite toward more mixed lithology.",
 
     # BRECCIA ──────────────────────────────────────────────────────────────────
     "breccia_clast_angularity_rounded":
-        "Transport abrasion; prolonged reworking.",
+        "Rounded clasts indicate transport abrasion or prolonged reworking of original fragments.",
     "breccia_clast_angularity_angular":
-        "Minimal transport; near-source fragmentation.",
+        "Angular clasts indicate minimal transport and mechanical fragmentation at or near the source.",
 
     "breccia_sorting_poor":
-        "Mixed clast sizes; rapid deposition.",
     "breccia_sorting_well":
-        "Uniform sizes; transport-driven sorting.",
 
     "breccia_support_fabric_matrix_supported":
-        "Fine matrix separates larger clasts.",
+        "Matrix-supported fabric indicates fine material dominates and separates larger clasts.",
     "breccia_support_fabric_clast_supported":
-        "Clasts in contact; collapse or rockfall origin.",
+        "Clast-supported fabric indicates large fragments are in contact, suggesting collapse or rockfall origin.",
 }
-
 
 OUTPUT_JSON_SCHEMA = """
 RockNet v2.0 — Inference Output Schema
