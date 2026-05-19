@@ -185,32 +185,26 @@ def back_button(text: str) -> QPushButton:
 def capture_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(50)
-    b.setStyleSheet("font-size: 22px; background-color: #cad2c5; color: #7e1f23;")
+    b.setStyleSheet("font-size: 22px; background-color: #cad2c5; color: #344f41;")
     return b
 
 def redo_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(50)
-    b.setStyleSheet("background-color: #95b7dc; font-size: 20px; color: #385573;")
+    b.setStyleSheet("font-size: 20px; background-color: #95b7dc; color: #385573;")
     return b
 
 def classify_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(50)
-    b.setStyleSheet(
-        "font-size: 20px;"
-    )
+    b.setStyleSheet("font-size: 20px;")
     return b
 
 def reclassify_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(50)
-    b.setStyleSheet("background-color: #95b7dc; font-size: 20px; color: #385573;")
+    b.setStyleSheet("font-size: 20px; background-color: #95b7dc; color: #385573;")
     return b
-
-# QPushButton:hover {
-#     background-color: #f5f6f4;
-# }
 
 def save_button(text: str) -> QPushButton:
     b = QPushButton(text)
@@ -227,22 +221,13 @@ def homepage_button(text: str) -> QPushButton:
 def quit_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(50)
-    b.setStyleSheet("""
-            font-size: 20px;
-            background-color: #344f41;
-            color: #cad2c5;
-            border-radius: 6px;
-        """)
+    b.setStyleSheet("font-size: 20px; background-color: #344f41; color: #cad2c5;")
     return b
 
 def mission_button(text: str) -> QPushButton:
     b = QPushButton(text)
-    b.setMinimumHeight(45)
-    b.setStyleSheet("""
-            font-size: 18px;
-            background-color: #344f41;
-            color: #cad2c5;
-        """)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("font-size: 18px; background-color: #344f41; color: #cad2c5;")
     return b
 
 
@@ -541,17 +526,7 @@ class VoicePage(QWidget):
         layout.addWidget(self.text, stretch=1)
 
         row = QHBoxLayout()
-        self.btn_start = QPushButton("Start")
-        self.btn_start.setStyleSheet("""
-            QPushButton {
-                background-color: #617c32;
-                font-size: 22px;
-                color: white;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
+        self.btn_start = classify_button("Start")
         self.btn_stop = back_button("Stop")
         self.btn_redo = redo_button("Redo")
         self.btn_reset = reclassify_button("Reset Context")
