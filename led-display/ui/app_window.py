@@ -814,12 +814,12 @@ class RockDetailPage(QWidget):
         self.lbl_top = QLabel()
         self.lbl_top.setAlignment(Qt.AlignCenter)
         self.lbl_top.setFixedSize(200, 150)
-        self.lbl_top.setStyleSheet("background-color: #222; border: 2px solid #697d6a; border-radius: 8px;")
+        self.lbl_top.setStyleSheet("background-color: #222; border: 2px solid #697d6a; border-radius: 3px;")
 
         self.lbl_side = QLabel()
         self.lbl_side.setAlignment(Qt.AlignCenter)
         self.lbl_side.setFixedSize(200, 150)
-        self.lbl_side.setStyleSheet("background-color: #222; border: 2px solid #697d6a; border-radius: 8px;")
+        self.lbl_side.setStyleSheet("background-color: #222; border: 2px solid #697d6a; border-radius: 3px;")
 
         images_row.addWidget(self.lbl_top)
         images_row.addWidget(self.lbl_side)
