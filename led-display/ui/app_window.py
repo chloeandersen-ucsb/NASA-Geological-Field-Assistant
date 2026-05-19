@@ -1811,7 +1811,7 @@ class AppWindow(QMainWindow):
                 feat_lbl = QLabel(f"{feat_name.replace('_', ' ').title()}: {value}  ({conf}%)")
                 feat_lbl.setAlignment(Qt.AlignLeft)
                 feat_lbl.setWordWrap(True)
-                feat_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
+                feat_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
                 feat_lbl.setStyleSheet("font-size: 14px; border: none; background: transparent; font-weight: bold;")
                 self.classified.features_layout.addWidget(feat_lbl)
 
@@ -1820,7 +1820,7 @@ class AppWindow(QMainWindow):
                     note_lbl = QLabel(note)
                     note_lbl.setAlignment(Qt.AlignLeft)
                     note_lbl.setWordWrap(True)
-                    note_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
+                    note_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
                     note_lbl.setStyleSheet("font-size: 11px; color: #888; border: none; background: transparent; font-weight: normal;")
                     self.classified.features_layout.addWidget(note_lbl)
 
@@ -2369,7 +2369,8 @@ class AppWindow(QMainWindow):
                             associated_notes.append(n)
 
             associated_notes.sort(key=lambda x: x.get("ts", 0))
-            initial_summary = "Generating AI summary..." if associated_notes else "No associated recordings to summarize yet."
+            has_features = bool(entry.result.raw and entry.result.raw.get("features"))
+            initial_summary = "Generating AI summary..." if (associated_notes or has_features) else "No associated recordings to summarize yet."
             self.rock_detail.set_entry(entry, associated_notes, ai_summary=initial_summary)
             self.vm.request_rock_summary(entry, associated_notes)
             self.stack.setCurrentWidget(self.rock_detail)

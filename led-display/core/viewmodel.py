@@ -1318,10 +1318,7 @@ class ViewModel(QObject):
     def request_rock_summary(self, entry: RockEntry, associated_notes: list[dict], force: bool = False) -> None:
         self._cancel_rock_summary_worker()
 
-        if not associated_notes:
-            self._rock_summary_pending_request = None
-            self.rock_summary_changed.emit(entry.rock_id, "No associated recordings to summarize yet.")
-            return
+        features = self._extract_displayable_features(entry.result.raw)
 
         notes = []
         for note in associated_notes:
@@ -1330,33 +1327,32 @@ class ViewModel(QObject):
             if normalized:
                 notes.append(normalized)
 
-        if not notes:
+        if not notes and not features:
             self._rock_summary_pending_request = None
             self.rock_summary_changed.emit(entry.rock_id, "No associated recordings to summarize yet.")
             return
 
-        note_signature = self._build_rock_summary_signature(associated_notes)
+        signature = self._build_rock_summary_signature(associated_notes, features)
         cached = self._rock_summary_cache.get(entry.rock_id)
 
         if not cached and entry.ai_summary and entry.ai_summary_signature:
             cached = (entry.ai_summary_signature, entry.ai_summary)
-            # Load it into RAM for fast clicking later
             self._rock_summary_cache[entry.rock_id] = cached
-        
-        # --- NEW: Check if we are forcing it, otherwise use cache ---
-        if not force and cached and cached[0] == note_signature:
+
+        if not force and cached and cached[0] == signature:
             self._rock_summary_pending_request = None
             self.rock_summary_changed.emit(entry.rock_id, cached[1])
             return
 
-        self._rock_summary_pending_request = (entry.rock_id, note_signature)
+        self._rock_summary_pending_request = (entry.rock_id, signature)
         payload = {
             "rock_id": entry.rock_id,
             "label": entry.result.label,
             "notes": notes,
+            "features": features,
             "estimated_volume": entry.result.estimated_volume,
             "estimated_weight": entry.result.estimated_weight,
-            "is_retry": force
+            "is_retry": force,
         }
         worker = RockSummaryWorker(entry.rock_id, payload, self)
         worker.summary_ready.connect(self._on_rock_summary_finished)
@@ -1451,7 +1447,22 @@ class ViewModel(QObject):
         if worker is not None:
             worker.deleteLater()
 
-    def _build_rock_summary_signature(self, associated_notes: list[dict]) -> str:
+    def _extract_displayable_features(self, raw: Optional[dict]) -> dict[str, str]:
+        """Return {feature_name: humanized_value} for all displayable RockNet features."""
+        if not raw:
+            return {}
+        features_data = raw.get("features") or {}
+        result: dict[str, str] = {}
+        for name, feat in features_data.items():
+            if not isinstance(feat, dict) or not feat.get("display", False):
+                continue
+            value = feat.get("value", "")
+            if not value or value in ("n/a", "uncertain"):
+                continue
+            result[name] = value.replace("_", " ")
+        return result
+
+    def _build_rock_summary_signature(self, associated_notes: list[dict], features: Optional[dict] = None) -> str:
         chunks: list[str] = []
         for note in associated_notes:
             ts = note.get("ts", 0)
@@ -1459,6 +1470,9 @@ class ViewModel(QObject):
             cleaned = note.get("cleaned", note.get("transcript", ""))
             normalized = " ".join(str(cleaned).split())
             chunks.append(f"{ts}|{rock_id}|{normalized}")
+        if features:
+            for k in sorted(features.keys()):
+                chunks.append(f"feat|{k}|{features[k]}")
         joined = "\n".join(chunks)
         return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
