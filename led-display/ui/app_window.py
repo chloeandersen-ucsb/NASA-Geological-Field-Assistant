@@ -227,7 +227,7 @@ def quit_button(text: str) -> QPushButton:
 def mission_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(50)
-    b.setStyleSheet("font-size: 18px; background-color: #344f41; color: #cad2c5;")
+    b.setStyleSheet("font-size: 18px; background-color: #cad2c5; color: #344f41;")
     return b
 
 
