@@ -176,6 +176,75 @@ def big_button(text: str) -> QPushButton:
     b.setStyleSheet("font-size: 20px;")
     return b
 
+def back_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("font-size: 22px; background-color: #344f41; color: #cad2c5;")
+    return b
+
+def capture_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("font-size: 22px; background-color: #cad2c5; color: #7e1f23;")
+    return b
+
+def redo_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("background-color: #95b7dc; font-size: 20px; color: #385573;")
+    return b
+
+def classify_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet(
+        "font-size: 20px;"
+    )
+    return b
+
+def reclassify_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("background-color: #95b7dc; font-size: 20px; color: #385573;")
+    return b
+
+# QPushButton:hover {
+#     background-color: #f5f6f4;
+# }
+
+def save_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("font-size: 20px; background-color: #617c32; color: #f5f6f4;")
+    return b
+
+def homepage_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(70)
+    b.setStyleSheet("font-size: 20px; background-color: #344f41; color: #cad2c5;")
+    return b
+
+def quit_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("""
+            font-size: 20px;
+            background-color: #344f41;
+            color: #cad2c5;
+            border-radius: 6px;
+        """)
+    return b
+
+def mission_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(45)
+    b.setStyleSheet("""
+            font-size: 18px;
+            background-color: #344f41;
+            color: #cad2c5;
+        """)
+    return b
+
 
 class HomePage(QWidget):
     def __init__(self):
@@ -199,16 +268,10 @@ class HomePage(QWidget):
 
         layout.addStretch(1)
 
-        self.btn_classify = big_button("Classify Rock")
-        self.btn_voice = big_button("Voice to Text")
-        self.btn_trip = big_button(" View Trip Notes")
-        self.btn_quit = QPushButton("QUIT")
-        self.btn_quit.setStyleSheet("""
-            background-color: #344f41;
-            color: #cad2c5;
-        """)
-
-        self.btn_quit.setMinimumHeight(50)
+        self.btn_classify = homepage_button("Classify Rock")
+        self.btn_voice = homepage_button("Voice to Text")
+        self.btn_trip = homepage_button(" View Trip Notes")
+        self.btn_quit = quit_button("QUIT")
 
         layout.addWidget(self.btn_classify)
         layout.addWidget(self.btn_voice)
@@ -227,13 +290,7 @@ class LoadingPage(QWidget):
         layout.addStretch(1)
         layout.addWidget(label)
         layout.addStretch(1)
-        self.btn_cancel = QPushButton("Cancel")
-        self.btn_cancel.setMinimumHeight(50)
-        self.btn_cancel.setStyleSheet("""
-            background-color: #7e1f23;
-            font-size: 22px;
-            color: white;
-        """)
+        self.btn_cancel = back_button("Cancel")
         layout.addWidget(self.btn_cancel)
 
     def set_message(self, message: str) -> None:
@@ -278,20 +335,9 @@ class CameraPreviewPage(QWidget):
         self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
         layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
         
-        self.btn_capture = QPushButton("Capture")
-        self.btn_cancel = QPushButton("Cancel")
-        self.btn_cancel.setMinimumHeight(50)
-        self.btn_capture.setMinimumHeight(50)
-        #self.btn_cancel.setStyleSheet("font-size: 18px;")
-        
-        self.btn_cancel.setStyleSheet("""
-            background-color: #7e1f23;
-            font-size: 22px;
-            color: white;
-        """)
-        self.btn_capture.setStyleSheet("""
-            font-size: 22px;
-        """)
+        self.btn_capture = capture_button("Capture")
+        self.btn_cancel = back_button("Back")
+
         row = QHBoxLayout()
         row.addWidget(self.btn_cancel)
         row.addWidget(self.btn_capture)
@@ -336,12 +382,8 @@ class CaptureReviewPage(QWidget):
         layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
 
         btns = QHBoxLayout()
-        self.btn_retake = QPushButton("Retake")
-        self.btn_retake.setMinimumHeight(55)
-        self.btn_retake.setStyleSheet("background-color: #95b7dc; font-size: 20px; color: #385573;")
-        self.btn_classify = QPushButton("Classify")
-        self.btn_classify.setMinimumHeight(55)
-        self.btn_classify.setStyleSheet("background-color: #617c32; font-size: 20px; color: #f5f6f4;")
+        self.btn_retake = redo_button("Retake")
+        self.btn_classify = classify_button("Classify")
         btns.addWidget(self.btn_retake)
         btns.addWidget(self.btn_classify)
         layout.addLayout(btns)
@@ -432,11 +474,10 @@ class ClassifiedPage(QWidget):
         self.features_container.setStyleSheet(
             "background-color: #f5f6f4; border: 2px solid #697d6a; border-radius: 8px;"
         )
-        self.features_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
         self.features_layout = QVBoxLayout(self.features_container)
         self.features_layout.setSpacing(4)
         self.features_layout.setContentsMargins(10, 15, 10, 15)
-        layout.addWidget(self.features_container)
+        layout.addWidget(self.features_container, stretch=1)
 
         # Alternatives
         self.lbl_alternatives = QLabel("")
@@ -450,39 +491,9 @@ class ClassifiedPage(QWidget):
         layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
         layout.addSpacing(10)
 
-        self.btn_reclassify = big_button("Reclassify")
-        self.btn_reclassify.setStyleSheet("""
-            QPushButton {
-                background-color: #95b7dc;
-                font-size: 20px;
-                color: #385573;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
-        self.btn_save = big_button("Save Classification")
-        self.btn_save.setStyleSheet("""
-            QPushButton {
-                background-color: #617c32;
-                font-size: 20px;
-                color: #f5f6f4;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
-        self.btn_delete = big_button("Delete")
-        self.btn_delete.setStyleSheet("""
-            QPushButton {
-                background-color: #313940;
-                font-size: 20px;
-                color: #f5f6f4;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
+        self.btn_reclassify = reclassify_button("Reclassify")
+        self.btn_save = save_button("Save Classification")
+        self.btn_delete = back_button("Delete")
         layout.addWidget(self.btn_reclassify)
         layout.addWidget(self.btn_save)
         layout.addWidget(self.btn_delete)
@@ -541,64 +552,15 @@ class VoicePage(QWidget):
                 background-color: #f5f6f4;
             }
         """)
-        self.btn_stop = QPushButton("Stop")
-        self.btn_stop.setStyleSheet("""
-            QPushButton {
-                background-color: #7e1f23;
-                font-size: 22px;
-                color: white;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
-        self.btn_redo = QPushButton("Redo")
-        self.btn_redo.setStyleSheet("""
-            QPushButton {
-                background-color: #95b7dc;
-                font-size: 22px;
-                color: #385573;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
-        self.btn_reset = QPushButton("Reset Context")
-        self.btn_reset.setStyleSheet("""
-            QPushButton { background-color: #a88b5c; font-size: 22px; color: white; }
-            QPushButton:hover { background-color: #f5f6f4; color: #344f41; }
-        """)
-        self.btn_save = QPushButton("Save")
-        self.btn_save.setStyleSheet("""
-            QPushButton {
-                background-color: #617c32;
-                font-size: 22px;
-                color: white;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
-        self.btn_delete = QPushButton("Delete")
-        self.btn_delete.setStyleSheet("""
-            QPushButton {
-                background-color: #313940;
-                font-size: 22px;
-                color: white;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
-        
-        self.btn_cancel = QPushButton("Cancel")
-        self.btn_cancel.setStyleSheet("""
-            QPushButton { background-color: #313940; font-size: 22px; color: white; }
-            QPushButton:hover { background-color: #f5f6f4; color: #344f41; }
-        """)
+        self.btn_stop = back_button("Stop")
+        self.btn_redo = redo_button("Redo")
+        self.btn_reset = reclassify_button("Reset Context")
+        self.btn_save = save_button("Save")
+        self.btn_delete = back_button("Delete")       
+
+        self.btn_cancel = back_button("Back")
         
         for b in [self.btn_start, self.btn_stop, self.btn_redo, self.btn_save, self.btn_delete, self.btn_reset, self.btn_cancel]:
-            b.setMinimumHeight(55)
             row.addWidget(b)
 
         layout.addLayout(row)
@@ -623,42 +585,16 @@ class TripLoadPage(QWidget):
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
         layout.addWidget(title)
 
-        self.btn_create_new_mission = QPushButton("CREATE NEW MISSION")
-        self.btn_create_new_mission.setMinimumHeight(45)
-        self.btn_create_new_mission.setStyleSheet("""
-            QPushButton {
-                background-color: #344f41;
-                color: white;
-                font-size: 18px;
-                font-weight: bold;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #486454;
-            }
-        """)
+        self.btn_create_new_mission = QPushButton("Create New Mission")
         layout.addWidget(self.btn_create_new_mission)
 
         # --- Delete All Button ---
-        self.btn_delete_all = QPushButton("DELETE ALL")
-        self.btn_delete_all.setMinimumHeight(45)
-        self.btn_delete_all.setStyleSheet("""
-            QPushButton {
-                background-color: #cc0000;
-                color: white;
-                font-size: 18px;
-                font-weight: bold;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #ff3333;
-            }
-        """)
+        self.btn_delete_all = back_button("Delete All Missions")
         layout.addWidget(self.btn_delete_all)
 
         self.lbl_current_mission = QLabel("Current mission: --")
         self.lbl_current_mission.setAlignment(Qt.AlignCenter)
-        self.lbl_current_mission.setStyleSheet("font-size: 16px;")
+        self.lbl_current_mission.setStyleSheet("font-size: 12px;")
         layout.addWidget(self.lbl_current_mission)
 
         missions_label = QLabel("Missions:")
@@ -670,7 +606,7 @@ class TripLoadPage(QWidget):
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(self.list, stretch=1)
 
-        self.btn_back = big_button("Back")
+        self.btn_back = back_button("Back")
         layout.addWidget(self.btn_back)
         
         self._missions_data = []
@@ -695,11 +631,11 @@ class MissionDetailPage(QWidget):
 
         self.lbl_totals = QLabel("Total volume: --   Total weight: --")
         self.lbl_totals.setAlignment(Qt.AlignCenter)
-        self.lbl_totals.setStyleSheet("font-size: 16px;")
+        self.lbl_totals.setStyleSheet("font-size: 12px;")
         layout.addWidget(self.lbl_totals)
 
         items_label = QLabel("Mission Items:")
-        items_label.setStyleSheet("font-size: 18px; font-weight: 600;")
+        items_label.setStyleSheet("font-size: 16px; font-weight: 600;")
         layout.addWidget(items_label)
 
         self.list = QListWidget()
@@ -707,7 +643,7 @@ class MissionDetailPage(QWidget):
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(self.list, stretch=1)
 
-        self.btn_back = big_button("Back")
+        self.btn_back = back_button("Back")
         layout.addWidget(self.btn_back)
 
         self._timeline_data = []
@@ -747,40 +683,10 @@ class MissionCreatePage(QWidget):
         """)
         layout.addWidget(self.text)
 
-        self.btn_create = QPushButton("CREATE MISSION")
-        self.btn_create.setMinimumHeight(55)
-        self.btn_create.setStyleSheet("""
-            QPushButton {
-                background-color: #344f41;
-                font-size: 20px;
-                color: white;
-                font-weight: bold;
-                border-radius: 8px;
-            }
-            QPushButton:hover {
-                background-color: #486454;
-            }
-            QPushButton:disabled {
-                background-color: #8d9a92;
-                color: #dce2dd;
-            }
-        """)
+        self.btn_create = mission_button("Create Mission")
         layout.addWidget(self.btn_create)
 
-        self.btn_cancel = QPushButton("Cancel")
-        self.btn_cancel.setMinimumHeight(55)
-        self.btn_cancel.setStyleSheet("""
-            QPushButton {
-                background-color: #95b7dc;
-                font-size: 20px;
-                color: #385573;
-                font-weight: bold;
-                border-radius: 8px;
-            }
-            QPushButton:hover {
-                background-color: #b8d2ea;
-            }
-        """)
+        self.btn_cancel = back_button("Back")
         layout.addWidget(self.btn_cancel)
         
 class RockDetailPage(QWidget):
@@ -931,7 +837,7 @@ class RockDetailPage(QWidget):
         """)
         layout.addWidget(self.notes_text, stretch=1)
 
-        self.btn_back = big_button("Back")
+        self.btn_back = back_button("Back")
         layout.addWidget(self.btn_back)
         self._current_rock_id = None
 
