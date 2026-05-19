@@ -797,14 +797,16 @@ class RockDetailPage(QWidget):
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(10)
 
+        BOX = "background-color: #f5f6f4; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;"
+
         self.lbl_title = QLabel("Rock Detail")
         self.lbl_title.setAlignment(Qt.AlignCenter)
-        self.lbl_title.setStyleSheet("background-color: #f5f6f4; font-size: 24px; font-weight: 700; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
+        self.lbl_title.setStyleSheet(f"{BOX} font-size: 24px; font-weight: 700;")
         layout.addWidget(self.lbl_title)
 
         self.lbl_time = QLabel("")
         self.lbl_time.setAlignment(Qt.AlignCenter)
-        self.lbl_time.setStyleSheet("background-color: #f5f6f4; font-size: 16px; font-weight: 600;")
+        self.lbl_time.setStyleSheet(f"{BOX} font-size: 16px; font-weight: 600;")
         layout.addWidget(self.lbl_time)
 
         images_row = QHBoxLayout()
@@ -826,107 +828,79 @@ class RockDetailPage(QWidget):
         self.lbl_info = QLabel("")
         self.lbl_info.setWordWrap(True)
         self.lbl_info.setFixedHeight(60)
-        self.lbl_info.setStyleSheet("background-color: #f5f6f4; font-size: 18px; border: 2px solid #697d6a; border-radius: 8px; padding: 8px;")
+        self.lbl_info.setStyleSheet(f"{BOX} font-size: 18px;")
         layout.addWidget(self.lbl_info)
 
-        # --- Summary Header with Re-Summarize Button ---
         summary_box = QFrame()
-        summary_box.setStyleSheet("""
-            QFrame {
-                background-color: #f5f6f4;
-                # border: 2px solid #697d6a;
-                # border-radius: 8px;
-                # padding: 8px;
-            }
-        """)
+        summary_box.setStyleSheet("QFrame { background-color: #f5f6f4; border: 2px solid #697d6a; border-radius: 8px; }")
         summary_box_layout = QVBoxLayout(summary_box)
         summary_box_layout.setContentsMargins(8, 8, 8, 8)
         summary_box_layout.setSpacing(6)
 
         summary_header_layout = QHBoxLayout()
         self.lbl_summary_title = QLabel("Summary:")
-        self.lbl_summary_title.setStyleSheet("background-color: #f5f6f4; font-size: 18px; font-weight: 700; border-radius: 5px")
-        
+        self.lbl_summary_title.setStyleSheet("background-color: transparent; font-size: 18px; font-weight: 700; border: none;")
+
         self.btn_force_summary = QPushButton("RE-SUMMARIZE")
         self.btn_force_summary.setFixedSize(140, 30)
         self.btn_force_summary.setStyleSheet("""
-            QPushButton { background-color: #f5f6f4; color: #385573; font-weight: bold; border-radius: 5px; font-size: 18px; }
-            QPushButton:hover { background-color: #617c32; }
+            QPushButton { background-color: #cbd2c5; color: #344f41; font-weight: bold; border-radius: 8px; border: 2px solid #697d6a; font-size: 14px; }
+            QPushButton:hover { background-color: #617c32; color: white; border-color: #617c32; }
         """)
-        
+
         summary_header_layout.addWidget(self.lbl_summary_title, stretch=1)
         summary_header_layout.addSpacing(10)
         summary_header_layout.addWidget(self.btn_force_summary)
-        # layout.addLayout(summary_header_layout)
         summary_box_layout.addLayout(summary_header_layout)
 
-        # --- NEW: 2x3 BUTTON GRID FOR JOYSTICK SNAP NAVIGATION ---
         self.summary_buttons_widget = QWidget()
+        self.summary_buttons_widget.setStyleSheet("background-color: transparent; border: none;")
         self.summary_grid = QGridLayout(self.summary_buttons_widget)
         self.summary_grid.setSpacing(5)
         self.summary_grid.setContentsMargins(0, 0, 0, 0)
 
-        summary_header_layout.addWidget(self.summary_buttons_widget)
-        
+        summary_box_layout.addWidget(self.summary_buttons_widget)
+
         self.summary_data = {}
         self.summary_buttons = {}
-        
+
         self.categories = [
-            ("Appearance", "Color & Appearance"), 
-            ("Mineralogy", "Mineralogy & Composition"), 
+            ("Appearance", "Color & Appearance"),
+            ("Mineralogy", "Mineralogy & Composition"),
             ("Texture", "Texture & Structure"),
-            ("Weathering", "Weathering & Alteration"), 
-            ("Dimensions", "Dimensions & Weight"), 
+            ("Weathering", "Weathering & Alteration"),
+            ("Dimensions", "Dimensions & Weight"),
             ("Other", "Field Context & Sampling Notes")
         ]
-        
+
         for i, (short_name, full_name) in enumerate(self.categories):
             btn = QPushButton(short_name)
-            btn.setMinimumHeight(35)
+            btn.setMinimumHeight(50)
             btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #cbd2c5;
-                    color: #344f41;
-                    font-weight: bold;
-                    font-size: 17px;
-                    border-radius: 3px;
-                    border: 2px solid #344f41;
-                }
-                QPushButton:hover { background-color: #617c32; color: white; }
+                QPushButton { background-color: #cbd2c5; color: #344f41; font-weight: bold; font-size: 17px; border-radius: 8px; border: 2px solid #697d6a; }
+                QPushButton:hover { background-color: #617c32; color: white; border-color: #617c32; }
             """)
-            # Wire the button to pop open the overlay
             btn.clicked.connect(lambda checked=False, cat=full_name: self._show_category_popup(cat))
-            
-            # divmod(i, 3) beautifully calculates the row and column for a 3-column grid!
             row, col = divmod(i, 3)
             self.summary_grid.addWidget(btn, row, col)
             self.summary_buttons[full_name] = btn
             self.summary_data[full_name] = "Not specified."
-        
-        summary_box_layout.addWidget(self.summary_buttons_widget)
 
         layout.addWidget(summary_box)
-        # --------------------------------------------------------
 
-        # --- NEW: The hidden loading label ---
         self.lbl_summary_loading = QLabel("Generating AI summary...")
         self.lbl_summary_loading.setAlignment(Qt.AlignCenter)
-        self.lbl_summary_loading.setStyleSheet("font-size: 18px; font-style: italic; color: #344f41; background-color: transparent;")
-        self.lbl_summary_loading.setMinimumHeight(140) # Keeps the page from shrinking when the grid vanishes
+        self.lbl_summary_loading.setStyleSheet("font-size: 18px; font-style: italic; color: #344f41; background-color: transparent; border: none;")
+        self.lbl_summary_loading.setMinimumHeight(140)
         layout.addWidget(self.lbl_summary_loading)
         self.lbl_summary_loading.hide()
-        # -------------------------------------
-
-        # self.lbl_notes_title = QLabel("Associated Voice Notes:")
-        # self.lbl_notes_title.setStyleSheet("background-color: #f5f6f4; font-size: 18px; font-weight: 700;")
-        # layout.addWidget(self.lbl_notes_title)
 
         self.notes_text = QTextEdit()
         self.notes_text.setReadOnly(True)
         self.notes_text.setStyleSheet("""
             background-color: #f5f6f4;
             font-size: 16px;
-            border: 2px solid #cbd2c5;
+            border: 2px solid #697d6a;
             border-radius: 8px;
             padding: 8px;
         """)
