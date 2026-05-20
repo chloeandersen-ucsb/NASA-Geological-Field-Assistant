@@ -191,6 +191,7 @@ class JoystickNavigator(QObject):
         self._focused_list_row: int = -1
         self._focused_list_original_style: str = ""
         self._page_memory: dict = {}
+        self._list_origin: Optional[tuple] = None  # (QListWidget, row) when focused on a row's dot button
 
         self._thread = QThread(self)
         self._worker = _JoystickWorker(bus, addr)
@@ -539,6 +540,18 @@ class JoystickNavigator(QObject):
             self._exit_list_to_buttons(-1)
             return
 
+        # Return to list row if we navigated right from a list to a dot button
+        if self._list_origin is not None:
+            lst, row = self._list_origin
+            self._list_origin = None
+            self._clear_btn_highlight()
+            try:
+                if lst.isVisible() and row < lst.count():
+                    self._highlight_list_row(lst, row)
+                    return
+            except RuntimeError:
+                pass
+
         buttons = self._buttons_on_page()
         if not buttons:
             return
@@ -563,9 +576,23 @@ class JoystickNavigator(QObject):
 
     def _move_right(self):
         if self._in_list():
+            # Try to focus the dot button (⋮) for the currently highlighted row
+            lst = self._focused_list
+            row = self._focused_list_row
+            item = lst.item(row)
+            if item:
+                widget = lst.itemWidget(item)
+                if widget:
+                    for btn in widget.findChildren(QPushButton):
+                        if btn.objectName() == "joystick_skip" and btn.text() == "⋮":
+                            self._list_origin = (lst, row)
+                            self._highlight_btn(btn)
+                            return
+            # No dot button found; exit list normally
             self._exit_list_to_buttons(1)
             return
 
+        self._list_origin = None
         buttons = self._buttons_on_page()
         if not buttons:
             return
@@ -632,43 +659,6 @@ class JoystickNavigator(QObject):
         buttons = self._buttons_on_page()
         if buttons:
             self._highlight_btn(buttons[0])
-
-    def _move_right(self):
-        if self._in_list():
-            self._exit_list_to_buttons(1)
-            # # Fire the dot_btn (joystick_skip) for the focused row
-            # lst = self._focused_list
-            # row = self._focused_list_row
-            # item = lst.item(row)
-            # if item:
-            #     widget = lst.itemWidget(item)
-            #     if widget:
-            #         for btn in widget.findChildren(QPushButton):
-            #             if btn.objectName() == "joystick_skip":
-            #                 btn.click()
-            #                 return
-            return  # no dot button found, do nothing
-
-        buttons = self._buttons_on_page()
-        if not buttons:
-            return
-        idx = self._focused_btn_index(buttons)
-        if idx == -1:
-            self._highlight_btn(buttons[0])
-            return
-
-        cur_row = self._btn_row(buttons[idx])
-        cur_x = self._btn_x(buttons[idx])
-
-        same_row_right = [
-            i for i, b in enumerate(buttons)
-            if self._btn_row(b) == cur_row and self._btn_x(b) > cur_x
-        ]
-        if same_row_right:
-            self._highlight_btn(buttons[same_row_right[0]])
-        else:
-            same_row = [i for i, b in enumerate(buttons) if self._btn_row(b) == cur_row]
-            self._highlight_btn(buttons[same_row[0]])
 
     def _save_position(self):
         """Save current focus position for the current page."""
