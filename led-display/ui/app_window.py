@@ -1719,16 +1719,23 @@ class AppWindow(QMainWindow):
         elif state == AppStateType.VOICE_TO_TEXT:
             self.vm.stop_mission_name_recording(abort=True)
             self.mission_keyboard.hide()
-            self.inline_keyboard.hide()       
+            self.inline_keyboard.hide()
             self.inline_keyboard.set_shift_state(0)
             self.voice.text.setReadOnly(True)
-            
+
             self._update_vtt_context_label()
-            
+
+            # --- THE FIX: Wipe ghost text from late LLM flushes ---
+            # If we enter this page and are NOT actively recording, start fresh!
+            if not getattr(self.vm, 'vtt_active', False):
+                self.vm.transcription_text = ""
+                self.voice.text.clear()
+            # ------------------------------------------------------
+
             current_text = self.vm.transcription_text
             self.voice.text.setPlainText(current_text)
             self.voice.btn_save.setEnabled(bool(current_text.strip()))
-            
+
             # --- NEW: Trigger Dynamic Layout ---
             if getattr(self.vm, 'vtt_active', False):
                 self._update_voice_buttons("recording")
@@ -2509,7 +2516,7 @@ class AppWindow(QMainWindow):
         
         # Calculate the remaining percentage (preventing it from dropping below 0%)
         remaining_ratio = 1.0 - (elapsed_seconds / MAX_BATTERY_SECONDS)
-        percentage = max(0, int(remaining_ratio * 86))
+        percentage = max(0, int(remaining_ratio * 79))
         
         # Change the icon if it gets dangerously low (under 15%)
         icon = "🪫" if percentage < 15 else "🔋"
