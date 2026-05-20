@@ -5,6 +5,7 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Optional
 
 try:
     from llama_cpp import Llama
@@ -13,6 +14,93 @@ except ImportError:
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_MODEL_PATH = PROJECT_ROOT / "led-display" / "models" / "Phi-3-mini-4k-instruct-q4.gguf"
+
+# Maps each RockNet feature name to its corresponding AI summary bucket.
+FEATURE_TO_BUCKET: dict[str, str] = {
+    # Appearance
+    "luster":             "Color & Appearance",
+    "brightness":         "Color & Appearance",
+    # Mineralogy
+    "phenocryst_hint":    "Mineralogy & Composition",
+    "mafic_content_hint": "Mineralogy & Composition",
+    # Texture / structure
+    "groundmass_texture": "Texture & Structure",
+    "crystal_fabric":     "Texture & Structure",
+    "clast_angularity":   "Texture & Structure",
+    "sorting":            "Texture & Structure",
+    "support_fabric":     "Texture & Structure",
+    # Weathering
+    "vesicularity":       "Weathering & Alteration",
+    "surface_character":  "Weathering & Alteration",
+}
+
+
+def extract_displayable_features(raw: Optional[dict]) -> dict[str, str]:
+    """Return {feature_name: humanized_value} for all displayable RockNet features."""
+    if not raw:
+        return {}
+    features_data = raw.get("features") or {}
+    result: dict[str, str] = {}
+    for name, feat in features_data.items():
+        if not isinstance(feat, dict) or not feat.get("display", False):
+            continue
+        value = feat.get("value", "")
+        if not value or value in ("n/a", "uncertain"):
+            continue
+        result[name] = value.replace("_", " ")
+    return result
+
+
+def features_to_summary_string(
+    label: str,
+    features: dict[str, str],
+    volume: Optional[float],
+    weight,
+) -> str:
+    """Build a 6-line summary string from classification features alone (no LLM)."""
+    buckets: dict[str, list[str]] = {
+        "Color & Appearance": [],
+        "Mineralogy & Composition": [],
+        "Texture & Structure": [],
+        "Weathering & Alteration": [],
+        "Dimensions & Weight": [],
+        "Field Context & Sampling Notes": [],
+    }
+
+    for feat_name, feat_value in features.items():
+        bucket = FEATURE_TO_BUCKET.get(feat_name)
+        if bucket:
+            readable = feat_name.replace("_", " ")
+            buckets[bucket].append(f"{readable}: {feat_value}")
+
+    dim_parts: list[str] = []
+    if volume is not None:
+        dim_parts.append(f"{volume:.1f} cm³")
+    weight_str = _normalize_text(str(weight)) if weight else ""
+    if weight_str and weight_str.lower() != "none":
+        dim_parts.append(weight_str)
+    if dim_parts:
+        buckets["Dimensions & Weight"].append("; ".join(dim_parts))
+
+    if label and label.lower() not in ("other", "unknown rock", ""):
+        buckets["Field Context & Sampling Notes"].append(
+            f"Classified as {label} by RockNet"
+        )
+
+    lines: list[str] = []
+    for bucket_name, parts in buckets.items():
+        value = "; ".join(parts) if parts else "Not specified."
+        lines.append(f"- {bucket_name}: {value}")
+    return "\n".join(lines)
+
+
+def _build_features_prompt_block(features: dict[str, str]) -> str:
+    """Build the classification features section to inject into the LLM prompt."""
+    if not features:
+        return ""
+    lines = [f"  {name.replace('_', ' ')}: {value}" for name, value in features.items()]
+    return "=== CLASSIFICATION FEATURES (RockNet image analysis) ===\n" + "\n".join(lines)
+
 
 FILLER_PATTERNS = (
     r"\bi(?: am|'m)\s+talking\s+about\s+a\s+rock\b",
@@ -99,6 +187,7 @@ def _build_report_prompt(payload: dict, notes: list[str]) -> str:
     label = _normalize_text(payload.get("label", "Unknown rock"))
     volume = payload.get("estimated_volume")
     weight = _normalize_text(payload.get("estimated_weight"))
+    features: dict[str, str] = payload.get("features") or {}
 
     metadata: list[str] = [f"Rock type: {label}"]
     if volume is not None:
@@ -107,14 +196,17 @@ def _build_report_prompt(payload: dict, notes: list[str]) -> str:
         metadata.append(f"Estimated weight: {weight}")
 
     joined_notes = "\n".join(f"- {note}" for note in notes)
-    
+    features_block = _build_features_prompt_block(features)
     retry_instruction = " Please provide a more detailed, varied, and comprehensive synthesis than a standard report." if payload.get("is_retry") else ""
 
-    return (
-        f"=== METADATA ===\n{chr(10).join(metadata)}\n\n"
-        f"=== FIELD AUDIO TRANSCRIPTS ===\n{joined_notes}\n\n"
+    sections: list[str] = [f"=== METADATA ===\n{chr(10).join(metadata)}"]
+    if features_block:
+        sections.append(features_block)
+    sections.append(f"=== FIELD AUDIO TRANSCRIPTS ===\n{joined_notes}")
+    synthesis_note = "classification features, " if features_block else ""
+    sections.append(
         "=== INSTRUCTIONS ===\n"
-        "Synthesize the metadata and transcripts above into a concise field report. "
+        f"Synthesize the metadata, {synthesis_note}and transcripts above into a concise field report. "
         "You MUST copy the exact 6-line template below word-for-word and fill in the brackets. Do not add, remove, or rename any lines. If data is missing, replace the bracket with 'Not specified'.\n"
         f"{retry_instruction}\n\n"
         "TEMPLATE:\n"
@@ -125,6 +217,7 @@ def _build_report_prompt(payload: dict, notes: list[str]) -> str:
         "- Dimensions & Weight: [fill in]\n"
         "- Field Context & Sampling Notes: [fill in]"
     )
+    return "\n\n".join(sections)
 
 
 def _load_llama() -> Llama:
@@ -235,6 +328,8 @@ def _generate_summary(payload: dict, notes: list[str]) -> str:
 
 def summarize_payload(payload: dict) -> dict:
     rock_id = payload.get("rock_id")
+    features: dict[str, str] = payload.get("features") or {}
+
     cleaned_notes: list[str] = []
     for note in payload.get("notes", []):
         cleaned_note = _clean_note(note)
@@ -243,6 +338,14 @@ def summarize_payload(payload: dict) -> dict:
     notes = _dedupe(cleaned_notes)
 
     if not notes:
+        if features:
+            summary = features_to_summary_string(
+                label=payload.get("label", ""),
+                features=features,
+                volume=payload.get("estimated_volume"),
+                weight=payload.get("estimated_weight"),
+            )
+            return {"rock_id": rock_id, "summary": summary}
         return {
             "rock_id": rock_id,
             "summary": "No associated recordings to summarize yet.",
