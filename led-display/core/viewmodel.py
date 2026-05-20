@@ -1217,8 +1217,13 @@ class ViewModel(QObject):
 
     def stop_voice_to_text(self) -> None:
         import sys
+        import time
         print("[VIEWMODEL] stop_voice_to_text() called", file=sys.stderr)
         self.vtt_active = False #!!!!!
+        
+        # --- NEW: Track exactly when we hit stop ---
+        self._stop_time = time.time()
+        
         self.transcriber.stop_recording()
         if self._transcription_target == "voice":
             self._transcription_target = None
@@ -1318,10 +1323,7 @@ class ViewModel(QObject):
     def request_rock_summary(self, entry: RockEntry, associated_notes: list[dict], force: bool = False) -> None:
         self._cancel_rock_summary_worker()
 
-        if not associated_notes:
-            self._rock_summary_pending_request = None
-            self.rock_summary_changed.emit(entry.rock_id, "No associated recordings to summarize yet.")
-            return
+        features = self._extract_displayable_features(entry.result.raw)
 
         notes = []
         for note in associated_notes:
@@ -1330,33 +1332,32 @@ class ViewModel(QObject):
             if normalized:
                 notes.append(normalized)
 
-        if not notes:
+        if not notes and not features:
             self._rock_summary_pending_request = None
             self.rock_summary_changed.emit(entry.rock_id, "No associated recordings to summarize yet.")
             return
 
-        note_signature = self._build_rock_summary_signature(associated_notes)
+        signature = self._build_rock_summary_signature(associated_notes, features)
         cached = self._rock_summary_cache.get(entry.rock_id)
 
         if not cached and entry.ai_summary and entry.ai_summary_signature:
             cached = (entry.ai_summary_signature, entry.ai_summary)
-            # Load it into RAM for fast clicking later
             self._rock_summary_cache[entry.rock_id] = cached
-        
-        # --- NEW: Check if we are forcing it, otherwise use cache ---
-        if not force and cached and cached[0] == note_signature:
+
+        if not force and cached and cached[0] == signature:
             self._rock_summary_pending_request = None
             self.rock_summary_changed.emit(entry.rock_id, cached[1])
             return
 
-        self._rock_summary_pending_request = (entry.rock_id, note_signature)
+        self._rock_summary_pending_request = (entry.rock_id, signature)
         payload = {
             "rock_id": entry.rock_id,
             "label": entry.result.label,
             "notes": notes,
+            "features": features,
             "estimated_volume": entry.result.estimated_volume,
             "estimated_weight": entry.result.estimated_weight,
-            "is_retry": force
+            "is_retry": force,
         }
         worker = RockSummaryWorker(entry.rock_id, payload, self)
         worker.summary_ready.connect(self._on_rock_summary_finished)
@@ -1396,14 +1397,16 @@ class ViewModel(QObject):
     def _on_transcription_token(self, chunk: str) -> None:
         import sys
         print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
-        # if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
-        #     self._set_state(AppStateType.VOICE_TO_TEXT)
+        if self._was_session_finalized:
+            return
         self.transcription_text += chunk
         print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
         self.transcription_changed.emit(self.transcription_text)
 
     def _on_transcription_completed(self, final_text: str) -> None:
         import sys
+        import time
+        
         if self._transcription_target == "mission":
             if not self._mission_name_accept_transcript:
                 return
@@ -1412,8 +1415,22 @@ class ViewModel(QObject):
             self.mission_name_text = final_text
             self.mission_name_transcription_changed.emit(self.mission_name_text)
             return
+            
         if self._was_session_finalized:
             return
+            
+        # --- THE REAL FIX ---
+        # The background service instantly fires a 'completed' signal the millisecond you hit stop, 
+        # passing the raw, unformatted text. If we let it through, it instantly kills the loading screen.
+        # Since we know the LLM takes at least a few seconds to run, we just ignore any non-empty 
+        # completed signal that arrives within 2.0 seconds of hitting stop!
+        if hasattr(self, '_stop_time'):
+            elapsed = time.time() - self._stop_time
+            if elapsed < 2.0 and final_text.strip() and "No audio recorded" not in final_text:
+                print(f"[VIEWMODEL] Ignoring premature raw text. Waiting for LLM...", file=sys.stderr)
+                return
+        # --------------------
+            
         if not final_text or not final_text.strip() or "No audio recorded" in final_text:
             self.transcription_text = ""
             self.transcription_changed.emit("")
@@ -1451,7 +1468,22 @@ class ViewModel(QObject):
         if worker is not None:
             worker.deleteLater()
 
-    def _build_rock_summary_signature(self, associated_notes: list[dict]) -> str:
+    def _extract_displayable_features(self, raw: Optional[dict]) -> dict[str, str]:
+        """Return {feature_name: humanized_value} for all displayable RockNet features."""
+        if not raw:
+            return {}
+        features_data = raw.get("features") or {}
+        result: dict[str, str] = {}
+        for name, feat in features_data.items():
+            if not isinstance(feat, dict) or not feat.get("display", False):
+                continue
+            value = feat.get("value", "")
+            if not value or value in ("n/a", "uncertain"):
+                continue
+            result[name] = value.replace("_", " ")
+        return result
+
+    def _build_rock_summary_signature(self, associated_notes: list[dict], features: Optional[dict] = None) -> str:
         chunks: list[str] = []
         for note in associated_notes:
             ts = note.get("ts", 0)
@@ -1459,6 +1491,9 @@ class ViewModel(QObject):
             cleaned = note.get("cleaned", note.get("transcript", ""))
             normalized = " ".join(str(cleaned).split())
             chunks.append(f"{ts}|{rock_id}|{normalized}")
+        if features:
+            for k in sorted(features.keys()):
+                chunks.append(f"feat|{k}|{features[k]}")
         joined = "\n".join(chunks)
         return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
