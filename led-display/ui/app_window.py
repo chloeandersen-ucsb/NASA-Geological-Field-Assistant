@@ -2481,8 +2481,9 @@ class AppWindow(QMainWindow):
             self.mission_create.lbl_recording_status.setText("Recording stopped")
 
     def _update_status(self):
-        """Fetches the live system time, locks to West Coast, and gets battery percentage."""
+        """Fetches the live system time, locks to West Coast, and calculates dead-reckoning battery."""
         import datetime
+        import time
         
         try:
             from zoneinfo import ZoneInfo
@@ -2498,18 +2499,22 @@ class AppWindow(QMainWindow):
         self.lbl_time.setText(time_str)
         self.lbl_date.setText(date_str)
         
-        try:
-            import psutil
-            battery = psutil.sensors_battery()
-            if battery:
-                percent = int(battery.percent)
-                is_plugged = battery.power_plugged
-                icon = "🔋"
-                self.lbl_battery.setText(f"{percent}% {icon}")
-            else:
-                self.lbl_battery.setText("100% 🔋") 
-        except Exception as e:
-            self.lbl_battery.setText("Battery N/A")
+        # --- DEAD RECKONING BATTERY HACK ---
+        # Assuming the 10,000 mAh INIU Power Bank (~186 minutes total runtime)
+        MAX_BATTERY_MINUTES = 378 
+        MAX_BATTERY_SECONDS = MAX_BATTERY_MINUTES * 60
+        
+        # Calculate how long the app has been running
+        elapsed_seconds = time.time() - self.session_start_time
+        
+        # Calculate the remaining percentage (preventing it from dropping below 0%)
+        remaining_ratio = 1.0 - (elapsed_seconds / MAX_BATTERY_SECONDS)
+        percentage = max(0, int(remaining_ratio * 86))
+        
+        # Change the icon if it gets dangerously low (under 15%)
+        icon = "🪫" if percentage < 15 else "🔋"
+        
+        self.lbl_battery.setText(f"{percentage}% {icon}")
             
 
 class Keyboard(QDialog):
