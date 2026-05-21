@@ -908,6 +908,7 @@ class ViewModel(QObject):
                 except OSError:
                     pass
         self.current_classification = None
+        self._original_classification_label = None
         self._last_top_path = None
         self._last_side_path = None
         self.open_camera_preview()
@@ -1045,6 +1046,7 @@ class ViewModel(QObject):
         if self.current_classification:
             self._delete_classification_files(self.current_classification)
         self.current_classification = None
+        self._original_classification_label = None
         self.go_home()
 
     def _delete_classification_files(self, result: ClassificationResult) -> None:
