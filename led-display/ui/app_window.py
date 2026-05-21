@@ -19,7 +19,7 @@ from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPain
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton, QMainWindow, QStackedWidget,
     QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout, QDialog,
-    QFrame
+    QFrame, QProgressBar
 )
 
 import importlib.util, pathlib
@@ -248,21 +248,56 @@ class LoadingPage(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        label = QLabel("Analyzing…")
-        label.setAlignment(Qt.AlignCenter)
-        label.setStyleSheet("font-size: 22px;")
+
+        self._label = QLabel("Analyzing…")
+        self._label.setAlignment(Qt.AlignCenter)
+        self._label.setStyleSheet("font-size: 22px;")
+
+        self._progress = QProgressBar()
+        self._progress.setRange(0, 100)
+        self._progress.setValue(0)
+        self._progress.setTextVisible(False)
+        self._progress.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #cad2c5;
+                border-radius: 5px;
+                background-color: #577d6a;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: #344f41;
+                border-radius: 3px;
+            }
+        """)
+
+        self._exact_progress = 0.0
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+
         layout.addStretch(1)
-        layout.addWidget(label)
+        layout.addWidget(self._label)
+        layout.addSpacing(15)
+        layout.addWidget(self._progress)
         layout.addStretch(1)
         self.btn_cancel = dark_green_button("Cancel")
         layout.addWidget(self.btn_cancel)
 
+    def _tick(self):
+        if self._exact_progress < 100.0:
+            self._exact_progress += (100.0 - self._exact_progress) * 0.01
+            self._progress.setValue(int(self._exact_progress))
+
+    def start_progress(self):
+        self._exact_progress = 0.0
+        self._progress.setValue(0)
+        self._timer.start(33)
+
+    def stop_progress(self):
+        self._timer.stop()
+        self._progress.setValue(0)
+
     def set_message(self, message: str) -> None:
-        for i in range(self.layout().count()):
-            item = self.layout().itemAt(i)
-            if item and item.widget() and isinstance(item.widget(), QLabel):
-                item.widget().setText(message)
-                break
+        self._label.setText(message)
 
 
 class VoiceLoadingPage(QWidget):
@@ -1570,7 +1605,11 @@ class AppWindow(QMainWindow):
             if state == AppStateType.VOICE_TO_TEXT and self.stack.currentWidget() == self.camera_preview:
                 pass
             else:
+                if self.stack.currentWidget() == self.loading and mapping[state] != self.loading:
+                    self.loading.stop_progress()
                 self.stack.setCurrentWidget(mapping[state])
+                if mapping[state] == self.loading:
+                    self.loading.start_progress()
 
         if state == AppStateType.HOME:
             self.vm.stop_mission_name_recording(abort=True)
