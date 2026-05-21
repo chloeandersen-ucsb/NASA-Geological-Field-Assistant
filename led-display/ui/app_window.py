@@ -1690,10 +1690,9 @@ class AppWindow(QMainWindow):
             self.classified.alternatives_layout.addWidget(lbl)
             alt_buttons = []
             for alt_label, alt_conf in alt_entries:
-                btn = blue_button("")
-                btn.setText(
-                    f"<center>{alt_label.upper()}<br>"
-                    f"<span style='font-size:12px'>conf: {int(alt_conf * 100)}%</span></center>"
+                btn = blue_button(f"{alt_label.upper()}\nconf: {int(alt_conf * 100)}%")
+                btn.setStyleSheet(
+                    "font-size: 14px; background-color: #95b7dc; color: #385573;"
                 )
                 btn.setObjectName("joystick_skip")
                 alt_buttons.append(btn)
@@ -1704,8 +1703,8 @@ class AppWindow(QMainWindow):
             selected = [None]
 
             def _on_alt_clicked(_checked, chosen_label, chosen_conf, chosen_btn):
-                unselected_style = "font-size: 20px; background-color: #95b7dc; color: #385573;"
-                selected_style   = "font-size: 20px; background-color: #385573; color: #f5f6f4;"
+                unselected_style = "font-size: 14px; background-color: #95b7dc; color: #385573;"
+                selected_style   = "font-size: 14px; background-color: #385573; color: #f5f6f4;"
                 if selected[0] is chosen_btn:
                     chosen_btn.setStyleSheet(unselected_style)
                     selected[0] = None
