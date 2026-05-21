@@ -78,6 +78,19 @@ def main() -> None:
         print(f"[DAEMON] Checkpoint metadata: {metadata}", file=sys.stderr, flush=True)
 
     emit({"status": "ready"})
+
+    # Pre-compile CUDA kernels so the first real inference isn't slow (~6s → ~200ms).
+    t_warm = time.perf_counter()
+    with torch.no_grad():
+        dummy = torch.zeros(1, 3, 640, 640, device=device)
+        model(dummy)
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    print(
+        f"[DAEMON] CUDA warmup done in {(time.perf_counter() - t_warm)*1000:.0f}ms{_cuda_mem_mb()}",
+        file=sys.stderr, flush=True,
+    )
+
     inference_count = 0
 
     for line in sys.stdin:

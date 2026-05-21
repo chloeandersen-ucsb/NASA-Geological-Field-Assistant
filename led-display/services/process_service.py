@@ -177,6 +177,7 @@ class ClassificationService(QObject):
 
         self._proc = QProcess(self)
         self._proc.setReadChannel(QProcess.StandardOutput)
+        self._proc.setProcessChannelMode(QProcess.ForwardedErrorChannel)
         self._proc.readyReadStandardOutput.connect(self._on_stdout)
         self._proc.finished.connect(self._on_proc_finished)
         self._proc.errorOccurred.connect(self._on_proc_error)
