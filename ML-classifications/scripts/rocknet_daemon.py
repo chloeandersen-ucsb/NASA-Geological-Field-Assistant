@@ -13,7 +13,6 @@ Protocol:
 
 import json
 import sys
-import time
 from pathlib import Path
 
 import torch
@@ -40,15 +39,6 @@ def emit(obj: dict) -> None:
     print(json.dumps(obj), flush=True)
 
 
-def _cuda_mem_mb() -> str:
-    """Return a short CUDA memory summary string, or empty string if unavailable."""
-    if not torch.cuda.is_available():
-        return ""
-    alloc  = torch.cuda.memory_allocated()  / 1024**2
-    reserv = torch.cuda.memory_reserved()   / 1024**2
-    return f"  [CUDA alloc={alloc:.1f}MB reserved={reserv:.1f}MB]"
-
-
 def main() -> None:
     import argparse
     parser = argparse.ArgumentParser()
@@ -58,40 +48,22 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    t0 = time.perf_counter()
     device = select_device()
-    print(f"[DAEMON] Starting — device={device}", file=sys.stderr, flush=True)
 
     if device.type == "cuda":
         torch.cuda.empty_cache()
-        print(f"[DAEMON] CUDA cache cleared{_cuda_mem_mb()}", file=sys.stderr, flush=True)
 
     model, metadata = load_checkpoint(args.weights, device=device)
     model.eval()
 
-    load_ms = (time.perf_counter() - t0) * 1000
-    print(
-        f"[DAEMON] Model loaded in {load_ms:.0f}ms{_cuda_mem_mb()}",
-        file=sys.stderr, flush=True,
-    )
-    if metadata:
-        print(f"[DAEMON] Checkpoint metadata: {metadata}", file=sys.stderr, flush=True)
-
     emit({"status": "ready"})
 
     # Pre-compile CUDA kernels so the first real inference isn't slow (~6s → ~200ms).
-    t_warm = time.perf_counter()
     with torch.no_grad():
         dummy = torch.zeros(1, 3, 640, 640, device=device)
         model(dummy)
     if device.type == "cuda":
         torch.cuda.synchronize()
-    print(
-        f"[DAEMON] CUDA warmup done in {(time.perf_counter() - t_warm)*1000:.0f}ms{_cuda_mem_mb()}",
-        file=sys.stderr, flush=True,
-    )
-
-    inference_count = 0
 
     for line in sys.stdin:
         line = line.strip()
@@ -112,11 +84,8 @@ def main() -> None:
             emit({"id": req_id, "status": "error", "message": "missing 'image' field"})
             continue
 
-        t1 = time.perf_counter()
         try:
             result = run_inference(model, image_path, device)
-            infer_ms = (time.perf_counter() - t1) * 1000
-            inference_count += 1
 
             if not output_json:
                 stem        = Path(image_path).stem
@@ -125,22 +94,10 @@ def main() -> None:
             with open(output_json, "w") as f:
                 json.dump(result, f, indent=2)
 
-            primary = result.get("primary", {})
-            print(
-                f"[DAEMON] #{inference_count} infer={infer_ms:.0f}ms "
-                f"result={primary.get('family','?')} conf={primary.get('confidence',0):.3f} "
-                f"tier={primary.get('tier','?')}{_cuda_mem_mb()}",
-                file=sys.stderr, flush=True,
-            )
-
             emit({"id": req_id, "status": "ok", "json_path": output_json})
 
         except Exception as exc:
-            infer_ms = (time.perf_counter() - t1) * 1000
-            print(
-                f"[DAEMON] #{inference_count+1} FAILED after {infer_ms:.0f}ms: {exc}",
-                file=sys.stderr, flush=True,
-            )
+            print(f"[DAEMON] Inference failed: {exc}", file=sys.stderr, flush=True)
             emit({"id": req_id, "status": "error", "message": str(exc)})
 
 

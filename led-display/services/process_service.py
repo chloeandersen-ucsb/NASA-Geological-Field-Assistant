@@ -6,7 +6,6 @@ import re
 import signal
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 import cv2
@@ -186,8 +185,6 @@ class ClassificationService(QObject):
         self._pending_request: dict | None = None
         self._busy            = False
         self._expected_json_path: str | None = None
-        self._classify_t0: float | None = None
-        self._daemon_start_t0: float | None = None
 
         if self._daemon_mode:
             self._start_daemon()
@@ -203,7 +200,6 @@ class ClassificationService(QObject):
             str(self.daemon_script),
             "--weights", str(self.default_weights),
         ])
-        print("[ML-SERVICE] Starting RockNet daemon…", file=sys.stderr, flush=True)
 
     def kill(self) -> None:
         if self._proc.state() != QProcess.NotRunning:
@@ -245,13 +241,10 @@ class ClassificationService(QObject):
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
-                print(f"[ML] Daemon non-JSON stdout: {raw}", file=sys.stderr)
                 continue
 
             if msg.get("status") == "ready":
                 self._ready = True
-                startup_ms = (time.perf_counter() - self._daemon_start_t0) * 1000 if self._daemon_start_t0 else 0
-                print(f"[ML-SERVICE] Daemon ready in {startup_ms:.0f}ms", file=sys.stderr, flush=True)
                 if self._pending_request:
                     self._send_request(self._pending_request)
                     self._pending_request = None
@@ -259,14 +252,11 @@ class ClassificationService(QObject):
 
             # Result or error for a classify call
             self._busy = False
-            round_trip_ms = (time.perf_counter() - self._classify_t0) * 1000 if self._classify_t0 else 0
             if msg.get("status") == "error":
-                print(f"[ML-SERVICE] Classify error after {round_trip_ms:.0f}ms: {msg.get('message')}", file=sys.stderr, flush=True)
                 self.failed.emit(msg.get("message", "Unknown daemon error"))
                 return
 
             json_path = msg.get("json_path")
-            print(f"[ML-SERVICE] Classify OK in {round_trip_ms:.0f}ms → {json_path}", file=sys.stderr, flush=True)
             if not json_path or not os.path.exists(json_path):
                 self.failed.emit(f"Daemon result JSON not found: {json_path}")
                 return
@@ -275,10 +265,8 @@ class ClassificationService(QObject):
 
     def _send_request(self, request: dict) -> None:
         self._busy = True
-        self._classify_t0 = time.perf_counter()
         line = (json.dumps(request) + "\n").encode()
         self._proc.write(line)
-        print(f"[ML-SERVICE] Sent classify request: {request.get('image')}", file=sys.stderr, flush=True)
 
     # ------------------------------------------------------------------
     # Daemon process events
