@@ -1688,10 +1688,32 @@ class AppWindow(QMainWindow):
             lbl = QLabel("Alternatively:")
             lbl.setStyleSheet("font-size: 12px; color: #888;")
             self.classified.alternatives_layout.addWidget(lbl)
+            alt_buttons = []
             for alt_label, alt_conf in alt_entries:
-                btn = light_green_button(f"{alt_label.upper()} ({int(alt_conf * 100)}%)")
-                btn.clicked.connect(lambda _checked, l=alt_label: self.vm.override_classification_label(l))
+                btn = blue_button(f"{alt_label.upper()} ({int(alt_conf * 100)}%)")
+                alt_buttons.append(btn)
                 self.classified.alternatives_layout.addWidget(btn)
+
+            original_label = result.label
+            selected = [None]
+
+            def _on_alt_clicked(_checked, chosen_label, chosen_btn):
+                unselected_style = "font-size: 20px; background-color: #95b7dc; color: #385573;"
+                selected_style   = "font-size: 20px; background-color: #385573; color: #f5f6f4;"
+                if selected[0] is chosen_btn:
+                    chosen_btn.setStyleSheet(unselected_style)
+                    selected[0] = None
+                    self.vm.override_classification_label(original_label)
+                else:
+                    for b in alt_buttons:
+                        b.setStyleSheet(unselected_style)
+                    chosen_btn.setStyleSheet(selected_style)
+                    selected[0] = chosen_btn
+                    self.vm.override_classification_label(chosen_label)
+
+            for btn, (alt_label, _) in zip(alt_buttons, alt_entries):
+                btn.clicked.connect(lambda _checked, l=alt_label, b=btn: _on_alt_clicked(_checked, l, b))
+
             self.classified.alternatives_layout.addStretch()
 
         raw = result.raw or {}

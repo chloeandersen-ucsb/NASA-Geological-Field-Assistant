@@ -997,6 +997,7 @@ class ViewModel(QObject):
             raw=payload,
         )
         self.current_classification = result
+        self._original_classification_label = result.label
         self.classification_changed.emit(result)
         if self._volume_pending:
             volume_str = "Volume = Calculating..."
@@ -1011,19 +1012,19 @@ class ViewModel(QObject):
 
     def override_classification_label(self, label: str) -> None:
         if self.current_classification:
-            self.current_classification = dc_replace(
-                self.current_classification, label=label, raw={}
-            )
-            self.classification_changed.emit(self.current_classification)
+            self.current_classification = dc_replace(self.current_classification, label=label)
 
     def save_classification(self) -> None:
         if self.current_classification:
+            to_save = self.current_classification
+            if to_save.label != getattr(self, "_original_classification_label", to_save.label):
+                to_save = dc_replace(to_save, raw={})
             mission = self.store.ensure_current_mission()
             self.active_mission_id = mission.mission_id
-            entry = self.store.save_rock(self.current_classification, mission_id=mission.mission_id)
+            entry = self.store.save_rock(to_save, mission_id=mission.mission_id)
             self.active_rock_id = entry.rock_id
             self._classification_saved_rock_id = entry.rock_id
-            label = self.current_classification.label
+            label = to_save.label
             
             # --- SHARED MAC PATH ---
             project_root = Path(__file__).resolve().parent.parent.parent
