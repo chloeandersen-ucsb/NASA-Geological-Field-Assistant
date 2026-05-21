@@ -173,10 +173,58 @@ class LoadingOverlay(QWidget):
         self.spinner.stop()
         self.text_timer.stop()
 
-def big_button(text: str) -> QPushButton:
+def back_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("font-size: 22px; background-color: #344f41; color: #cad2c5;")
+    return b
+
+def capture_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("font-size: 22px; background-color: #cad2c5; color: #344f41;")
+    return b
+
+def redo_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("font-size: 20px; background-color: #95b7dc; color: #385573;")
+    return b
+
+def classify_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("font-size: 20px;")
+    return b
+
+def reclassify_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("font-size: 20px; background-color: #95b7dc; color: #385573;")
+    return b
+
+def save_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("font-size: 20px; background-color: #617c32; color: #f5f6f4;")
+    return b
+
+def homepage_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(70)
-    b.setStyleSheet("font-size: 20px;")
+    b.setStyleSheet("font-size: 20px; background-color: #344f41; color: #cad2c5;")
+    return b
+
+def quit_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("font-size: 20px; background-color: #344f41; color: #cad2c5;")
+    return b
+
+def mission_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(50)
+    b.setStyleSheet("font-size: 22px; background-color: #cad2c5; color: #344f41;")
     return b
 
 
@@ -202,16 +250,10 @@ class HomePage(QWidget):
 
         layout.addStretch(1)
 
-        self.btn_classify = big_button("Classify Rock")
-        self.btn_voice = big_button("Voice to Text")
-        self.btn_trip = big_button(" View Trip Notes")
-        self.btn_quit = QPushButton("QUIT")
-        self.btn_quit.setStyleSheet("""
-            background-color: #344f41;
-            color: #cad2c5;
-        """)
-
-        self.btn_quit.setMinimumHeight(50)
+        self.btn_classify = homepage_button("Classify Rock")
+        self.btn_voice = homepage_button("Voice to Text")
+        self.btn_trip = homepage_button(" View Trip Notes")
+        self.btn_quit = quit_button("QUIT")
 
         layout.addWidget(self.btn_classify)
         layout.addWidget(self.btn_voice)
@@ -230,13 +272,7 @@ class LoadingPage(QWidget):
         layout.addStretch(1)
         layout.addWidget(label)
         layout.addStretch(1)
-        self.btn_cancel = QPushButton("Cancel")
-        self.btn_cancel.setMinimumHeight(50)
-        self.btn_cancel.setStyleSheet("""
-            background-color: #7e1f23;
-            font-size: 22px;
-            color: white;
-        """)
+        self.btn_cancel = back_button("Cancel")
         layout.addWidget(self.btn_cancel)
 
     def set_message(self, message: str) -> None:
@@ -281,20 +317,9 @@ class CameraPreviewPage(QWidget):
         self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
         layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
         
-        self.btn_capture = QPushButton("Capture")
-        self.btn_cancel = QPushButton("Cancel")
-        self.btn_cancel.setMinimumHeight(50)
-        self.btn_capture.setMinimumHeight(50)
-        #self.btn_cancel.setStyleSheet("font-size: 18px;")
-        
-        self.btn_cancel.setStyleSheet("""
-            background-color: #7e1f23;
-            font-size: 22px;
-            color: white;
-        """)
-        self.btn_capture.setStyleSheet("""
-            font-size: 22px;
-        """)
+        self.btn_capture = capture_button("Capture")
+        self.btn_cancel = back_button("Back")
+
         row = QHBoxLayout()
         row.addWidget(self.btn_cancel)
         row.addWidget(self.btn_capture)
@@ -339,12 +364,8 @@ class CaptureReviewPage(QWidget):
         layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
 
         btns = QHBoxLayout()
-        self.btn_retake = QPushButton("Retake")
-        self.btn_retake.setMinimumHeight(55)
-        self.btn_retake.setStyleSheet("background-color: #95b7dc; font-size: 20px; color: #385573;")
-        self.btn_classify = QPushButton("Classify")
-        self.btn_classify.setMinimumHeight(55)
-        self.btn_classify.setStyleSheet("background-color: #617c32; font-size: 20px; color: #f5f6f4;")
+        self.btn_retake = redo_button("Retake")
+        self.btn_classify = classify_button("Classify")
         btns.addWidget(self.btn_retake)
         btns.addWidget(self.btn_classify)
         layout.addLayout(btns)
@@ -452,39 +473,9 @@ class ClassifiedPage(QWidget):
         layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
         layout.addSpacing(10)
 
-        self.btn_reclassify = big_button("Reclassify")
-        self.btn_reclassify.setStyleSheet("""
-            QPushButton {
-                background-color: #95b7dc;
-                font-size: 22px;
-                color: #385573;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
-        self.btn_save = big_button("Save Classification")
-        self.btn_save.setStyleSheet("""
-            QPushButton {
-                background-color: #617c32;
-                font-size: 22px;
-                color: #f5f6f4;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
-        self.btn_delete = big_button("Delete")
-        self.btn_delete.setStyleSheet("""
-            QPushButton {
-                background-color: #313940;
-                font-size: 22px;
-                color: #f5f6f4;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
+        self.btn_reclassify = reclassify_button("Reclassify")
+        self.btn_save = save_button("Save Classification")
+        self.btn_delete = back_button("Delete")
         layout.addWidget(self.btn_reclassify)
         layout.addWidget(self.btn_save)
         layout.addWidget(self.btn_delete)
@@ -532,75 +523,16 @@ class VoicePage(QWidget):
         layout.addWidget(self.text, stretch=1)
 
         row = QHBoxLayout()
-        self.btn_start = QPushButton("Start")
-        self.btn_start.setStyleSheet("""
-            QPushButton {
-                background-color: #617c32;
-                font-size: 22px;
-                color: white;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
-        self.btn_stop = QPushButton("Stop")
-        self.btn_stop.setStyleSheet("""
-            QPushButton {
-                background-color: #7e1f23;
-                font-size: 22px;
-                color: white;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
-        self.btn_redo = QPushButton("Redo")
-        self.btn_redo.setStyleSheet("""
-            QPushButton {
-                background-color: #95b7dc;
-                font-size: 22px;
-                color: #385573;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
-        self.btn_reset = QPushButton("Reset Context")
-        self.btn_reset.setStyleSheet("""
-            QPushButton { background-color: #a88b5c; font-size: 22px; color: white; }
-            QPushButton:hover { background-color: #f5f6f4; color: #344f41; }
-        """)
-        self.btn_save = QPushButton("Save")
-        self.btn_save.setStyleSheet("""
-            QPushButton {
-                background-color: #617c32;
-                font-size: 22px;
-                color: white;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
-        self.btn_delete = QPushButton("Delete")
-        self.btn_delete.setStyleSheet("""
-            QPushButton {
-                background-color: #313940;
-                font-size: 22px;
-                color: white;
-            }
-            QPushButton:hover {
-                background-color: #f5f6f4;
-            }
-        """)
-        
-        self.btn_cancel = QPushButton("Cancel")
-        self.btn_cancel.setStyleSheet("""
-            QPushButton { background-color: #313940; font-size: 22px; color: white; }
-            QPushButton:hover { background-color: #f5f6f4; color: #344f41; }
-        """)
+        self.btn_start = classify_button("Start")
+        self.btn_stop = back_button("Stop")
+        self.btn_redo = redo_button("Redo")
+        self.btn_reset = reclassify_button("Reset Context")
+        self.btn_save = save_button("Save")
+        self.btn_delete = back_button("Delete")       
+
+        self.btn_cancel = back_button("Back")
         
         for b in [self.btn_start, self.btn_stop, self.btn_redo, self.btn_save, self.btn_delete, self.btn_reset, self.btn_cancel]:
-            b.setMinimumHeight(55)
             row.addWidget(b)
 
         layout.addLayout(row)
@@ -614,6 +546,58 @@ class VoicePage(QWidget):
         super().resizeEvent(event)
 
 
+class ConfirmPage(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setSpacing(20)
+
+        self._lbl = QLabel()
+        self._lbl.setAlignment(Qt.AlignCenter)
+        self._lbl.setWordWrap(True)
+        self._lbl.setStyleSheet("font-size: 20px; color: #344f41;")
+        layout.addWidget(self._lbl, stretch=1)
+
+        self._btn_confirm = save_button("CONFIRM")
+        layout.addWidget(self._btn_confirm)
+
+        self._btn_cancel = redo_button("CANCEL")
+        layout.addWidget(self._btn_cancel)
+
+        self._on_confirm_cb = None
+        self._on_cancel_cb = None
+        self._btn_confirm.clicked.connect(lambda: self._on_confirm_cb and self._on_confirm_cb())
+        self._btn_cancel.clicked.connect(lambda: self._on_cancel_cb and self._on_cancel_cb())
+
+    def prepare(self, text: str, on_confirm, on_cancel) -> None:
+        self._lbl.setText(text)
+        self._on_confirm_cb = on_confirm
+        self._on_cancel_cb = on_cancel
+
+
+class AlertPage(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setSpacing(20)
+
+        self._lbl = QLabel()
+        self._lbl.setAlignment(Qt.AlignCenter)
+        self._lbl.setWordWrap(True)
+        self._lbl.setStyleSheet("font-size: 20px; color: #344f41;")
+        layout.addWidget(self._lbl, stretch=1)
+
+        self._btn_ok = redo_button("OK")
+        layout.addWidget(self._btn_ok)
+
+        self._on_dismiss_cb = None
+        self._btn_ok.clicked.connect(lambda: self._on_dismiss_cb and self._on_dismiss_cb())
+
+    def prepare(self, text: str, on_dismiss) -> None:
+        self._lbl.setText(text)
+        self._on_dismiss_cb = on_dismiss
+
+
 class TripLoadPage(QWidget):
     def __init__(self):
         super().__init__()
@@ -625,42 +609,16 @@ class TripLoadPage(QWidget):
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
         layout.addWidget(title)
 
-        self.btn_create_new_mission = QPushButton("CREATE NEW MISSION")
-        self.btn_create_new_mission.setMinimumHeight(45)
-        self.btn_create_new_mission.setStyleSheet("""
-            QPushButton {
-                background-color: #344f41;
-                color: white;
-                font-size: 18px;
-                font-weight: bold;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #486454;
-            }
-        """)
+        self.btn_create_new_mission = mission_button("Create New Mission")
         layout.addWidget(self.btn_create_new_mission)
 
         # --- Delete All Button ---
-        self.btn_delete_all = QPushButton("DELETE ALL")
-        self.btn_delete_all.setMinimumHeight(45)
-        self.btn_delete_all.setStyleSheet("""
-            QPushButton {
-                background-color: #cc0000;
-                color: white;
-                font-size: 18px;
-                font-weight: bold;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #ff3333;
-            }
-        """)
+        self.btn_delete_all = back_button("Delete All Missions")
         layout.addWidget(self.btn_delete_all)
 
         self.lbl_current_mission = QLabel("Current mission: --")
         self.lbl_current_mission.setAlignment(Qt.AlignCenter)
-        self.lbl_current_mission.setStyleSheet("font-size: 16px;")
+        self.lbl_current_mission.setStyleSheet("font-size: 12px;")
         layout.addWidget(self.lbl_current_mission)
 
         missions_label = QLabel("Missions:")
@@ -672,7 +630,7 @@ class TripLoadPage(QWidget):
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(self.list, stretch=1)
 
-        self.btn_back = big_button("Back")
+        self.btn_back = back_button("Back")
         layout.addWidget(self.btn_back)
         
         self._missions_data = []
@@ -697,11 +655,11 @@ class MissionDetailPage(QWidget):
 
         self.lbl_totals = QLabel("Total volume: --   Total weight: --")
         self.lbl_totals.setAlignment(Qt.AlignCenter)
-        self.lbl_totals.setStyleSheet("font-size: 16px;")
+        self.lbl_totals.setStyleSheet("font-size: 12px;")
         layout.addWidget(self.lbl_totals)
 
         items_label = QLabel("Mission Items:")
-        items_label.setStyleSheet("font-size: 18px; font-weight: 600;")
+        items_label.setStyleSheet("font-size: 16px; font-weight: 600;")
         layout.addWidget(items_label)
 
         self.list = QListWidget()
@@ -709,7 +667,7 @@ class MissionDetailPage(QWidget):
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(self.list, stretch=1)
 
-        self.btn_back = big_button("Back")
+        self.btn_back = back_button("Back")
         layout.addWidget(self.btn_back)
 
         self._timeline_data = []
@@ -749,40 +707,10 @@ class MissionCreatePage(QWidget):
         """)
         layout.addWidget(self.text)
 
-        self.btn_create = QPushButton("CREATE MISSION")
-        self.btn_create.setMinimumHeight(55)
-        self.btn_create.setStyleSheet("""
-            QPushButton {
-                background-color: #344f41;
-                font-size: 20px;
-                color: white;
-                font-weight: bold;
-                border-radius: 8px;
-            }
-            QPushButton:hover {
-                background-color: #486454;
-            }
-            QPushButton:disabled {
-                background-color: #8d9a92;
-                color: #dce2dd;
-            }
-        """)
+        self.btn_create = mission_button("Create Mission")
         layout.addWidget(self.btn_create)
 
-        self.btn_cancel = QPushButton("Cancel")
-        self.btn_cancel.setMinimumHeight(55)
-        self.btn_cancel.setStyleSheet("""
-            QPushButton {
-                background-color: #95b7dc;
-                font-size: 20px;
-                color: #385573;
-                font-weight: bold;
-                border-radius: 8px;
-            }
-            QPushButton:hover {
-                background-color: #b8d2ea;
-            }
-        """)
+        self.btn_cancel = back_button("Back")
         layout.addWidget(self.btn_cancel)
         
 class RockDetailPage(QWidget):
@@ -906,7 +834,7 @@ class RockDetailPage(QWidget):
         """)
         layout.addWidget(self.notes_text, stretch=1)
 
-        self.btn_back = big_button("Back")
+        self.btn_back = back_button("Back")
         layout.addWidget(self.btn_back)
         self._current_rock_id = None
 
@@ -1062,7 +990,7 @@ class VoiceNoteDetailPage(QWidget):
         """)
         layout.addWidget(self.text, stretch=1)
 
-        self.btn_back = big_button("Back")
+        self.btn_back = back_button("Back")
         layout.addWidget(self.btn_back)
 
     def set_note(self, note: dict) -> None:
@@ -1233,6 +1161,8 @@ class AppWindow(QMainWindow):
         self.voice_loading = VoiceLoadingPage()
         self.voice = VoicePage()
         self.trip = TripLoadPage()
+        self.confirm_page = ConfirmPage()
+        self.alert_page = AlertPage()
         self.mission_detail = MissionDetailPage()
         self.mission_create = MissionCreatePage()
         self.rock_detail = RockDetailPage()
@@ -1248,6 +1178,8 @@ class AppWindow(QMainWindow):
         self.stack.addWidget(self.voice_loading)
         self.stack.addWidget(self.voice)
         self.stack.addWidget(self.trip)
+        self.stack.addWidget(self.confirm_page)
+        self.stack.addWidget(self.alert_page)
         self.stack.addWidget(self.mission_detail)
         self.stack.addWidget(self.mission_create)
         self.stack.addWidget(self.rock_detail)
@@ -1398,24 +1330,16 @@ class AppWindow(QMainWindow):
                     widget.setContentsMargins(5, 2, 5, 2)
     
     def _on_delete_all_clicked(self) -> None:
-        # Create the custom popup
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Delete All Data")
-        msg_box.setText("Are you sure? Clicking CONFIRM will delete data from all your past missions. This data will be irretrievable.")
-        msg_box.setStyleSheet("QLabel { color: #344f41; font-size: 18px; font-weight: normal; } QMessageBox { background-color: #cbd2c5; }")
-        
-        # Add the custom buttons
-        btn_confirm = msg_box.addButton("CONFIRM", QMessageBox.AcceptRole)
-        btn_confirm.setStyleSheet("background-color: #cc0000; color: white; font-weight: bold; padding: 8px;")
-        
-        btn_cancel = msg_box.addButton("CANCEL", QMessageBox.RejectRole)
-        btn_cancel.setStyleSheet("background-color: #95b7dc; color: #385573; font-weight: bold; padding: 8px;")
-        
-        msg_box.exec()
-        
-        # Check which button they clicked
-        if msg_box.clickedButton() == btn_confirm:
-            self.vm.clear_all_trip_data()
+        self.confirm_page.prepare(
+            "Are you sure? This will delete all past mission data and is irretrievable.",
+            on_confirm=self._on_confirm_delete_all,
+            on_cancel=self._show_trip_home,
+        )
+        self.stack.setCurrentWidget(self.confirm_page)
+
+    def _on_confirm_delete_all(self) -> None:
+        self.vm.clear_all_trip_data()
+        self._show_trip_home()
 
     def _setup_shortcuts(self) -> None:
         shortcut_f11 = QShortcut(QKeySequence(Qt.Key_F11), self)
@@ -1552,6 +1476,7 @@ class AppWindow(QMainWindow):
         self.trip.btn_create_new_mission.clicked.connect(self._open_create_mission_page)
         self.trip.btn_delete_all.clicked.connect(self._on_delete_all_clicked)
         self.trip.list.itemClicked.connect(self._on_mission_clicked)
+
 
         self.mission_detail.btn_back.clicked.connect(self._show_trip_home)
         self.mission_detail.list.itemClicked.connect(self._on_timeline_clicked)
@@ -2213,40 +2138,29 @@ class AppWindow(QMainWindow):
         menu.popup(QPoint(x, y))
 
     def _delete_mission(self, mission_id: str, mission_name: str) -> None:
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Delete Mission")
-        msg_box.setText(f'Are you sure? Clicking CONFIRM will delete the mission "{mission_name}" and all of its items permanently.')
-        msg_box.setStyleSheet("QLabel { color: #344f41; font-size: 18px; font-weight: normal; } QMessageBox { background-color: #cbd2c5; }")
-
-        btn_cancel = msg_box.addButton("CANCEL", QMessageBox.RejectRole)
-        btn_cancel.setStyleSheet("background-color: #95b7dc; color: #385573; font-weight: bold; padding: 8px;")
-
-        btn_confirm = msg_box.addButton("CONFIRM", QMessageBox.AcceptRole)
-        btn_confirm.setStyleSheet("background-color: #cc0000; color: white; font-weight: bold; padding: 8px;")
-
-        msg_box.exec()
-        if msg_box.clickedButton() == btn_confirm:
+        def on_confirm():
             if mission_id == self._selected_mission_id:
                 self._selected_mission_id = None
             self.vm.delete_mission(mission_id)
+            self._show_trip_home()
+        self.confirm_page.prepare(
+            f'Are you sure? Clicking CONFIRM will delete the mission "{mission_name}" and all of its items permanently.',
+            on_confirm=on_confirm,
+            on_cancel=self._show_trip_home,
+        )
+        self.stack.setCurrentWidget(self.confirm_page)
 
     def _delete_timeline_item(self, item_dict):
         if item_dict["type"] == "voice":
-            msg_box = QMessageBox(self)
-            msg_box.setWindowTitle("Delete Voice Note")
-            msg_box.setText("Are you sure? Clicking CONFIRM will delete this data permanently.")
-            msg_box.setStyleSheet("QLabel { color: #344f41; font-size: 18px; font-weight: normal; } QMessageBox { background-color: #cbd2c5; }")
-            
-            btn_cancel = msg_box.addButton("CANCEL", QMessageBox.RejectRole)
-            btn_cancel.setStyleSheet("background-color: #95b7dc; color: #385573; font-weight: bold; padding: 8px;")
-            
-            btn_confirm = msg_box.addButton("CONFIRM", QMessageBox.AcceptRole)
-            btn_confirm.setStyleSheet("background-color: #cc0000; color: white; font-weight: bold; padding: 8px;")
-            
-            msg_box.exec()
-            
-            if msg_box.clickedButton() == btn_confirm:
+            def on_confirm():
                 self.vm.delete_voice_note_by_ts(item_dict["data"].get("ts"))
+                self.stack.setCurrentWidget(self.mission_detail)
+            self.confirm_page.prepare(
+                "Are you sure? Clicking CONFIRM will delete this data permanently.",
+                on_confirm=on_confirm,
+                on_cancel=lambda: self.stack.setCurrentWidget(self.mission_detail),
+            )
+            self.stack.setCurrentWidget(self.confirm_page)
                 
         elif item_dict["type"] == "rock":
             dialog = QDialog(self)
@@ -2423,7 +2337,8 @@ class AppWindow(QMainWindow):
         try:
             mission = self.vm.create_mission(name)
         except ValueError as exc:
-            QMessageBox.warning(self, "Name Taken", str(exc))
+            self.alert_page.prepare(str(exc), on_dismiss=lambda: self.stack.setCurrentWidget(self.mission_create))
+            self.stack.setCurrentWidget(self.alert_page)
             return
         self.mission_create.text.clear()
         self.mission_keyboard.hide()
@@ -2435,7 +2350,11 @@ class AppWindow(QMainWindow):
             self._show_trip_home()
 
     def _on_error(self, message: str) -> None:
-        QMessageBox.warning(self, "Error", "Something went wrong. Please press escape to return to home screen.")
+        self.alert_page.prepare(
+            "Something went wrong. Please press escape to return to home screen.",
+            on_dismiss=self.vm.go_home,
+        )
+        self.stack.setCurrentWidget(self.alert_page)
     
     def _on_recording_status_changed(self, is_recording: bool):
         self.camera_preview.mic_ctrl._update_ui_state(is_recording)
