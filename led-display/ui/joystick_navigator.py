@@ -3,11 +3,12 @@
 joystick_navigator.py  –  SparkFun Qwiic Joystick → Qt button focus navigator
 """
 
+import re as _re
 import time
 import sys
 from typing import Optional
 
-from PySide6.QtCore import QObject, QThread, Signal, Qt, QTimer
+from PySide6.QtCore import QObject, QThread, Signal, Qt, QTimer, QPoint
 from PySide6.QtWidgets import (
     QApplication, QPushButton, QWidget, QAbstractButton,
     QStackedWidget, QTextEdit, QListWidget,
@@ -27,8 +28,6 @@ DEADZONE       = 60
 POLL_HZ        = 30
 INITIAL_DELAY  = 0.40
 REPEAT_DELAY   = 0.18
-
-import re as _re
 
 HIGHLIGHT_BORDER = "#697d6a"
 
@@ -239,17 +238,6 @@ class JoystickNavigator(QObject):
         btn.setStyleSheet(_apply_highlight(btn, original))
         btn.setFocus(Qt.OtherFocusReason)
 
-    def _clear_list_highlight(self):
-        if self._focused_list is not None:
-            try:
-                self._focused_list.clearSelection()
-                self._focused_list.setStyleSheet(self._focused_list_original_style)
-            except RuntimeError:
-                pass
-            self._focused_list = None
-            self._focused_list_row = -1
-            self._focused_list_original_style = ""
-
     def _highlight_list_row(self, lst: QListWidget, row: int):
         self._clear_btn_highlight()
         if lst is not self._focused_list:
@@ -271,8 +259,8 @@ class JoystickNavigator(QObject):
             widget = lst.itemWidget(item)
             if widget:
                 widget.setStyleSheet(
-                    f"background-color: {HIGHLIGHT_BG};"
-                    f"border: 2px solid {HIGHLIGHT_BOR};"
+                    f"background-color: rgba(52, 79, 65, 0.18);"
+                    f"border: 2px solid {HIGHLIGHT_BORDER};"
                     f"border-radius: 4px;"
                 )
     
@@ -357,13 +345,12 @@ class JoystickNavigator(QObject):
         return results
 
     def _lists_on_page(self) -> list:
-        from PySide6.QtCore import QPoint
+
         page = self._get_page()
         if page is None:
             return []
         results = []
         for w in page.findChildren(QListWidget):
-            print(f"  LIST: visible={w.isVisible()} count={w.count()}", file=sys.stderr)
             if w.isVisible() and w.count() > 0:
                 results.append(w)
         # results.sort(key=lambda w: w.mapTo(page, w.rect().center()).y())
@@ -410,7 +397,7 @@ class JoystickNavigator(QObject):
             return
 
         # list_y = lst.mapTo(page, lst.rect().center()).y()
-        from PySide6.QtCore import QPoint
+
         list_y = lst.mapTo(page, QPoint(0, 0)).y() + lst.height() // 2
 
         if direction == -1:
@@ -453,7 +440,7 @@ class JoystickNavigator(QObject):
         for lst in self._lists_on_page():
             page = self._get_page()
             # list_y = lst.mapTo(page, lst.rect().center()).y()
-            from PySide6.QtCore import QPoint
+    
             list_y = lst.mapTo(page, QPoint(0, 0)).y() + lst.height() // 2  
             if list_y < cur_y:
                 if prev_row_y is None or list_y > prev_row_y:
@@ -512,10 +499,9 @@ class JoystickNavigator(QObject):
         for lst in self._lists_on_page():
             page = self._get_page()
             # list_y = lst.mapTo(page, lst.rect().center()).y()
-            from PySide6.QtCore import QPoint
+    
             list_y = lst.mapTo(page, QPoint(0, 0)).y() + lst.height() // 2
 
-            print(f"  MOVE_DOWN: cur_y={cur_y} list_y={list_y} next_row_y={next_row_y}", file=sys.stderr)
             if list_y > cur_y:
                 if next_row_y is None or list_y < next_row_y:
                     self._enter_list(lst, from_top=True)
@@ -672,6 +658,7 @@ class JoystickNavigator(QObject):
     
     def _on_page_changed(self, _index: int):
         self._save_position()
+        self._list_origin = None
         QTimer.singleShot(100, self._focus_first)
 
     def _focus_first(self):
