@@ -1690,29 +1690,37 @@ class AppWindow(QMainWindow):
             self.classified.alternatives_layout.addWidget(lbl)
             alt_buttons = []
             for alt_label, alt_conf in alt_entries:
-                btn = blue_button(f"{alt_label.upper()} ({int(alt_conf * 100)}%)")
+                btn = blue_button("")
+                btn.setText(
+                    f"<center>{alt_label.upper()}<br>"
+                    f"<span style='font-size:12px'>conf: {int(alt_conf * 100)}%</span></center>"
+                )
+                btn.setObjectName("joystick_skip")
                 alt_buttons.append(btn)
                 self.classified.alternatives_layout.addWidget(btn)
 
             original_label = result.label
+            original_conf  = result.confidence
             selected = [None]
 
-            def _on_alt_clicked(_checked, chosen_label, chosen_btn):
+            def _on_alt_clicked(_checked, chosen_label, chosen_conf, chosen_btn):
                 unselected_style = "font-size: 20px; background-color: #95b7dc; color: #385573;"
                 selected_style   = "font-size: 20px; background-color: #385573; color: #f5f6f4;"
                 if selected[0] is chosen_btn:
                     chosen_btn.setStyleSheet(unselected_style)
                     selected[0] = None
-                    self.vm.override_classification_label(original_label)
+                    self.vm.override_classification_label(original_label, original_conf)
                 else:
                     for b in alt_buttons:
                         b.setStyleSheet(unselected_style)
                     chosen_btn.setStyleSheet(selected_style)
                     selected[0] = chosen_btn
-                    self.vm.override_classification_label(chosen_label)
+                    self.vm.override_classification_label(chosen_label, chosen_conf)
 
-            for btn, (alt_label, _) in zip(alt_buttons, alt_entries):
-                btn.clicked.connect(lambda _checked, l=alt_label, b=btn: _on_alt_clicked(_checked, l, b))
+            for btn, (alt_label, alt_conf) in zip(alt_buttons, alt_entries):
+                btn.clicked.connect(
+                    lambda _checked, l=alt_label, c=alt_conf, b=btn: _on_alt_clicked(_checked, l, c, b)
+                )
 
             self.classified.alternatives_layout.addStretch()
 

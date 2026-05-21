@@ -1010,9 +1010,12 @@ class ViewModel(QObject):
         self.volume_display_changed.emit(volume_str)
         self._set_state(AppStateType.CLASSIFIED)
 
-    def override_classification_label(self, label: str) -> None:
+    def override_classification_label(self, label: str, confidence: Optional[float] = None) -> None:
         if self.current_classification:
-            self.current_classification = dc_replace(self.current_classification, label=label)
+            kwargs: dict = {"label": label}
+            if confidence is not None:
+                kwargs["confidence"] = confidence
+            self.current_classification = dc_replace(self.current_classification, **kwargs)
 
     def save_classification(self) -> None:
         if self.current_classification:
