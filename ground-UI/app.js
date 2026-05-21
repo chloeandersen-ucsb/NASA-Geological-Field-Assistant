@@ -166,6 +166,29 @@ function makeObjectUrl(file) {
   return url;
 }
 
+function hasClassificationData(sample) {
+  const classification = String(sample?.classification ?? "").trim();
+  return Boolean(classification) && classification.toLowerCase() !== "unknown";
+}
+
+function hasMatchedImagePair(sample) {
+  return Boolean(sample?.hasImagePair) && Boolean(sample?.topImagePath || sample?.imagePath) && Boolean(sample?.sideImagePath || sample?.imagePath);
+}
+
+function isDisplayableSample(sample) {
+  return hasClassificationData(sample) && hasMatchedImagePair(sample);
+}
+
+function normalizeMissionsForDisplay(missionList) {
+  return (missionList || [])
+    .map((mission) => ({
+      ...mission,
+      samples: (mission.samples || []).filter(isDisplayableSample),
+      audioFiles: mission.audioFiles || [],
+    }))
+    .filter((mission) => mission.samples.length > 0);
+}
+
 async function parseFolderImport(fileList) {
   const files = Array.from(fileList || []);
   if (!files.length) {
@@ -178,10 +201,16 @@ async function parseFolderImport(fileList) {
     fileMap.set(key.replace(/^\/?/, ""), file);
   });
 
-  const missionsFile = files.find((file) => file.name === "missions.json");
-  if (missionsFile) {
+  const missionsFiles = files
+    .filter((file) => file.name === "missions.json")
+    .sort((a, b) => (a.webkitRelativePath || a.name).split(/[\\/]/).length - (b.webkitRelativePath || b.name).split(/[\\/]/).length);
+
+  for (const missionsFile of missionsFiles) {
     const data = JSON.parse(await missionsFile.text());
-    return Object.values(data);
+    const missionsList = Array.isArray(data) ? data : Object.values(data);
+    if (missionsList.length && missionsList.every((mission) => Array.isArray(mission?.samples))) {
+      return normalizeMissionsForDisplay(missionsList);
+    }
   }
 
   const rocksEntries = [...fileMap.entries()].filter(([path]) => path.endsWith("/sage_store/rocks.jsonl"));
@@ -197,7 +226,6 @@ async function parseFolderImport(fileList) {
     const voiceFile = fileMap.get(voicePath);
     const imagePrefix = `${runRoot}/images/`;
 
-    const imageIndex = [];
     const imagesByFilename = new Map();
     for (const [path, file] of fileMap.entries()) {
       if (!path.startsWith(imagePrefix) || !path.toLowerCase().endsWith(".jpg")) {
@@ -207,12 +235,6 @@ async function parseFolderImport(fileList) {
       if (filename) {
         imagesByFilename.set(filename, makeObjectUrl(file));
       }
-      const match = path.match(/(\d{8})_(\d{6})/);
-      if (!match) {
-        continue;
-      }
-      const timestamp = new Date(`${match[1].slice(0, 4)}-${match[1].slice(4, 6)}-${match[1].slice(6, 8)}T${match[2].slice(0, 2)}:${match[2].slice(2, 4)}:${match[2].slice(4, 6)}Z`).getTime() / 1000;
-      imageIndex.push({ timestamp, url: imagesByFilename.get(filename) });
     }
 
     const rocks = parseJsonl(await rocksFile.text()).reduce((acc, obj) => {
@@ -278,38 +300,21 @@ async function parseFolderImport(fileList) {
     const samples = rockIds.map((rockId) => {
       const rock = rocks.get(rockId);
       const timestampUtc = new Date((rock.timestamp || 0) * 1000).toISOString();
-      let imagePath = null;
+      const classification = String(rock.classification || "").trim();
+      const topFile = rock.topImagePath ? rock.topImagePath.split("/").pop() : null;
+      const sideFile = rock.sideImagePath ? rock.sideImagePath.split("/").pop() : null;
+      const topImagePath = topFile ? imagesByFilename.get(topFile) : null;
+      const sideImagePath = sideFile ? imagesByFilename.get(sideFile) : null;
 
-      const explicitCandidates = [];
-      if (rock.sideImagePath) {
-        explicitCandidates.push(rock.sideImagePath.split("/").pop());
-      }
-      if (rock.topImagePath) {
-        explicitCandidates.push(rock.topImagePath.split("/").pop());
-      }
-      for (const candidate of explicitCandidates) {
-        const mapped = candidate ? imagesByFilename.get(candidate) : null;
-        if (mapped) {
-          imagePath = mapped;
-          break;
-        }
-      }
-
-      if (!imagePath && imageIndex.length) {
-        const closest = imageIndex.reduce((best, candidate) => {
-          if (!best) return candidate;
-          return Math.abs(candidate.timestamp - rock.timestamp) < Math.abs(best.timestamp - rock.timestamp) ? candidate : best;
-        }, null);
-        if (closest && Math.abs(closest.timestamp - rock.timestamp) < 10800) {
-          imagePath = closest.url;
-        }
+      if (!classification || classification.toLowerCase() === "unknown" || !topImagePath || !sideImagePath) {
+        return null;
       }
 
       return {
         id: rock.id,
         full_id: rock.full_id,
         timestampUtc,
-        classification: rock.classification,
+        classification,
         confidence: rock.confidence,
         predictionTimestamp: timestampUtc,
         volumeCm3: rock.volume || 0,
@@ -319,12 +324,14 @@ async function parseFolderImport(fileList) {
         estimationMethod: "Stored metadata",
         scaleTop: 0.12,
         scaleSide: 0.11,
-        hasImagePair: Boolean(imagePath),
-        imagePath,
+        hasImagePair: true,
+        imagePath: topImagePath,
+        topImagePath,
+        sideImagePath,
         notes: "",
         voiceNotes: voiceNotes.get(rock.full_id) || [],
       };
-    });
+    }).filter(Boolean);
 
     if (samples.length) {
       missionsById.set(missionId, {
@@ -336,15 +343,16 @@ async function parseFolderImport(fileList) {
     }
   }
 
-  return [...missionsById.values()];
+  return normalizeMissionsForDisplay([...missionsById.values()]);
 }
 
-function getImageCandidates(sample) {
-  if (!sample.imagePath) {
+function getImageCandidates(sample, pathKey = "imagePath") {
+  const sourcePath = sample?.[pathKey] || sample?.imagePath;
+  if (!sourcePath) {
     return [];
   }
 
-  const rawPath = String(sample.imagePath).replace(/^\.\//, "");
+  const rawPath = String(sourcePath).replace(/^\.\//, "");
   if (/^(blob:|data:|file:|https?:)/i.test(rawPath)) {
     return [rawPath];
   }
@@ -408,7 +416,7 @@ async function loadMissionsData() {
       throw new Error(`HTTP ${response.status}`);
     }
     const data = await response.json();
-    missions = Object.values(data);
+    missions = normalizeMissionsForDisplay(Object.values(data));
     return true;
   } catch (err) {
     console.error('Failed to load missions.json:', err);
@@ -422,6 +430,9 @@ function getMission() {
 
 function getSample() {
   const mission = getMission();
+  if (!mission?.samples?.length) {
+    return null;
+  }
   return mission.samples.find((s) => s.id === uiState.selectedSampleId) || mission.samples[0];
 }
 
@@ -429,8 +440,7 @@ function getDefaultSampleIdForMission(mission) {
   if (!mission?.samples?.length) {
     return "";
   }
-  const firstWithImage = mission.samples.find((sample) => sample.hasImagePair && sample.imagePath);
-  return firstWithImage?.id || mission.samples[0].id;
+  return mission.samples[0].id;
 }
 
 function getDefaultTranscriptIdForMission(mission) {
@@ -517,10 +527,12 @@ function initMissionSelector() {
 
 function getFilteredSamples() {
   const mission = getMission();
+  if (!mission?.samples?.length) {
+    return [];
+  }
   return mission.samples
     .filter((sample) => {
-    // Skip samples with no image at all
-    if (!sample.imagePath) {
+    if (!isDisplayableSample(sample)) {
       return false;
     }
 
@@ -586,6 +598,13 @@ function getClassificationLabel(samples, targetSample) {
 
 function refreshFilters() {
   const mission = getMission();
+  if (!mission?.samples?.length) {
+    classificationFilterEl.innerHTML = `<option value="all">All</option>`;
+    dateFilterEl.innerHTML = `<option value="all">All</option>`;
+    classificationFilterEl.value = "all";
+    dateFilterEl.value = "all";
+    return;
+  }
   const classes = [...new Set(mission.samples.map((s) => s.classification))];
   const dates = [...new Set(mission.samples.map((s) => s.timestampUtc.slice(0, 10)))];
 
@@ -605,6 +624,10 @@ function refreshFilters() {
 
 function renderTree() {
   const mission = getMission();
+  if (!mission) {
+    missionTreeEl.innerHTML = "";
+    return;
+  }
   const samples = getFilteredSamples();
 
   missionTreeEl.innerHTML = "";
@@ -703,16 +726,21 @@ function kvRows(targetEl, rows) {
 function renderSampleViewer() {
   const mission = getMission();
   const sample = getSample();
+  if (!mission || !sample) {
+    return;
+  }
   const sampleStatus = getSampleStatus(sample);
   sampleViewSectionEl.classList.remove("hidden");
   sampleInfoStripEl.classList.add("sample-info-strip-sample");
 
-  const imageCandidates = getImageCandidates(sample);
-  setImageWithFallback(topViewImageEl, imageCandidates, placeholderImage("TOP VIEW", `${mission.id} ${sample.id}`));
+  const topCandidates = getImageCandidates(sample, "topImagePath");
+  const sideCandidates = getImageCandidates(sample, "sideImagePath");
+  const fallbackCandidates = getImageCandidates(sample, "imagePath");
+  setImageWithFallback(topViewImageEl, topCandidates.length ? topCandidates : fallbackCandidates, placeholderImage("TOP VIEW", `${mission.id} ${sample.id}`));
   if (sampleStatus.label === "missing pair") {
     setImageWithFallback(sideViewImageEl, [blankImage()], blankImage());
   } else {
-    setImageWithFallback(sideViewImageEl, imageCandidates, placeholderImage("SIDE VIEW", `${mission.id} ${sample.id}`));
+    setImageWithFallback(sideViewImageEl, sideCandidates.length ? sideCandidates : fallbackCandidates, placeholderImage("SIDE VIEW", `${mission.id} ${sample.id}`));
   }
 
   // Reset per-sample visual state so previous interactions don't distort new images.
@@ -779,7 +807,11 @@ function renderSampleViewer() {
 
 function renderStrip() {
   const mission = getMission();
-  const samples = [...mission.samples].filter((sample) => sample.imagePath);
+  if (!mission?.samples?.length) {
+    sampleStripEl.innerHTML = "";
+    return;
+  }
+  const samples = [...mission.samples].filter((sample) => isDisplayableSample(sample));
   if (uiState.sortBy === "timestamp") {
     samples.sort((a, b) => a.timestampUtc.localeCompare(b.timestampUtc));
   } else if (uiState.sortBy === "volume") {

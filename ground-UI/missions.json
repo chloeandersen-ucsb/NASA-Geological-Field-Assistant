@@ -4,802 +4,6 @@
     "operator": "Ground Analyst",
     "samples": [
       {
-        "id": "5cca4616-64e",
-        "full_id": "5cca4616-64ee-48f6-83cd-3f1221a0b0ee",
-        "timestampUtc": "2026-01-28T10:48:53.178151Z",
-        "classification": "Clay",
-        "confidence": 0.75,
-        "predictionTimestamp": "2026-01-28T10:48:53.178151Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": []
-      },
-      {
-        "id": "e336fe2b-58b",
-        "full_id": "e336fe2b-58b5-4442-84ed-05acba95e38b",
-        "timestampUtc": "2026-01-28T10:56:26.523232Z",
-        "classification": "olivine-basalt",
-        "confidence": 0.92,
-        "predictionTimestamp": "2026-01-28T10:56:26.523232Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": [
-          {
-            "timestamp": 1769627014.4117694,
-            "transcript": "no",
-            "session_id": null
-          },
-          {
-            "timestamp": 1769627410.2922816,
-            "transcript": "hi soan okay hello so to so today um i'm going going to to ten test them wrong some rocks and then go go to the sheriff to the ship uh um um you yup mmhm mhm",
-            "session_id": null
-          },
-          {
-            "timestamp": 1769628309.336363,
-            "transcript": "okay ok so this this is a is a test test ford for duplicate duplication stations and and also two to see you you see like like what what the final final output is good part is go going tona be a be so yeah yeah right now the right now it looks kind of looks kind of in in accurate accurate it but i but i'm mm going to one to to assume to that because that's because because this is not this is an older model older model but what's f let's find out yeah",
-            "session_id": null
-          }
-        ]
-      },
-      {
-        "id": "432fd570-dae",
-        "full_id": "432fd570-dae2-479e-9b30-aa0b870bb144",
-        "timestampUtc": "2026-02-12T12:18:58.239878Z",
-        "classification": "gypsum",
-        "confidence": 0.7723,
-        "predictionTimestamp": "2026-02-12T12:18:58.239878Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": [
-          {
-            "timestamp": 1770935109.3570735,
-            "transcript": "testing the system another phrase here location marked geological field notes hello world this is a test sample transcription",
-            "session_id": null
-          }
-        ]
-      },
-      {
-        "id": "c42ba3be-e54",
-        "full_id": "c42ba3be-e544-4ad7-9a57-31d84f1055fc",
-        "timestampUtc": "2026-02-17T16:04:44.320832Z",
-        "classification": "Shale-(Mudstone)",
-        "confidence": 0.8037,
-        "predictionTimestamp": "2026-02-17T16:04:44.320832Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": [
-          {
-            "timestamp": 1771366025.3123605,
-            "transcript": "hello trying to see if the voice did see if the voice detects works if the voice detext works the voice detexed works and text works and it looks s and it looks like it does but i just want does but i just wanted to make sure that everything is running wi everything is running well",
-            "session_id": null
-          },
-          {
-            "timestamp": 1771366217.126795,
-            "transcript": "hello oh why was it not saying anything testing to see why this won't save",
-            "session_id": null
-          },
-          {
-            "timestamp": 1771366296.7126582,
-            "transcript": "oh hello trying b try the try to see if this one to see if this works it's c it's crazy because i don't think it ought crazy because i don't think it automatically easy because i don't think it automatically switches and it waits for the astrona for the astronaut to start speaking so going to see what's up with that",
-            "session_id": null
-          },
-          {
-            "timestamp": 1771366582.8108592,
-            "transcript": "test to see if it takes time to register that i have stopped the recording before it actually properly takes into account that i'm saving",
-            "session_id": null
-          },
-          {
-            "timestamp": 1771366684.29534,
-            "transcript": "hello t hello trying to see so trying to see if the sa the saving only works when you wait ving only works when you wait for like a second after you have second after you hadad stopped",
-            "session_id": null
-          },
-          {
-            "timestamp": 1771367753.9448595,
-            "transcript": "hi hello trying to llo trying to see if i can",
-            "session_id": null
-          },
-          {
-            "timestamp": 1771367788.8718057,
-            "transcript": "hello trying to see if this trying to see if the saving work if the saving works if i just click it fast",
-            "session_id": null
-          },
-          {
-            "timestamp": 1771372290.2831411,
-            "transcript": "hello th testing hour testing out both features",
-            "session_id": null
-          }
-        ]
-      },
-      {
-        "id": "66b598ea-8db",
-        "full_id": "66b598ea-8db6-4906-96d0-e5f909c0717f",
-        "timestampUtc": "2026-02-23T14:20:35.684632Z",
-        "classification": "basalt pigeonite",
-        "confidence": 0.6127743721008301,
-        "predictionTimestamp": "2026-02-23T14:20:35.684632Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": []
-      },
-      {
-        "id": "d1d7b6df-c72",
-        "full_id": "d1d7b6df-c720-44b4-95f2-c15aed8f99f4",
-        "timestampUtc": "2026-02-23T15:06:37.797467Z",
-        "classification": "basalt ilmenite",
-        "confidence": 0.9172723889350891,
-        "predictionTimestamp": "2026-02-23T15:06:37.797467Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": []
-      },
-      {
-        "id": "de7416c2-717",
-        "full_id": "de7416c2-7174-4568-88ea-97a8fe8b033e",
-        "timestampUtc": "2026-02-25T22:07:37.121463Z",
-        "classification": "breccia impact",
-        "confidence": 0.7719407677650452,
-        "predictionTimestamp": "2026-02-25T22:07:37.121463Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": [
-          {
-            "timestamp": 1772086099.0975885,
-            "transcript": "yes six no no hello oh hello hello hello so okay okay",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772086223.8466527,
-            "transcript": "hello my name is eli",
-            "session_id": null
-          }
-        ]
-      },
-      {
-        "id": "f6996fb4-478",
-        "full_id": "f6996fb4-4780-4279-b07f-c7dabc21e348",
-        "timestampUtc": "2026-02-25T22:16:34.884032Z",
-        "classification": "breccia impact",
-        "confidence": 0.5863122344017029,
-        "predictionTimestamp": "2026-02-25T22:16:34.884032Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": [
-          {
-            "timestamp": 1772086548.9020908,
-            "transcript": "hello i am talking about rocks",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772086556.8634884,
-            "transcript": "and now it's my second time",
-            "session_id": null
-          }
-        ]
-      },
-      {
-        "id": "b52be78b-995",
-        "full_id": "b52be78b-9952-4aaf-bdb0-ab2b428fceb8",
-        "timestampUtc": "2026-02-25T22:38:04.536599Z",
-        "classification": "basalt pigeonite",
-        "confidence": 0.5735390186309814,
-        "predictionTimestamp": "2026-02-25T22:38:04.536599Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": []
-      },
-      {
-        "id": "f4c7c95e-60f",
-        "full_id": "f4c7c95e-60f5-471d-8af6-6da6d4d7e454",
-        "timestampUtc": "2026-02-25T22:38:09.753079Z",
-        "classification": "basalt pigeonite",
-        "confidence": 0.5735390186309814,
-        "predictionTimestamp": "2026-02-25T22:38:09.753079Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": []
-      },
-      {
-        "id": "40229dea-2b2",
-        "full_id": "40229dea-2b24-4f65-bae4-e7812ce28d02",
-        "timestampUtc": "2026-02-25T22:41:02.353170Z",
-        "classification": "breccia impact",
-        "confidence": 0.5798213481903076,
-        "predictionTimestamp": "2026-02-25T22:41:02.353170Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": []
-      },
-      {
-        "id": "32991cf1-322",
-        "full_id": "32991cf1-3223-4841-ad82-f1e2314afeac",
-        "timestampUtc": "2026-02-25T22:42:28.427726Z",
-        "classification": "basalt pigeonite",
-        "confidence": 0.42032602429389954,
-        "predictionTimestamp": "2026-02-25T22:42:28.427726Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": []
-      },
-      {
-        "id": "f956a30c-206",
-        "full_id": "f956a30c-2069-4e0d-b0bc-96e7b7097035",
-        "timestampUtc": "2026-02-25T22:44:06.838480Z",
-        "classification": "basalt pigeonite",
-        "confidence": 0.5077970623970032,
-        "predictionTimestamp": "2026-02-25T22:44:06.838480Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": [
-          {
-            "timestamp": 1772088265.7824068,
-            "transcript": "hello bazalt pigonite  basalt pigeonite pigeonite",
-            "session_id": null
-          }
-        ]
-      },
-      {
-        "id": "b2d6055f-3f3",
-        "full_id": "b2d6055f-3f30-4da5-ae0c-1cc82de38cbc",
-        "timestampUtc": "2026-02-26T11:15:25.543594Z",
-        "classification": "breccia impact",
-        "confidence": 0.7260699272155762,
-        "predictionTimestamp": "2026-02-26T11:15:25.543594Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": []
-      },
-      {
-        "id": "d231ebac-bf3",
-        "full_id": "d231ebac-bf3d-4cf0-9d44-5595a5fc28fb",
-        "timestampUtc": "2026-02-26T11:16:50.045739Z",
-        "classification": "basalt ilmenite",
-        "confidence": 0.9553719162940979,
-        "predictionTimestamp": "2026-02-26T11:16:50.045739Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": [
-          {
-            "timestamp": 1772133471.2282088,
-            "transcript": "like like we can sorry   but also it said like it saved like successfullyd the context when i was gone  basically  it saved the result  um i can't find anymore  where was it the image  basically  it saved it saved the image into context  okay  but i can't find the la  what was it again  bazalt eliminite  bazalt eminate  i don't know  someone else wants to say",
-            "session_id": null
-          }
-        ]
-      },
-      {
-        "id": "b5c5eea1-8cf",
-        "full_id": "b5c5eea1-8cf6-4a61-af88-2087821e9f13",
-        "timestampUtc": "2026-02-27T13:48:40.129602Z",
-        "classification": "breccia impact",
-        "confidence": 0.7924243211746216,
-        "predictionTimestamp": "2026-02-27T13:48:40.129602Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": [
-          {
-            "timestamp": 1772219797.0562148,
-            "transcript": "hello testing",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772220137.897814,
-            "transcript": "motion that loads when i go into the voice detext",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772220583.1959655,
-            "transcript": "the voice notes that i'm doing because i want to be able to see that i can continuously speak",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772221059.4872148,
-            "transcript": "switch between screens and keepy a code so that i have like a smooth uh travel",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772221081.9494166,
-            "transcript": "trying to see if i can start lo trying to see if i can start and say if i would say if is s the so iland the finalle the i that i look like a ve by on",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772221197.24847,
-            "transcript": "so trying to see if i can switchs  so right after this i'm going to say home when i get to the home screen home home home home home home home home  now i'm gonna click on the voice of text and if it fails here now that i know actually i'm gonna click on the classify rock and see what it does  so i'm goingn to click classif rock and the same rock rock rock rock rock rock rock rock okay  now i'm gonna go to the voice of text screen and see if it still keeps recording  let me save this file actually",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772221225.8335931,
-            "transcript": "i am in v texts and it is working so i do not know why it didn not work before but let me stop and see what it isd",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772221534.3682644,
-            "transcript": "testing  i'm currently on camera capture for classification  i'm goingna go out back to the home screen and see i'm there  i'm now on the home screen  now i'm gonna click on the voice attack button and all goes well it should keep recording  so now i'm in the voice attaex  and it seems like it's been recording  which has been great  so now i'm gonna stop the recording and save it  and see what it says",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772221859.615261,
-            "transcript": "hello i'm starting the recording just making that the ui updates when my switchscreen stop recording somewhere else and then come back so i'm gonna stop the recording now",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772221893.1037664,
-            "transcript": "hello i'm starting the recording just making that the ui updates when my switchscreen stop recording somewhere else and then come back so i'm gonna stop the recording now",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772221961.7301543,
-            "transcript": "so it seems like going to the trip nottes kind of can break this  but i guess people aren't really gonna be looking at the trip nottes while they're actively speaking  so i'm hoping that that's fine but let me just test something out right now i'm go to stop through corner",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772222060.5266964,
-            "transcript": "so now i'm going to so now i'm going into t now i'm going to the t of reverse now i'm going to t of reverse engine i'm going to try toverse engineer this t of revers engineer this so now verse engine neer this so right now i'm a enger this so right now i'm a right now i'm in i'm mean voice to in voic de so i guess vs totas so i guess like vytacks so i guess like going to s totack so i guess like going to thosetack me so i guess like going to bo that means that you like going of most that means that you can't really the bo that means that you can't really get out of it instead you can' really get out of it which i guess is fine but guess it' fine but i gohe look but let me tryingry and say that let me start saving this let me try saving this and see that if i let me start saving this and see that if i click back our saving this and see that if i lookli back again this and see that if i look back again its that if i click back it again if it ck it again if it clears what i just said",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772222217.6831367,
-            "transcript": "so right now basically just testing out if the voice text works on its own  so this is just voice text but stop and say",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772222236.8840468,
-            "transcript": "so right now basically just testing out if the voice text works on its own  so this is just voice text but stop and say",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772222263.2341921,
-            "transcript": "so it seems like i have to manually go back into the voice deiteexs  if i just started on its own  to clear what's in there  which is a little annoying but right now i'm back at the voicetexs i going to stop and save",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772222669.0807734,
-            "transcript": "so i'm gonna start uh my recording so i'm gonna start my recording in start uh my recording and picure sure and i'm gon to do and i'm gonna go to the i'm gon to go to the voice detaex service to the voice attex so basically the voice attacks so basically it should just voice attaex so basically it change just so basically it should just is doing what it's doing what it's supposed to do all good po to do or good i'm gonna heads oh good i'm gonna hit saf here good i'm gonna hit sameve here go to chirp nose same here go to trip notes and hold go to trick notes and hopefully when i come back here it's and hopefully when i come back here it starts a new recording",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772222702.649351,
-            "transcript": "so i'm gonna start my recording in future and i'm gonna go to the voice attack  so basically it should just it's doing what it's supposed to do  all good  i'm gonna hit sameve here  go to trick notes and hopefully when i come back here it starts a new recording",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772223169.1075087,
-            "transcript": "hello basically i'm just trying to start recording on the camera capture and i'm gonna hit save and hopefully it shows up in the trip notes",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772223259.67899,
-            "transcript": "i'm gonna see if the basic works where basically i'm gonna start recording on the camera capture and i'm gonna navigate back to the voice attacks and it should continue recording  so this seems to be working so let me stop",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772229088.1234684,
-            "transcript": "start recording here  you're speaking bh bh bla want to voice a text and it should keep up voice the text and it should keep up okay i think the that should keep up okay i think the cameras can uh okay i think the cameras kind of screw i think the cameras kind of screwing things up a little cameras kind of screen things up a little bit  but it does keep it keeps things up a little bit but it does keep it keeps going from it but it does keep it keeps going from what i started saying in the beginning uh and then saying in the beginning uh huh and then if i",
-            "session_id": null
-          }
-        ]
-      },
-      {
-        "id": "7a3dbcd6-44e",
-        "full_id": "7a3dbcd6-44e1-4e4b-b2e9-69e026184358",
-        "timestampUtc": "2026-02-27T14:16:24.446069Z",
-        "classification": "basalt pigeonite",
-        "confidence": 0.6460831761360168,
-        "predictionTimestamp": "2026-02-27T14:16:24.446069Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": [
-          {
-            "timestamp": 1772230609.4706597,
-            "transcript": "which right now  we don't have the microphone because oh  i'm sorry  we do i was wrong  so there is a microphone  so we're speaking and if we're start",
-            "session_id": null
-          }
-        ]
-      },
-      {
-        "id": "81cc6650-b6d",
-        "full_id": "81cc6650-b6d2-422a-ac44-261304908bb2",
-        "timestampUtc": "2026-03-01T16:01:19.098986Z",
-        "classification": "basalt ilmenite",
-        "confidence": 0.9336336851119995,
-        "predictionTimestamp": "2026-03-01T16:01:19.098986Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": []
-      },
-      {
-        "id": "bfa6c78c-fad",
-        "full_id": "bfa6c78c-fad4-4c42-add1-da120c3f217a",
-        "timestampUtc": "2026-03-01T16:13:19.696921Z",
-        "classification": "basalt ilmenite",
-        "confidence": 0.8724344968795776,
-        "predictionTimestamp": "2026-03-01T16:13:19.696921Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": []
-      },
-      {
-        "id": "9c7009a6-f10",
-        "full_id": "9c7009a6-f100-4362-9461-9d99a14bd998",
-        "timestampUtc": "2026-03-01T16:14:21.153968Z",
-        "classification": "basalt ilmenite",
-        "confidence": 0.9555920958518982,
-        "predictionTimestamp": "2026-03-01T16:14:21.153968Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": []
-      },
-      {
-        "id": "7633d8b5-a0e",
-        "full_id": "7633d8b5-a0e3-40c1-96c7-86837da45fc2",
-        "timestampUtc": "2026-03-01T16:18:56.664888Z",
-        "classification": "basalt ilmenite",
-        "confidence": 0.8444557189941406,
-        "predictionTimestamp": "2026-03-01T16:18:56.664888Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": [
-          {
-            "timestamp": 1772410767.1523492,
-            "transcript": "so we are looking at a basalt ilmenite rock that has some texture here and there",
-            "session_id": null
-          },
-          {
-            "timestamp": 1772411019.7805693,
-            "transcript": "recording here and you start speaking it should start like picking it up right now and then if i go cancel and then i go back to voice attacks  it keeps recording like from what i sort of want  so that was a vision  unfortunately it's a little buggy",
-            "session_id": null
-          }
-        ]
-      },
-      {
-        "id": "9a3a0a26-ae0",
-        "full_id": "9a3a0a26-ae0f-4fb1-95c2-72df493c5ff3",
-        "timestampUtc": "2026-03-01T16:29:54.772382Z",
-        "classification": "basalt ilmenite",
-        "confidence": 0.9807977080345154,
-        "predictionTimestamp": "2026-03-01T16:29:54.772382Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": false,
-        "imagePath": null,
-        "notes": "",
-        "voiceNotes": [
-          {
-            "timestamp": 1772411419.6097105,
-            "transcript": "hello this is the nasa field assistant team we just examined a basalt ilmenite eliumite rock",
-            "session_id": null
-          }
-        ]
-      },
-      {
-        "id": "0c66c7e6-eb3",
-        "full_id": "0c66c7e6-eb3d-4cb0-ba57-78611b4eaeeb",
-        "timestampUtc": "2026-03-04T15:06:06.648210Z",
-        "classification": "basalt ilmenite",
-        "confidence": 0.908921480178833,
-        "predictionTimestamp": "2026-03-04T15:06:06.648210Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": true,
-        "imagePath": "20260416_094443/images/20260304/20260304_165538_a6c54f53-cfcd-4f09-978e-922bb93d1eb7.jpg",
-        "notes": "",
-        "voiceNotes": []
-      },
-      {
-        "id": "327c61ee-989",
-        "full_id": "327c61ee-9890-4a5d-b9a1-975194a1cb31",
-        "timestampUtc": "2026-03-04T15:35:10.930478Z",
-        "classification": "basalt ilmenite",
-        "confidence": 0.8877443671226501,
-        "predictionTimestamp": "2026-03-04T15:35:10.930478Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": true,
-        "imagePath": "20260416_094443/images/20260304/20260304_165538_a6c54f53-cfcd-4f09-978e-922bb93d1eb7.jpg",
-        "notes": "",
-        "voiceNotes": []
-      },
-      {
-        "id": "4179ab90-8f5",
-        "full_id": "4179ab90-8f56-40a9-8f0c-7b933d46db7d",
-        "timestampUtc": "2026-03-04T15:39:09.211016Z",
-        "classification": "basalt pigeonite",
-        "confidence": 0.6553485989570618,
-        "predictionTimestamp": "2026-03-04T15:39:09.211016Z",
-        "volumeCm3": 0,
-        "dimensions": {
-          "length": 0,
-          "width": 0,
-          "height": 0
-        },
-        "footprintArea": 0,
-        "shapeFactor": 0,
-        "estimationMethod": "Stored metadata",
-        "scaleTop": 0.12,
-        "scaleSide": 0.11,
-        "hasImagePair": true,
-        "imagePath": "20260416_094443/images/20260304/20260304_165538_a6c54f53-cfcd-4f09-978e-922bb93d1eb7.jpg",
-        "notes": "",
-        "voiceNotes": []
-      },
-      {
         "id": "470148ea-74d",
         "full_id": "470148ea-74db-4c38-a3a6-35b8e9e2fb9a",
         "timestampUtc": "2026-03-04T17:00:39.810067Z",
@@ -818,7 +22,9 @@
         "scaleTop": 0.12,
         "scaleSide": 0.11,
         "hasImagePair": true,
-        "imagePath": "20260416_094443/images/20260304/20260304_165542_129627ab-1146-4fea-a9c2-ad4a949a8657.jpg",
+        "imagePath": "20260416_094443/images/20260304/20260304_165538_a6c54f53-cfcd-4f09-978e-922bb93d1eb7.jpg",
+        "topImagePath": "20260416_094443/images/20260304/20260304_165538_a6c54f53-cfcd-4f09-978e-922bb93d1eb7.jpg",
+        "sideImagePath": "20260416_094443/images/20260304/20260304_165542_129627ab-1146-4fea-a9c2-ad4a949a8657.jpg",
         "notes": "",
         "voiceNotes": []
       },
@@ -841,7 +47,9 @@
         "scaleTop": 0.12,
         "scaleSide": 0.11,
         "hasImagePair": true,
-        "imagePath": "20260416_094443/images/20260304/20260304_171251_d07d1672-3d12-4af0-8988-13681f26edcd.jpg",
+        "imagePath": "20260416_094443/images/20260304/20260304_171248_8abab56a-ff7b-4c1a-9e74-fdaebf144283.jpg",
+        "topImagePath": "20260416_094443/images/20260304/20260304_171248_8abab56a-ff7b-4c1a-9e74-fdaebf144283.jpg",
+        "sideImagePath": "20260416_094443/images/20260304/20260304_171251_d07d1672-3d12-4af0-8988-13681f26edcd.jpg",
         "notes": "",
         "voiceNotes": []
       },
@@ -864,7 +72,9 @@
         "scaleTop": 0.12,
         "scaleSide": 0.11,
         "hasImagePair": true,
-        "imagePath": "20260416_094443/images/20260304/20260304_232018_a59042f9-0f59-4d58-94e9-6413af7eb51c.jpg",
+        "imagePath": "20260416_094443/images/20260304/20260304_232016_0312c749-e228-4ba3-a7e7-3bb2f792acbe.jpg",
+        "topImagePath": "20260416_094443/images/20260304/20260304_232016_0312c749-e228-4ba3-a7e7-3bb2f792acbe.jpg",
+        "sideImagePath": "20260416_094443/images/20260304/20260304_232018_a59042f9-0f59-4d58-94e9-6413af7eb51c.jpg",
         "notes": "",
         "voiceNotes": [
           {
@@ -908,7 +118,9 @@
         "scaleTop": 0.12,
         "scaleSide": 0.11,
         "hasImagePair": true,
-        "imagePath": "20260416_094443/images/20260407/20260407_221605_ed1a3c5d-3f1d-41b3-b797-da9f0f75d66f.jpg",
+        "imagePath": "20260416_094443/images/20260407/20260407_221604_e4a9c987-2031-4e35-a110-9e25e3176dd9.jpg",
+        "topImagePath": "20260416_094443/images/20260407/20260407_221604_e4a9c987-2031-4e35-a110-9e25e3176dd9.jpg",
+        "sideImagePath": "20260416_094443/images/20260407/20260407_221605_ed1a3c5d-3f1d-41b3-b797-da9f0f75d66f.jpg",
         "notes": "",
         "voiceNotes": []
       },
@@ -931,7 +143,512 @@
         "scaleTop": 0.12,
         "scaleSide": 0.11,
         "hasImagePair": true,
-        "imagePath": "20260416_094443/images/20260409/20260409_153449_a8ea1f63-510f-4866-828b-0bab354a7302.jpg",
+        "imagePath": "20260416_094443/images/20260409/20260409_153448_ca6b5e87-bbd1-49c3-9156-9c9bcce640d5.jpg",
+        "topImagePath": "20260416_094443/images/20260409/20260409_153448_ca6b5e87-bbd1-49c3-9156-9c9bcce640d5.jpg",
+        "sideImagePath": "20260416_094443/images/20260409/20260409_153449_a8ea1f63-510f-4866-828b-0bab354a7302.jpg",
+        "notes": "",
+        "voiceNotes": []
+      }
+    ],
+    "audioFiles": []
+  },
+  "20260517_185713": {
+    "id": "20260517_185713",
+    "operator": "Ground Analyst",
+    "samples": [
+      {
+        "id": "470148ea-74d",
+        "full_id": "470148ea-74db-4c38-a3a6-35b8e9e2fb9a",
+        "timestampUtc": "2026-03-04T17:00:39.810067Z",
+        "classification": "breccia impact",
+        "confidence": 0.6637325882911682,
+        "predictionTimestamp": "2026-03-04T17:00:39.810067Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260304/20260304_165538_a6c54f53-cfcd-4f09-978e-922bb93d1eb7.jpg",
+        "topImagePath": "20260517_185713/images/20260304/20260304_165538_a6c54f53-cfcd-4f09-978e-922bb93d1eb7.jpg",
+        "sideImagePath": "20260517_185713/images/20260304/20260304_165542_129627ab-1146-4fea-a9c2-ad4a949a8657.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "74edeba0-a65",
+        "full_id": "74edeba0-a65b-4732-8bf3-d136196f6e6a",
+        "timestampUtc": "2026-03-04T17:17:09.346776Z",
+        "classification": "basalt pigeonite",
+        "confidence": 0.6213736534118652,
+        "predictionTimestamp": "2026-03-04T17:17:09.346776Z",
+        "volumeCm3": 49.2,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260304/20260304_171248_8abab56a-ff7b-4c1a-9e74-fdaebf144283.jpg",
+        "topImagePath": "20260517_185713/images/20260304/20260304_171248_8abab56a-ff7b-4c1a-9e74-fdaebf144283.jpg",
+        "sideImagePath": "20260517_185713/images/20260304/20260304_171251_d07d1672-3d12-4af0-8988-13681f26edcd.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "de171204-722",
+        "full_id": "de171204-722b-40c7-a1c8-3217b45d9208",
+        "timestampUtc": "2026-03-04T23:21:25.944635Z",
+        "classification": "basalt pigeonite",
+        "confidence": 0.6067668199539185,
+        "predictionTimestamp": "2026-03-04T23:21:25.944635Z",
+        "volumeCm3": 6.53848547519217,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260304/20260304_232016_0312c749-e228-4ba3-a7e7-3bb2f792acbe.jpg",
+        "topImagePath": "20260517_185713/images/20260304/20260304_232016_0312c749-e228-4ba3-a7e7-3bb2f792acbe.jpg",
+        "sideImagePath": "20260517_185713/images/20260304/20260304_232018_a59042f9-0f59-4d58-94e9-6413af7eb51c.jpg",
+        "notes": "",
+        "voiceNotes": [
+          {
+            "timestamp": 1772695107.236779,
+            "transcript": "hello testing microphone, now!",
+            "session_id": null
+          },
+          {
+            "timestamp": 1772695334.300252,
+            "transcript": "hello testing microphone.",
+            "session_id": null
+          },
+          {
+            "timestamp": 1772695438.1170626,
+            "transcript": "hello testing",
+            "session_id": null
+          },
+          {
+            "timestamp": 1772695565.9104085,
+            "transcript": "hello testing",
+            "session_id": null
+          }
+        ]
+      },
+      {
+        "id": "cca5950b-e7c",
+        "full_id": "cca5950b-e7ca-4906-9735-7c5131c74a79",
+        "timestampUtc": "2026-04-07T22:16:35.087476Z",
+        "classification": "basalt pigeonite",
+        "confidence": 0.5694859623908997,
+        "predictionTimestamp": "2026-04-07T22:16:35.087476Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260407/20260407_221604_e4a9c987-2031-4e35-a110-9e25e3176dd9.jpg",
+        "topImagePath": "20260517_185713/images/20260407/20260407_221604_e4a9c987-2031-4e35-a110-9e25e3176dd9.jpg",
+        "sideImagePath": "20260517_185713/images/20260407/20260407_221605_ed1a3c5d-3f1d-41b3-b797-da9f0f75d66f.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "6366af14-087",
+        "full_id": "6366af14-0872-4ff3-b50a-984205127b34",
+        "timestampUtc": "2026-04-09T15:35:17.766890Z",
+        "classification": "basalt pigeonite",
+        "confidence": 0.6421718001365662,
+        "predictionTimestamp": "2026-04-09T15:35:17.766890Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260409/20260409_153448_ca6b5e87-bbd1-49c3-9156-9c9bcce640d5.jpg",
+        "topImagePath": "20260517_185713/images/20260409/20260409_153448_ca6b5e87-bbd1-49c3-9156-9c9bcce640d5.jpg",
+        "sideImagePath": "20260517_185713/images/20260409/20260409_153449_a8ea1f63-510f-4866-828b-0bab354a7302.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "8e61ee20-5dc",
+        "full_id": "8e61ee20-5dc4-4d0a-b9af-1d97ce50dda0",
+        "timestampUtc": "2026-04-19T11:22:05.334694Z",
+        "classification": "Basalt",
+        "confidence": 0.9704,
+        "predictionTimestamp": "2026-04-19T11:22:05.334694Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260419/20260419_112131_842439ec-9e7f-4972-9bfa-e3b9971b1675.jpg",
+        "topImagePath": "20260517_185713/images/20260419/20260419_112131_842439ec-9e7f-4972-9bfa-e3b9971b1675.jpg",
+        "sideImagePath": "20260517_185713/images/20260419/20260419_112133_4ab44484-463a-424f-afae-1533db695ab9.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "8f05bc4b-dab",
+        "full_id": "8f05bc4b-dabe-4754-873c-e55997eaa838",
+        "timestampUtc": "2026-04-20T14:40:09.118021Z",
+        "classification": "basalt pigeonite",
+        "confidence": 0.5052633285522461,
+        "predictionTimestamp": "2026-04-20T14:40:09.118021Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260420/20260420_143927_ccd15718-c318-40a0-be7b-d04aabef6583.jpg",
+        "topImagePath": "20260517_185713/images/20260420/20260420_143927_ccd15718-c318-40a0-be7b-d04aabef6583.jpg",
+        "sideImagePath": "20260517_185713/images/20260420/20260420_143928_7bdf2234-7a48-42b0-9bdf-2e8a3e252720.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "dffb9cf1-6d0",
+        "full_id": "dffb9cf1-6d09-4ec0-8a06-a572d2d4d3bc",
+        "timestampUtc": "2026-04-20T16:04:37.297419Z",
+        "classification": "basalt pigeonite",
+        "confidence": 0.7003783583641052,
+        "predictionTimestamp": "2026-04-20T16:04:37.297419Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260420/20260420_160411_f681ba54-9631-4cb0-9ad3-e6ea859c94b0.jpg",
+        "topImagePath": "20260517_185713/images/20260420/20260420_160411_f681ba54-9631-4cb0-9ad3-e6ea859c94b0.jpg",
+        "sideImagePath": "20260517_185713/images/20260420/20260420_160411_9fba5789-e4b2-41d9-8c3f-2653fe90e1ed.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "94b2e6e0-207",
+        "full_id": "94b2e6e0-2075-4d4c-970f-0d8dfe510bf4",
+        "timestampUtc": "2026-05-05T12:42:49.805423Z",
+        "classification": "Basalt",
+        "confidence": 0.9789,
+        "predictionTimestamp": "2026-05-05T12:42:49.805423Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260505/20260505_124143_d309c69c-7e36-458e-adce-eb2f4518e67d.jpg",
+        "topImagePath": "20260517_185713/images/20260505/20260505_124143_d309c69c-7e36-458e-adce-eb2f4518e67d.jpg",
+        "sideImagePath": "20260517_185713/images/20260505/20260505_124144_c90d5188-441a-4e40-9bb4-8c8eb6c0e65c.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "a87c85ca-cce",
+        "full_id": "a87c85ca-cce6-4add-b872-3aecdc7a5576",
+        "timestampUtc": "2026-05-05T14:52:16.512566Z",
+        "classification": "Basalt",
+        "confidence": 0.9788,
+        "predictionTimestamp": "2026-05-05T14:52:16.512566Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260505/20260505_145058_1b391aff-fbc9-4872-bbc0-8142ad416fe2.jpg",
+        "topImagePath": "20260517_185713/images/20260505/20260505_145058_1b391aff-fbc9-4872-bbc0-8142ad416fe2.jpg",
+        "sideImagePath": "20260517_185713/images/20260505/20260505_145059_8bbe13c8-4a36-466a-8cd0-f3e3cfc672f4.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "c5dfdecc-339",
+        "full_id": "c5dfdecc-3397-48ce-9748-2a753081900c",
+        "timestampUtc": "2026-05-05T14:55:24.671098Z",
+        "classification": "Basalt",
+        "confidence": 0.9783,
+        "predictionTimestamp": "2026-05-05T14:55:24.671098Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260505/20260505_145409_300b747e-1325-41e0-87d3-d08da2e607b4.jpg",
+        "topImagePath": "20260517_185713/images/20260505/20260505_145409_300b747e-1325-41e0-87d3-d08da2e607b4.jpg",
+        "sideImagePath": "20260517_185713/images/20260505/20260505_145410_5dfdc98f-9b56-42e0-8de2-23a3bcc114ea.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "0982c262-fd8",
+        "full_id": "0982c262-fd8c-49c1-ad7d-a526353422ce",
+        "timestampUtc": "2026-05-07T12:30:29.534958Z",
+        "classification": "basalt",
+        "confidence": 0.7973,
+        "predictionTimestamp": "2026-05-07T12:30:29.534958Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260507/20260507_122929_fd1c71fb-69c6-42de-999a-77dddadb1e1e.jpg",
+        "topImagePath": "20260517_185713/images/20260507/20260507_122929_fd1c71fb-69c6-42de-999a-77dddadb1e1e.jpg",
+        "sideImagePath": "20260517_185713/images/20260507/20260507_122929_c1451d2c-7d0e-42fd-8737-0eb23d1ec77d.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "ee8bae68-a6f",
+        "full_id": "ee8bae68-a6f5-4ced-a282-4fbb15bec86b",
+        "timestampUtc": "2026-05-07T12:45:49.776596Z",
+        "classification": "basalt",
+        "confidence": 0.86,
+        "predictionTimestamp": "2026-05-07T12:45:49.776596Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260507/20260507_124513_24f2a231-f4bf-49c6-a482-4c4a169f58b4.jpg",
+        "topImagePath": "20260517_185713/images/20260507/20260507_124513_24f2a231-f4bf-49c6-a482-4c4a169f58b4.jpg",
+        "sideImagePath": "20260517_185713/images/20260507/20260507_124514_b6120b38-ea1a-4fdd-918d-3fa66b6a73b1.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "1e66ef30-f67",
+        "full_id": "1e66ef30-f675-4a9e-ae87-3944e4b00e7e",
+        "timestampUtc": "2026-05-07T12:46:55.554327Z",
+        "classification": "anorthosite",
+        "confidence": 0.7776,
+        "predictionTimestamp": "2026-05-07T12:46:55.554327Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260507/20260507_124622_3d91dae0-ed67-40bb-b5dd-e9eabf0b9164.jpg",
+        "topImagePath": "20260517_185713/images/20260507/20260507_124622_3d91dae0-ed67-40bb-b5dd-e9eabf0b9164.jpg",
+        "sideImagePath": "20260517_185713/images/20260507/20260507_124623_7d1e848a-0134-48ff-b12c-d749a631664f.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "05cb3e74-23c",
+        "full_id": "05cb3e74-23cb-41fa-ba86-790995b2fb1f",
+        "timestampUtc": "2026-05-07T12:47:37.251803Z",
+        "classification": "basalt",
+        "confidence": 0.6311,
+        "predictionTimestamp": "2026-05-07T12:47:37.251803Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260507/20260507_124708_f5b4060a-2033-444e-821d-c176bb9c0924.jpg",
+        "topImagePath": "20260517_185713/images/20260507/20260507_124708_f5b4060a-2033-444e-821d-c176bb9c0924.jpg",
+        "sideImagePath": "20260517_185713/images/20260507/20260507_124709_462e3117-252e-47a4-80c9-14395acfc747.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "071042fd-ad9",
+        "full_id": "071042fd-ad9a-4a37-9dce-4728cbffa572",
+        "timestampUtc": "2026-05-07T12:49:29.669576Z",
+        "classification": "basalt",
+        "confidence": 0.7579,
+        "predictionTimestamp": "2026-05-07T12:49:29.669576Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260507/20260507_124901_d02a2bf0-f269-4704-831a-19d0f1a466fc.jpg",
+        "topImagePath": "20260517_185713/images/20260507/20260507_124901_d02a2bf0-f269-4704-831a-19d0f1a466fc.jpg",
+        "sideImagePath": "20260517_185713/images/20260507/20260507_124902_90d8c1f4-a09f-4304-bb2a-15afdf348cec.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "b5bf3514-4f9",
+        "full_id": "b5bf3514-4f9c-475e-92dd-59be4ac87d49",
+        "timestampUtc": "2026-05-08T12:55:37.824560Z",
+        "classification": "anorthosite",
+        "confidence": 0.6375,
+        "predictionTimestamp": "2026-05-08T12:55:37.824560Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260508/20260508_125407_cf8bd6b3-1669-4a1d-9089-a8b1a17cc082.jpg",
+        "topImagePath": "20260517_185713/images/20260508/20260508_125407_cf8bd6b3-1669-4a1d-9089-a8b1a17cc082.jpg",
+        "sideImagePath": "20260517_185713/images/20260508/20260508_125407_195844b8-b6dd-44bb-9b30-d199540a9084.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "6255737e-70f",
+        "full_id": "6255737e-70f2-480a-922a-521f522f4812",
+        "timestampUtc": "2026-05-08T12:58:25.245656Z",
+        "classification": "anorthosite",
+        "confidence": 0.6168,
+        "predictionTimestamp": "2026-05-08T12:58:25.245656Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260508/20260508_125758_d75a9f0b-452e-433f-92c4-d5797963fd4a.jpg",
+        "topImagePath": "20260517_185713/images/20260508/20260508_125758_d75a9f0b-452e-433f-92c4-d5797963fd4a.jpg",
+        "sideImagePath": "20260517_185713/images/20260508/20260508_125759_3fd998cf-7d4e-469d-8025-895de91bf865.jpg",
+        "notes": "",
+        "voiceNotes": []
+      },
+      {
+        "id": "a38e7e81-ef9",
+        "full_id": "a38e7e81-ef90-4e03-917f-d686eda29d72",
+        "timestampUtc": "2026-05-11T14:56:00.711451Z",
+        "classification": "anorthosite",
+        "confidence": 0.5611,
+        "predictionTimestamp": "2026-05-11T14:56:00.711451Z",
+        "volumeCm3": 0,
+        "dimensions": {
+          "length": 0,
+          "width": 0,
+          "height": 0
+        },
+        "footprintArea": 0,
+        "shapeFactor": 0,
+        "estimationMethod": "Stored metadata",
+        "scaleTop": 0.12,
+        "scaleSide": 0.11,
+        "hasImagePair": true,
+        "imagePath": "20260517_185713/images/20260511/20260511_145532_b5672357-223a-40d9-b99d-9d6d2fb7f4fc.jpg",
+        "topImagePath": "20260517_185713/images/20260511/20260511_145532_b5672357-223a-40d9-b99d-9d6d2fb7f4fc.jpg",
+        "sideImagePath": "20260517_185713/images/20260511/20260511_145532_54093076-7a93-4ce9-be8c-03a9b0dc8d72.jpg",
         "notes": "",
         "voiceNotes": []
       }
