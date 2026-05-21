@@ -19,7 +19,7 @@ from PySide6.QtGui import QTextCursor, QKeyEvent, QShortcut, QKeySequence, QPain
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton, QMainWindow, QStackedWidget,
     QTextEdit, QListWidget, QHBoxLayout, QSizePolicy, QGridLayout, QDialog,
-    QFrame, QMessageBox
+    QFrame
 )
 
 import importlib.util, pathlib
@@ -544,6 +544,58 @@ class VoicePage(QWidget):
         # Force the overlay to always match the exact size of the VoicePage
         self.loading_overlay.setGeometry(self.rect())
         super().resizeEvent(event)
+
+
+class ConfirmPage(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setSpacing(20)
+
+        self._lbl = QLabel()
+        self._lbl.setAlignment(Qt.AlignCenter)
+        self._lbl.setWordWrap(True)
+        self._lbl.setStyleSheet("font-size: 20px; color: #344f41;")
+        layout.addWidget(self._lbl, stretch=1)
+
+        self._btn_confirm = save_button("CONFIRM")
+        layout.addWidget(self._btn_confirm)
+
+        self._btn_cancel = redo_button("CANCEL")
+        layout.addWidget(self._btn_cancel)
+
+        self._on_confirm_cb = None
+        self._on_cancel_cb = None
+        self._btn_confirm.clicked.connect(lambda: self._on_confirm_cb and self._on_confirm_cb())
+        self._btn_cancel.clicked.connect(lambda: self._on_cancel_cb and self._on_cancel_cb())
+
+    def prepare(self, text: str, on_confirm, on_cancel) -> None:
+        self._lbl.setText(text)
+        self._on_confirm_cb = on_confirm
+        self._on_cancel_cb = on_cancel
+
+
+class AlertPage(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setSpacing(20)
+
+        self._lbl = QLabel()
+        self._lbl.setAlignment(Qt.AlignCenter)
+        self._lbl.setWordWrap(True)
+        self._lbl.setStyleSheet("font-size: 20px; color: #344f41;")
+        layout.addWidget(self._lbl, stretch=1)
+
+        self._btn_ok = redo_button("OK")
+        layout.addWidget(self._btn_ok)
+
+        self._on_dismiss_cb = None
+        self._btn_ok.clicked.connect(lambda: self._on_dismiss_cb and self._on_dismiss_cb())
+
+    def prepare(self, text: str, on_dismiss) -> None:
+        self._lbl.setText(text)
+        self._on_dismiss_cb = on_dismiss
 
 
 class TripLoadPage(QWidget):
@@ -1109,6 +1161,8 @@ class AppWindow(QMainWindow):
         self.voice_loading = VoiceLoadingPage()
         self.voice = VoicePage()
         self.trip = TripLoadPage()
+        self.confirm_page = ConfirmPage()
+        self.alert_page = AlertPage()
         self.mission_detail = MissionDetailPage()
         self.mission_create = MissionCreatePage()
         self.rock_detail = RockDetailPage()
@@ -1124,6 +1178,8 @@ class AppWindow(QMainWindow):
         self.stack.addWidget(self.voice_loading)
         self.stack.addWidget(self.voice)
         self.stack.addWidget(self.trip)
+        self.stack.addWidget(self.confirm_page)
+        self.stack.addWidget(self.alert_page)
         self.stack.addWidget(self.mission_detail)
         self.stack.addWidget(self.mission_create)
         self.stack.addWidget(self.rock_detail)
@@ -1274,24 +1330,16 @@ class AppWindow(QMainWindow):
                     widget.setContentsMargins(5, 2, 5, 2)
     
     def _on_delete_all_clicked(self) -> None:
-        # Create the custom popup
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Delete All Data")
-        msg_box.setText("Are you sure? Clicking CONFIRM will delete data from all your past missions. This data will be irretrievable.")
-        msg_box.setStyleSheet("QLabel { color: #344f41; font-size: 18px; font-weight: normal; } QMessageBox { background-color: #cbd2c5; }")
-        
-        # Add the custom buttons
-        btn_confirm = msg_box.addButton("CONFIRM", QMessageBox.AcceptRole)
-        btn_confirm.setStyleSheet("background-color: #cc0000; color: white; font-weight: bold; padding: 8px;")
-        
-        btn_cancel = msg_box.addButton("CANCEL", QMessageBox.RejectRole)
-        btn_cancel.setStyleSheet("background-color: #95b7dc; color: #385573; font-weight: bold; padding: 8px;")
-        
-        msg_box.exec()
-        
-        # Check which button they clicked
-        if msg_box.clickedButton() == btn_confirm:
-            self.vm.clear_all_trip_data()
+        self.confirm_page.prepare(
+            "Are you sure? This will delete all past mission data and is irretrievable.",
+            on_confirm=self._on_confirm_delete_all,
+            on_cancel=self._show_trip_home,
+        )
+        self.stack.setCurrentWidget(self.confirm_page)
+
+    def _on_confirm_delete_all(self) -> None:
+        self.vm.clear_all_trip_data()
+        self._show_trip_home()
 
     def _setup_shortcuts(self) -> None:
         shortcut_f11 = QShortcut(QKeySequence(Qt.Key_F11), self)
@@ -1428,6 +1476,7 @@ class AppWindow(QMainWindow):
         self.trip.btn_create_new_mission.clicked.connect(self._open_create_mission_page)
         self.trip.btn_delete_all.clicked.connect(self._on_delete_all_clicked)
         self.trip.list.itemClicked.connect(self._on_mission_clicked)
+
 
         self.mission_detail.btn_back.clicked.connect(self._show_trip_home)
         self.mission_detail.list.itemClicked.connect(self._on_timeline_clicked)
@@ -2089,40 +2138,29 @@ class AppWindow(QMainWindow):
         menu.popup(QPoint(x, y))
 
     def _delete_mission(self, mission_id: str, mission_name: str) -> None:
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Delete Mission")
-        msg_box.setText(f'Are you sure? Clicking CONFIRM will delete the mission "{mission_name}" and all of its items permanently.')
-        msg_box.setStyleSheet("QLabel { color: #344f41; font-size: 18px; font-weight: normal; } QMessageBox { background-color: #cbd2c5; }")
-
-        btn_cancel = msg_box.addButton("CANCEL", QMessageBox.RejectRole)
-        btn_cancel.setStyleSheet("background-color: #95b7dc; color: #385573; font-weight: bold; padding: 8px;")
-
-        btn_confirm = msg_box.addButton("CONFIRM", QMessageBox.AcceptRole)
-        btn_confirm.setStyleSheet("background-color: #cc0000; color: white; font-weight: bold; padding: 8px;")
-
-        msg_box.exec()
-        if msg_box.clickedButton() == btn_confirm:
+        def on_confirm():
             if mission_id == self._selected_mission_id:
                 self._selected_mission_id = None
             self.vm.delete_mission(mission_id)
+            self._show_trip_home()
+        self.confirm_page.prepare(
+            f'Are you sure? Clicking CONFIRM will delete the mission "{mission_name}" and all of its items permanently.',
+            on_confirm=on_confirm,
+            on_cancel=self._show_trip_home,
+        )
+        self.stack.setCurrentWidget(self.confirm_page)
 
     def _delete_timeline_item(self, item_dict):
         if item_dict["type"] == "voice":
-            msg_box = QMessageBox(self)
-            msg_box.setWindowTitle("Delete Voice Note")
-            msg_box.setText("Are you sure? Clicking CONFIRM will delete this data permanently.")
-            msg_box.setStyleSheet("QLabel { color: #344f41; font-size: 18px; font-weight: normal; } QMessageBox { background-color: #cbd2c5; }")
-            
-            btn_cancel = msg_box.addButton("CANCEL", QMessageBox.RejectRole)
-            btn_cancel.setStyleSheet("background-color: #95b7dc; color: #385573; font-weight: bold; padding: 8px;")
-            
-            btn_confirm = msg_box.addButton("CONFIRM", QMessageBox.AcceptRole)
-            btn_confirm.setStyleSheet("background-color: #cc0000; color: white; font-weight: bold; padding: 8px;")
-            
-            msg_box.exec()
-            
-            if msg_box.clickedButton() == btn_confirm:
+            def on_confirm():
                 self.vm.delete_voice_note_by_ts(item_dict["data"].get("ts"))
+                self.stack.setCurrentWidget(self.mission_detail)
+            self.confirm_page.prepare(
+                "Are you sure? Clicking CONFIRM will delete this data permanently.",
+                on_confirm=on_confirm,
+                on_cancel=lambda: self.stack.setCurrentWidget(self.mission_detail),
+            )
+            self.stack.setCurrentWidget(self.confirm_page)
                 
         elif item_dict["type"] == "rock":
             dialog = QDialog(self)
@@ -2299,7 +2337,8 @@ class AppWindow(QMainWindow):
         try:
             mission = self.vm.create_mission(name)
         except ValueError as exc:
-            QMessageBox.warning(self, "Name Taken", str(exc))
+            self.alert_page.prepare(str(exc), on_dismiss=lambda: self.stack.setCurrentWidget(self.mission_create))
+            self.stack.setCurrentWidget(self.alert_page)
             return
         self.mission_create.text.clear()
         self.mission_keyboard.hide()
@@ -2311,7 +2350,11 @@ class AppWindow(QMainWindow):
             self._show_trip_home()
 
     def _on_error(self, message: str) -> None:
-        QMessageBox.warning(self, "Error", "Something went wrong. Please press escape to return to home screen.")
+        self.alert_page.prepare(
+            "Something went wrong. Please press escape to return to home screen.",
+            on_dismiss=self.vm.go_home,
+        )
+        self.stack.setCurrentWidget(self.alert_page)
     
     def _on_recording_status_changed(self, is_recording: bool):
         self.camera_preview.mic_ctrl._update_ui_state(is_recording)
