@@ -62,22 +62,14 @@ def detect_apriltag_side_px(image, tag_dict_name="DICT_APRILTAG_36h11"):
     aruco = cv2.aruco
     dictionary = getattr(aruco, "getPredefinedDictionary")(getattr(aruco, tag_dict_name))
 
-    # Build a list of grayscale candidates to maximise detection across lighting conditions
+    # Build a list of grayscale candidates (raw, CLAHE, slightly blurred)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     candidates = [gray]
-
-    # CLAHE: helps with uneven / shadowed lighting
     try:
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         candidates.append(clahe.apply(gray))
     except Exception:
         pass
-
-    # Unsharp mask: recovers soft edges from slight motion blur
-    blurred = cv2.GaussianBlur(gray, (0, 0), 3)
-    sharpened = cv2.addWeighted(gray, 1.5, blurred, -0.5, 0)
-    candidates.append(sharpened)
-
     candidates.append(cv2.GaussianBlur(gray, (5, 5), 0))
 
     # If the image is very large, also test a downscaled copy to reduce noise
@@ -92,9 +84,7 @@ def detect_apriltag_side_px(image, tag_dict_name="DICT_APRILTAG_36h11"):
         if hasattr(aruco, "CORNER_REFINE_SUBPIX"):
             p.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
         p.adaptiveThreshWinSizeMin = 3
-        # Large window handles uneven lighting across a tag on a 1920×1080 image;
-        # the OpenCV default of 23 is tuned for low-res inputs and misses tags here.
-        p.adaptiveThreshWinSizeMax = 53
+        p.adaptiveThreshWinSizeMax = 23
         p.adaptiveThreshWinSizeStep = 10
         return p
 
@@ -107,7 +97,7 @@ def detect_apriltag_side_px(image, tag_dict_name="DICT_APRILTAG_36h11"):
                 pass
         try:
             p.adaptiveThreshWinSizeMin = 3
-            p.adaptiveThreshWinSizeMax = 53
+            p.adaptiveThreshWinSizeMax = 23
             p.adaptiveThreshWinSizeStep = 10
         except Exception:
             pass
