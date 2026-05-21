@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace as dc_replace
 from enum import Enum, auto
 from pathlib import Path
 from typing import Optional, List, Union
@@ -908,6 +908,7 @@ class ViewModel(QObject):
                 except OSError:
                     pass
         self.current_classification = None
+        self._original_classification_label = None
         self._last_top_path = None
         self._last_side_path = None
         self.open_camera_preview()
@@ -997,6 +998,7 @@ class ViewModel(QObject):
             raw=payload,
         )
         self.current_classification = result
+        self._original_classification_label = result.label
         self.classification_changed.emit(result)
         if self._volume_pending:
             volume_str = "Volume = Calculating..."
@@ -1009,14 +1011,24 @@ class ViewModel(QObject):
         self.volume_display_changed.emit(volume_str)
         self._set_state(AppStateType.CLASSIFIED)
 
+    def override_classification_label(self, label: str, confidence: Optional[float] = None) -> None:
+        if self.current_classification:
+            kwargs: dict = {"label": label}
+            if confidence is not None:
+                kwargs["confidence"] = confidence
+            self.current_classification = dc_replace(self.current_classification, **kwargs)
+
     def save_classification(self) -> None:
         if self.current_classification:
+            to_save = self.current_classification
+            if to_save.label != getattr(self, "_original_classification_label", to_save.label):
+                to_save = dc_replace(to_save, raw={})
             mission = self.store.ensure_current_mission()
             self.active_mission_id = mission.mission_id
-            entry = self.store.save_rock(self.current_classification, mission_id=mission.mission_id)
+            entry = self.store.save_rock(to_save, mission_id=mission.mission_id)
             self.active_rock_id = entry.rock_id
             self._classification_saved_rock_id = entry.rock_id
-            label = self.current_classification.label
+            label = to_save.label
             
             # --- SHARED MAC PATH ---
             project_root = Path(__file__).resolve().parent.parent.parent
@@ -1034,6 +1046,7 @@ class ViewModel(QObject):
         if self.current_classification:
             self._delete_classification_files(self.current_classification)
         self.current_classification = None
+        self._original_classification_label = None
         self.go_home()
 
     def _delete_classification_files(self, result: ClassificationResult) -> None:
