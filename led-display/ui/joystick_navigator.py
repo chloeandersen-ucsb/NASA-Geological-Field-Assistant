@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QApplication, QPushButton, QWidget, QAbstractButton,
     QStackedWidget, QTextEdit, QListWidget,
 )
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtGui import QKeyEvent, QColor
 
 # ── I2C / joystick constants ────────────────────────────────────────────────
 JOYSTICK_ADDR  = 0x20
@@ -28,30 +28,30 @@ POLL_HZ        = 30
 INITIAL_DELAY  = 0.40
 REPEAT_DELAY   = 0.18
 
-# HIGHLIGHT_BG   = "#f0c040"
-# HIGHLIGHT_FG   = "#1a1a1a"
-# HIGHLIGHT_BOR  = "#c8960a"
+import re as _re
 
-HIGHLIGHT_BG   = "#2f473b"
-HIGHLIGHT_FG   = "#d6dcd9"
-HIGHLIGHT_BOR  = "#15201a"
+HIGHLIGHT_BORDER = "#697d6a"
+
+
+def _darken_hex(hex_color: str, factor: float = 0.82) -> str:
+    c = QColor(hex_color)
+    return QColor(
+        int(c.red()   * factor),
+        int(c.green() * factor),
+        int(c.blue()  * factor),
+    ).name()
 
 
 def _apply_highlight(widget: QWidget, original_style: str) -> str:
     style = original_style.strip()
+    match = _re.search(r'background(?:-color)?\s*:\s*(#[0-9a-fA-F]{6})', style)
+    darkened_bg = _darken_hex(match.group(1)) if match else "rgba(52, 79, 65, 0.18)"
+    bg_rule     = f"background-color: {darkened_bg};"
+    border_rule = f"border: 2px solid {HIGHLIGHT_BORDER};"
     if "{" in style:
-        override = (
-            f" QPushButton {{ background-color: {HIGHLIGHT_BG} !important; "
-            f"color: {HIGHLIGHT_FG} !important; "
-            f"border: 3px solid {HIGHLIGHT_BOR} !important; }}"
-        )
-        return style + override
+        return style + f" QPushButton {{ {bg_rule} {border_rule} }}"
     else:
-        return style + (
-            f" background-color: {HIGHLIGHT_BG};"
-            f" color: {HIGHLIGHT_FG};"
-            f" border: 3px solid {HIGHLIGHT_BOR};"
-        )
+        return style + f" {bg_rule} {border_rule}"
 
 
 class _JoystickWorker(QObject):
