@@ -209,6 +209,12 @@ def homepage_quit_button(text: str) -> QPushButton:
     b.setStyleSheet("font-size: 20px; background-color: #344f41; color: #cad2c5;")
     return b
 
+def light_green_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(35)
+    b.setStyleSheet("font-size: 14px; background-color: #344f41; color: #cad2c5;")
+    return b
+
 
 class HomePage(QWidget):
     def __init__(self):
@@ -1683,7 +1689,7 @@ class AppWindow(QMainWindow):
             lbl.setStyleSheet("font-size: 12px; color: #888;")
             self.classified.alternatives_layout.addWidget(lbl)
             for alt_label, alt_conf in alt_entries:
-                btn = blue_button(f"{alt_label.upper()} ({int(alt_conf * 100)}%)")
+                btn = light_green_button(f"{alt_label.upper()} ({int(alt_conf * 100)}%)")
                 btn.clicked.connect(lambda _checked, l=alt_label: self.vm.override_classification_label(l))
                 self.classified.alternatives_layout.addWidget(btn)
             self.classified.alternatives_layout.addStretch()

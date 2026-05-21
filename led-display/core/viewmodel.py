@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace as dc_replace
 from enum import Enum, auto
 from pathlib import Path
 from typing import Optional, List, Union
@@ -1011,9 +1011,10 @@ class ViewModel(QObject):
 
     def override_classification_label(self, label: str) -> None:
         if self.current_classification:
-            self.current_classification.label = label
-            self.current_classification.raw = {}
-            self.classification_result.emit(self.current_classification)
+            self.current_classification = dc_replace(
+                self.current_classification, label=label, raw={}
+            )
+            self.classification_changed.emit(self.current_classification)
 
     def save_classification(self) -> None:
         if self.current_classification:
