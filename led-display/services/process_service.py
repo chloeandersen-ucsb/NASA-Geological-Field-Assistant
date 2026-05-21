@@ -6,6 +6,7 @@ import re
 import signal
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import cv2
@@ -143,69 +144,209 @@ class CameraService(QThread):
         print("[CAMERA] Native Preview stopped", file=sys.stderr)
 
 
-class ClassificationService(ProcessService):
+class ClassificationService(QObject):
+    """
+    Wraps rocknet_daemon.py as a persistent process.
+
+    The daemon loads the model once and stays alive for the lifetime of the app.
+    classify() sends a JSON line to its stdin; results come back on stdout.
+    Falls back to the old per-call rocknet_infer.py when mocks are active.
+    """
+
     finished = Signal(dict)
-    
+    failed   = Signal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        
-        use_mocks = os.environ.get("SAGE_USE_MOCKS", "").lower() in ("1", "true", "yes")
+
+        use_mocks  = os.environ.get("SAGE_USE_MOCKS",   "").lower() in ("1", "true", "yes")
         use_mock_ml = os.environ.get("SAGE_USE_MOCK_ML", "").lower() in ("1", "true", "yes")
-        
-        if use_mocks or use_mock_ml:
-            self.python = connector.get_python_executable()
-            self.rocknet_script = connector.get_mock_rocknet_script_path()
+        self._use_mock = use_mocks or use_mock_ml
+
+        self.python = connector.get_python_executable()
+
+        if self._use_mock:
+            self.rocknet_script  = connector.get_mock_rocknet_script_path()
             self.default_weights = "mock_weights.pt"
+            self._daemon_mode    = False
         else:
-            self.python = connector.get_python_executable()
-            self.rocknet_script = connector.get_rocknet_script_path()
+            self.daemon_script   = connector.get_rocknet_daemon_script_path()
             self.default_weights = connector.get_rocknet_weights_path()
-            
+            self._daemon_mode    = True
             connector.validate_ml_paths()
-        
+
+        self._proc = QProcess(self)
+        self._proc.setReadChannel(QProcess.StandardOutput)
+        self._proc.setProcessChannelMode(QProcess.ForwardedErrorChannel)
+        self._proc.readyReadStandardOutput.connect(self._on_stdout)
+        self._proc.finished.connect(self._on_proc_finished)
+        self._proc.errorOccurred.connect(self._on_proc_error)
+
+        self._ready           = False
+        self._pending_request: dict | None = None
+        self._busy            = False
+        self._discard_next    = False
         self._expected_json_path: str | None = None
-    
+
+        if self._daemon_mode:
+            self._start_daemon()
+
+    # ------------------------------------------------------------------
+    # Daemon lifecycle
+    # ------------------------------------------------------------------
+
+    def _start_daemon(self) -> None:
+        self._ready = False
+        self._daemon_start_t0 = time.perf_counter()
+        self._proc.start(self.python, [
+            str(self.daemon_script),
+            "--weights", str(self.default_weights),
+        ])
+
+    def cancel(self) -> None:
+        """Discard the in-flight result without killing the daemon."""
+        self._discard_next = self._busy
+        self._busy = False
+        self._pending_request = None
+
+    def kill(self) -> None:
+        """Kill the daemon entirely — only for app shutdown or unrecoverable errors."""
+        self._busy = False
+        self._discard_next = False
+        if self._proc.state() != QProcess.NotRunning:
+            self._proc.kill()
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     def classify(self, image_path: str, weights_path: str | None = None) -> None:
-        if self.proc.state() != QProcess.NotRunning:
+        if not self._daemon_mode:
+            self._classify_oneshot(image_path, weights_path)
+            return
+
+        if self._busy:
             self.failed.emit("Classifier already running")
             return
-        
+
+        base, _ = os.path.splitext(image_path)
+        out_json = base + "_prediction.json"
+
+        request = {"id": base, "image": image_path, "output_json": out_json}
+
+        if self._ready:
+            self._send_request(request)
+        else:
+            # Daemon still warming up — queue and send once ready
+            self._pending_request = request
+
+    # ------------------------------------------------------------------
+    # Daemon stdout handler
+    # ------------------------------------------------------------------
+
+    def _on_stdout(self) -> None:
+        while self._proc.canReadLine():
+            raw = bytes(self._proc.readLine()).decode("utf-8", errors="ignore").strip()
+            if not raw:
+                continue
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            if msg.get("status") == "ready":
+                self._ready = True
+                if self._pending_request:
+                    self._send_request(self._pending_request)
+                    self._pending_request = None
+                return
+
+            # Result or error for a classify call
+            self._busy = False
+            if self._discard_next:
+                self._discard_next = False
+                return
+
+            if msg.get("status") == "error":
+                self.failed.emit(msg.get("message", "Unknown daemon error"))
+                return
+
+            json_path = msg.get("json_path")
+            if not json_path or not os.path.exists(json_path):
+                self.failed.emit(f"Daemon result JSON not found: {json_path}")
+                return
+
+            self._deliver(json_path)
+
+    def _send_request(self, request: dict) -> None:
+        self._busy = True
+        line = (json.dumps(request) + "\n").encode()
+        self._proc.write(line)
+
+    # ------------------------------------------------------------------
+    # Daemon process events
+    # ------------------------------------------------------------------
+
+    def _on_proc_finished(self, exit_code: int, _status) -> None:
+        if self._busy:
+            err = bytes(self._proc.readAllStandardError()).decode("utf-8", errors="ignore").strip()
+            self._busy = False
+            self.failed.emit(err or f"RockNet daemon exited unexpectedly (code {exit_code})")
+
+    def _on_proc_error(self, _err) -> None:
+        self._busy = False
+        self.failed.emit("RockNet daemon process error")
+
+    # ------------------------------------------------------------------
+    # One-shot fallback (mocks only)
+    # ------------------------------------------------------------------
+
+    def _classify_oneshot(self, image_path: str, weights_path: str | None = None) -> None:
+        if self._proc.state() != QProcess.NotRunning:
+            self.failed.emit("Classifier already running")
+            return
+
         weights = weights_path or self.default_weights
-        
         base, _ = os.path.splitext(image_path)
         out_json = base + "_prediction.json"
         self._expected_json_path = out_json
-        
-        cmd = [
-            self.python,
+
+        self._proc.disconnect()
+        self._proc.finished.connect(self._on_oneshot_finished)
+        self._proc.errorOccurred.connect(self._on_proc_error)
+
+        self._proc.start(self.python, [
             str(self.rocknet_script),
             "--weights", str(weights),
             "--image", image_path,
             "--output-json", out_json,
-        ]
-        self.proc.start(cmd[0], cmd[1:])
-    
-    def _on_finished(self, exit_code: int, _status) -> None:
-        err = bytes(self.proc.readAllStandardError()).decode("utf-8", errors="ignore").strip()
+        ])
+
+    def _on_oneshot_finished(self, exit_code: int, _status) -> None:
+        err = bytes(self._proc.readAllStandardError()).decode("utf-8", errors="ignore").strip()
         if exit_code != 0:
             self.failed.emit(err or f"Classification failed (exit {exit_code})")
             return
-        
         if not self._expected_json_path:
             self.failed.emit("Internal error: expected output JSON path not set")
             return
-        
         if not os.path.exists(self._expected_json_path):
             self.failed.emit(f"RockNet output JSON not found: {self._expected_json_path}")
             return
-        
+        self._deliver(self._expected_json_path)
+
+    # ------------------------------------------------------------------
+    # Shared result delivery
+    # ------------------------------------------------------------------
+
+    def _deliver(self, json_path: str) -> None:
         try:
-            with open(self._expected_json_path, "r", encoding="utf-8") as f:
+            with open(json_path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
         except Exception as e:
             self.failed.emit(f"Failed to read RockNet output JSON: {e}")
             return
-        
+
         if not isinstance(payload, dict):
             self.failed.emit(f"RockNet output JSON has unexpected type: {type(payload)}")
             return
@@ -215,16 +356,13 @@ class ClassificationService(ProcessService):
             if "family" not in primary or "confidence" not in primary:
                 self.failed.emit("RockNet v2 output missing primary.family or primary.confidence")
                 return
-            payload["label"] = primary["family"]
+            payload["label"]      = primary["family"]
             payload["confidence"] = primary["confidence"]
         elif "label" not in payload or "confidence" not in payload:
             self.failed.emit("RockNet output JSON missing label/confidence")
             return
-        
+
         self.finished.emit(payload)
-    
-    def _on_error(self, _err) -> None:
-        self.failed.emit("Classifier process error")
 
 
 class VolumeService(ProcessService):

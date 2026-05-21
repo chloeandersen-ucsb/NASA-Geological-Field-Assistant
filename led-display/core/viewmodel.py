@@ -1172,7 +1172,7 @@ class ViewModel(QObject):
         if self._volume_ready_timer:
             self._volume_ready_timer.stop()
             self._volume_ready_timer = None
-        self.classifier.kill()
+        self.classifier.cancel()
         self.volume_service.kill()
         self._delete_pending_classification_files()
         self._classify_payload = None
