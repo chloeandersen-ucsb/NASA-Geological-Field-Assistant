@@ -1009,6 +1009,12 @@ class ViewModel(QObject):
         self.volume_display_changed.emit(volume_str)
         self._set_state(AppStateType.CLASSIFIED)
 
+    def override_classification_label(self, label: str) -> None:
+        if self.current_classification:
+            self.current_classification.label = label
+            self.current_classification.raw = {}
+            self.classification_result.emit(self.current_classification)
+
     def save_classification(self) -> None:
         if self.current_classification:
             mission = self.store.ensure_current_mission()

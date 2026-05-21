@@ -444,11 +444,11 @@ class ClassifiedPage(QWidget):
         layout.addWidget(self.features_container, stretch=1)
 
         # Alternatives
-        self.lbl_alternatives = QLabel("")
-        self.lbl_alternatives.setAlignment(Qt.AlignCenter)
-        self.lbl_alternatives.setWordWrap(True)
-        self.lbl_alternatives.setStyleSheet("font-size: 12px; color: #888;")
-        layout.addWidget(self.lbl_alternatives)
+        self.alternatives_container = QWidget()
+        self.alternatives_layout = QHBoxLayout(self.alternatives_container)
+        self.alternatives_layout.setContentsMargins(0, 0, 0, 0)
+        self.alternatives_layout.setSpacing(8)
+        layout.addWidget(self.alternatives_container)
 
         # Voice widget + buttons
         self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
@@ -1663,19 +1663,30 @@ class AppWindow(QMainWindow):
                     sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
                     top3 = [{"label": k, "confidence": v} for k, v in sorted_scores[:3]]
 
-        alt_parts = []
+        while self.classified.alternatives_layout.count():
+            child = self.classified.alternatives_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        alt_entries = []
         if top3 and len(top3) >= 2:
             conf2 = float(top3[1].get("confidence", 0.0))
             if conf2 > 0:
-                alt_parts.append(f"{top3[1].get('label', '').upper()} (conf: {int(conf2 * 100)}%)")
+                alt_entries.append((top3[1].get("label", ""), conf2))
         if top3 and len(top3) >= 3:
             conf3 = float(top3[2].get("confidence", 0.0))
             if conf3 > 0:
-                alt_parts.append(f"{top3[2].get('label', '').upper()} (conf: {int(conf3 * 100)}%)")
-        if alt_parts:
-            self.classified.lbl_alternatives.setText("Alternatively: " + ",  ".join(alt_parts))
-        else:
-            self.classified.lbl_alternatives.setText("")
+                alt_entries.append((top3[2].get("label", ""), conf3))
+
+        if alt_entries:
+            lbl = QLabel("Alternatively:")
+            lbl.setStyleSheet("font-size: 12px; color: #888;")
+            self.classified.alternatives_layout.addWidget(lbl)
+            for alt_label, alt_conf in alt_entries:
+                btn = blue_button(f"{alt_label.upper()} ({int(alt_conf * 100)}%)")
+                btn.clicked.connect(lambda _checked, l=alt_label: self.vm.override_classification_label(l))
+                self.classified.alternatives_layout.addWidget(btn)
+            self.classified.alternatives_layout.addStretch()
 
         raw = result.raw or {}
         features = raw.get("features") or {}
