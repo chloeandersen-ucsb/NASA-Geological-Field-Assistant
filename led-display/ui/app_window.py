@@ -173,37 +173,25 @@ class LoadingOverlay(QWidget):
         self.spinner.stop()
         self.text_timer.stop()
 
-def back_button(text: str) -> QPushButton:
+def dark_green_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(50)
     b.setStyleSheet("font-size: 22px; background-color: #344f41; color: #cad2c5;")
     return b
 
-def capture_button(text: str) -> QPushButton:
+def light_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(50)
     b.setStyleSheet("font-size: 22px; background-color: #cad2c5; color: #344f41;")
     return b
 
-def redo_button(text: str) -> QPushButton:
+def blue_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(50)
     b.setStyleSheet("font-size: 20px; background-color: #95b7dc; color: #385573;")
     return b
 
-def classify_button(text: str) -> QPushButton:
-    b = QPushButton(text)
-    b.setMinimumHeight(50)
-    b.setStyleSheet("font-size: 20px;")
-    return b
-
-def reclassify_button(text: str) -> QPushButton:
-    b = QPushButton(text)
-    b.setMinimumHeight(50)
-    b.setStyleSheet("font-size: 20px; background-color: #95b7dc; color: #385573;")
-    return b
-
-def save_button(text: str) -> QPushButton:
+def green_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(50)
     b.setStyleSheet("font-size: 20px; background-color: #617c32; color: #f5f6f4;")
@@ -215,16 +203,10 @@ def homepage_button(text: str) -> QPushButton:
     b.setStyleSheet("font-size: 20px; background-color: #344f41; color: #cad2c5;")
     return b
 
-def quit_button(text: str) -> QPushButton:
+def homepage_quit_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(50)
     b.setStyleSheet("font-size: 20px; background-color: #344f41; color: #cad2c5;")
-    return b
-
-def mission_button(text: str) -> QPushButton:
-    b = QPushButton(text)
-    b.setMinimumHeight(50)
-    b.setStyleSheet("font-size: 22px; background-color: #cad2c5; color: #344f41;")
     return b
 
 
@@ -253,7 +235,7 @@ class HomePage(QWidget):
         self.btn_classify = homepage_button("Classify Rock")
         self.btn_voice = homepage_button("Voice to Text")
         self.btn_trip = homepage_button(" View Trip Notes")
-        self.btn_quit = quit_button("QUIT")
+        self.btn_quit = homepage_quit_button("QUIT")
 
         layout.addWidget(self.btn_classify)
         layout.addWidget(self.btn_voice)
@@ -272,7 +254,7 @@ class LoadingPage(QWidget):
         layout.addStretch(1)
         layout.addWidget(label)
         layout.addStretch(1)
-        self.btn_cancel = back_button("Cancel")
+        self.btn_cancel = dark_green_button("Cancel")
         layout.addWidget(self.btn_cancel)
 
     def set_message(self, message: str) -> None:
@@ -317,8 +299,8 @@ class CameraPreviewPage(QWidget):
         self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
         layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
         
-        self.btn_capture = capture_button("Capture")
-        self.btn_cancel = back_button("Back")
+        self.btn_capture = light_button("Capture")
+        self.btn_cancel = dark_green_button("Back")
 
         row = QHBoxLayout()
         row.addWidget(self.btn_cancel)
@@ -364,8 +346,8 @@ class CaptureReviewPage(QWidget):
         layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
 
         btns = QHBoxLayout()
-        self.btn_retake = redo_button("Retake")
-        self.btn_classify = classify_button("Classify")
+        self.btn_retake = blue_button("Retake")
+        self.btn_classify = light_button("Classify")
         btns.addWidget(self.btn_retake)
         btns.addWidget(self.btn_classify)
         layout.addLayout(btns)
@@ -473,9 +455,9 @@ class ClassifiedPage(QWidget):
         layout.addWidget(self.mic_ctrl, 0, Qt.AlignCenter)
         layout.addSpacing(10)
 
-        self.btn_reclassify = reclassify_button("Reclassify")
-        self.btn_save = save_button("Save Classification")
-        self.btn_delete = back_button("Delete")
+        self.btn_reclassify = blue_button("Reclassify")
+        self.btn_save = green_button("Save Classification")
+        self.btn_delete = dark_green_button("Delete")
         layout.addWidget(self.btn_reclassify)
         layout.addWidget(self.btn_save)
         layout.addWidget(self.btn_delete)
@@ -523,14 +505,14 @@ class VoicePage(QWidget):
         layout.addWidget(self.text, stretch=1)
 
         row = QHBoxLayout()
-        self.btn_start = classify_button("Start")
-        self.btn_stop = back_button("Stop")
-        self.btn_redo = redo_button("Redo")
-        self.btn_reset = reclassify_button("Reset Context")
-        self.btn_save = save_button("Save")
-        self.btn_delete = back_button("Delete")       
+        self.btn_start = light_button("Start")
+        self.btn_stop = dark_green_button("Stop")
+        self.btn_redo = blue_button("Redo")
+        self.btn_reset = blue_button("Reset Context")
+        self.btn_save = green_button("Save")
+        self.btn_delete = dark_green_button("Delete")       
 
-        self.btn_cancel = back_button("Back")
+        self.btn_cancel = dark_green_button("Back")
         
         for b in [self.btn_start, self.btn_stop, self.btn_redo, self.btn_save, self.btn_delete, self.btn_reset, self.btn_cancel]:
             row.addWidget(b)
@@ -558,10 +540,10 @@ class ConfirmPage(QWidget):
         self._lbl.setStyleSheet("font-size: 20px; color: #344f41;")
         layout.addWidget(self._lbl, stretch=1)
 
-        self._btn_confirm = save_button("CONFIRM")
+        self._btn_confirm = green_button("CONFIRM")
         layout.addWidget(self._btn_confirm)
 
-        self._btn_cancel = redo_button("CANCEL")
+        self._btn_cancel = blue_button("CANCEL")
         layout.addWidget(self._btn_cancel)
 
         self._on_confirm_cb = None
@@ -587,7 +569,7 @@ class AlertPage(QWidget):
         self._lbl.setStyleSheet("font-size: 20px; color: #344f41;")
         layout.addWidget(self._lbl, stretch=1)
 
-        self._btn_ok = redo_button("OK")
+        self._btn_ok = blue_button("OK")
         layout.addWidget(self._btn_ok)
 
         self._on_dismiss_cb = None
@@ -609,11 +591,11 @@ class TripLoadPage(QWidget):
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
         layout.addWidget(title)
 
-        self.btn_create_new_mission = mission_button("Create New Mission")
+        self.btn_create_new_mission = light_button("Create New Mission")
         layout.addWidget(self.btn_create_new_mission)
 
         # --- Delete All Button ---
-        self.btn_delete_all = back_button("Delete All Missions")
+        self.btn_delete_all = dark_green_button("Delete All Missions")
         layout.addWidget(self.btn_delete_all)
 
         self.lbl_current_mission = QLabel("Current mission: --")
@@ -630,7 +612,7 @@ class TripLoadPage(QWidget):
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(self.list, stretch=1)
 
-        self.btn_back = back_button("Back")
+        self.btn_back = dark_green_button("Back")
         layout.addWidget(self.btn_back)
         
         self._missions_data = []
@@ -667,7 +649,7 @@ class MissionDetailPage(QWidget):
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(self.list, stretch=1)
 
-        self.btn_back = back_button("Back")
+        self.btn_back = dark_green_button("Back")
         layout.addWidget(self.btn_back)
 
         self._timeline_data = []
@@ -707,10 +689,10 @@ class MissionCreatePage(QWidget):
         """)
         layout.addWidget(self.text)
 
-        self.btn_create = mission_button("Create Mission")
+        self.btn_create = light_button("Create Mission")
         layout.addWidget(self.btn_create)
 
-        self.btn_cancel = back_button("Back")
+        self.btn_cancel = dark_green_button("Back")
         layout.addWidget(self.btn_cancel)
         
 class RockDetailPage(QWidget):
@@ -834,7 +816,7 @@ class RockDetailPage(QWidget):
         """)
         layout.addWidget(self.notes_text, stretch=1)
 
-        self.btn_back = back_button("Back")
+        self.btn_back = dark_green_button("Back")
         layout.addWidget(self.btn_back)
         self._current_rock_id = None
 
@@ -990,7 +972,7 @@ class VoiceNoteDetailPage(QWidget):
         """)
         layout.addWidget(self.text, stretch=1)
 
-        self.btn_back = back_button("Back")
+        self.btn_back = dark_green_button("Back")
         layout.addWidget(self.btn_back)
 
     def set_note(self, note: dict) -> None:

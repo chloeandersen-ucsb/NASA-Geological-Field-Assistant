@@ -45,7 +45,7 @@ class ModelLoaderThread(QThread):
 class SplashScreen(QWidget):
     def __init__(self, is_jetson):
         super().__init__()
-        self.setStyleSheet("background-color: #586e5d; color: #cad2c5; font-family: 'Courier New';")
+        self.setStyleSheet("background-color: #cbd2c5; color: #cad2c5; font-family: 'Courier New';")
         
         if is_jetson:
             self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
@@ -76,14 +76,14 @@ class SplashScreen(QWidget):
             QProgressBar {
                 border: 2px solid #cad2c5;
                 border-radius: 5px;
-                background-color: #344f41;
+                background-color: #577d6a;
                 height: 30px;
                 text-align: center;
                 font-weight: bold;
                 font-size: 16px;
             }
             QProgressBar::chunk {
-                background-color: #a88b5c;
+                background-color: #344f41;
                 border-radius: 3px;
             }
         """)
