@@ -184,6 +184,7 @@ class ClassificationService(QObject):
         self._ready           = False
         self._pending_request: dict | None = None
         self._busy            = False
+        self._discard_next    = False
         self._expected_json_path: str | None = None
 
         if self._daemon_mode:
@@ -201,7 +202,16 @@ class ClassificationService(QObject):
             "--weights", str(self.default_weights),
         ])
 
+    def cancel(self) -> None:
+        """Discard the in-flight result without killing the daemon."""
+        self._discard_next = self._busy
+        self._busy = False
+        self._pending_request = None
+
     def kill(self) -> None:
+        """Kill the daemon entirely — only for app shutdown or unrecoverable errors."""
+        self._busy = False
+        self._discard_next = False
         if self._proc.state() != QProcess.NotRunning:
             self._proc.kill()
 
@@ -252,6 +262,10 @@ class ClassificationService(QObject):
 
             # Result or error for a classify call
             self._busy = False
+            if self._discard_next:
+                self._discard_next = False
+                return
+
             if msg.get("status") == "error":
                 self.failed.emit(msg.get("message", "Unknown daemon error"))
                 return
