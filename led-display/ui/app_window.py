@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtGui import QPixmap
 from PySide6.QtGui import QFont
 from PySide6.QtGui import QImage
+import math
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -87,6 +88,89 @@ class SummaryPopupOverlay(QWidget):
         self.lbl_content.setText(content)
         self.raise_()
         self.show()
+
+class BatteryInputDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # Frameless dialog that sits on top
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setStyleSheet("background-color: #cbd2c5; color: #344f41; border: 3px solid #344f41; border-radius: 12px;")
+        self.setFixedSize(320, 480)
+
+        layout = QVBoxLayout(self)
+        
+        lbl_title = QLabel("Set Battery Percentage")
+        lbl_title.setAlignment(Qt.AlignCenter)
+        lbl_title.setStyleSheet("font-size: 20px; font-weight: bold; border: none; padding-top: 10px;")
+        layout.addWidget(lbl_title)
+        
+        self.lbl_display = QLabel("")
+        self.lbl_display.setAlignment(Qt.AlignCenter)
+        self.lbl_display.setStyleSheet("font-size: 36px; font-weight: bold; background-color: #f5f6f4; border: 2px solid #697d6a; border-radius: 8px; padding: 10px; margin: 10px;")
+        layout.addWidget(self.lbl_display)
+
+        grid = QGridLayout()
+        grid.setSpacing(10)
+        grid.setContentsMargins(15, 0, 15, 10)
+        
+        self.entered_value = ""
+        
+        # 3x4 Grid for number pad
+        buttons = [
+            ('1', 0, 0), ('2', 0, 1), ('3', 0, 2),
+            ('4', 1, 0), ('5', 1, 1), ('6', 1, 2),
+            ('7', 2, 0), ('8', 2, 1), ('9', 2, 2),
+            ('⌫', 3, 0), ('0', 3, 1), ('✓', 3, 2)
+        ]
+        
+        for text, row, col in buttons:
+            btn = QPushButton(text)
+            btn.setFixedSize(75, 65)
+            if text == '✓':
+                btn.setStyleSheet("font-size: 24px; font-weight: bold; background-color: #617c32; color: white; border-radius: 8px; border: none;")
+            elif text == '⌫':
+                btn.setStyleSheet("font-size: 24px; font-weight: bold; background-color: #95b7dc; color: #385573; border-radius: 8px; border: none;")
+            else:
+                btn.setStyleSheet("font-size: 24px; font-weight: bold; background-color: #f5f6f4; border: 2px solid #697d6a; border-radius: 8px;")
+            
+            btn.clicked.connect(lambda checked=False, t=text: self._on_btn_clicked(t))
+            grid.addWidget(btn, row, col)
+            
+        layout.addLayout(grid)
+        
+        btn_cancel = QPushButton("Cancel")
+        btn_cancel.setFixedHeight(45)
+        btn_cancel.setStyleSheet("font-size: 18px; font-weight: bold; background-color: #344f41; color: white; border-radius: 8px; margin: 0px 15px 15px 15px;")
+        btn_cancel.clicked.connect(self.reject)
+        layout.addWidget(btn_cancel)
+
+    def _on_btn_clicked(self, text):
+        if text == '⌫':
+            self.entered_value = self.entered_value[:-1]
+        elif text == '✓':
+            if self.entered_value:
+                val = int(self.entered_value)
+                # Validation rule: 1 to 100
+                if 1 <= val <= 100:
+                    self.accept()
+                else:
+                    self.lbl_display.setText("Invalid\n(1-100)")
+                    self.lbl_display.setStyleSheet("font-size: 20px; font-weight: bold; color: #cc0000; background-color: #f5f6f4; border: 2px solid #cc0000; border-radius: 8px; padding: 10px; margin: 10px;")
+                    self.entered_value = ""
+                    return
+            else:
+                return
+        else:
+            # Maximum 3 digits
+            if len(self.entered_value) < 3:
+                self.entered_value += text
+                self.lbl_display.setStyleSheet("font-size: 36px; font-weight: bold; background-color: #f5f6f4; border: 2px solid #697d6a; border-radius: 8px; padding: 10px; margin: 10px;")
+        
+        if text != '✓':
+            self.lbl_display.setText(self.entered_value + "%" if self.entered_value else "")
+
+    def get_percentage(self):
+        return int(self.entered_value) if self.entered_value else -1
 
 class SpinnerWidget(QWidget):
     """A custom widget that draws a smooth, rotating loading circle."""
@@ -207,6 +291,12 @@ def homepage_quit_button(text: str) -> QPushButton:
     b = QPushButton(text)
     b.setMinimumHeight(50)
     b.setStyleSheet("font-size: 20px; background-color: #344f41; color: #cad2c5;")
+    return b
+
+def light_green_button(text: str) -> QPushButton:
+    b = QPushButton(text)
+    b.setMinimumHeight(35)
+    b.setStyleSheet("font-size: 14px; background-color: #344f41; color: #cad2c5;")
     return b
 
 
@@ -479,11 +569,11 @@ class ClassifiedPage(QWidget):
         layout.addWidget(self.features_container, stretch=1)
 
         # Alternatives
-        self.lbl_alternatives = QLabel("")
-        self.lbl_alternatives.setAlignment(Qt.AlignCenter)
-        self.lbl_alternatives.setWordWrap(True)
-        self.lbl_alternatives.setStyleSheet("font-size: 12px; color: #888;")
-        layout.addWidget(self.lbl_alternatives)
+        self.alternatives_container = QWidget()
+        self.alternatives_layout = QHBoxLayout(self.alternatives_container)
+        self.alternatives_layout.setContentsMargins(0, 0, 0, 0)
+        self.alternatives_layout.setSpacing(8)
+        layout.addWidget(self.alternatives_container)
 
         # Voice widget + buttons
         self.mic_ctrl = ExpandingVoiceWidget(self.vm, self)
@@ -1116,7 +1206,22 @@ class AppWindow(QMainWindow):
         super().__init__()
 
         import time
-        self.session_start_time = time.time()
+        import json
+        self.MAX_BATTERY_SECONDS = 378 * 60 
+        self.current_battery_percentage = 100.0 
+        
+        # Load saved battery state if it exists
+        state_file = project_root / "battery_state.json"
+        if state_file.exists():
+            try:
+                with open(state_file, "r") as f:
+                    data = json.load(f)
+                    self.current_battery_percentage = float(data.get("percentage", 100.0))
+            except Exception as e:
+                print(f"Failed to load battery state: {e}")
+
+        self.last_battery_calc_time = time.time()
+        self.last_saved_percentage = int(self.current_battery_percentage)
         
         self.vm = vm
         self.setWindowTitle("SAGE Jetson UI")
@@ -1148,6 +1253,7 @@ class AppWindow(QMainWindow):
         self.lbl_battery = QLabel("100% 🔋")
         self.lbl_battery.setStyleSheet("font-size: 16px; font-weight: bold; color: #344f41; background: transparent;")
         self.lbl_battery.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.lbl_battery.mousePressEvent = self._on_battery_clicked
 
         status_layout.addWidget(self.lbl_time)
         status_layout.addStretch(1)
@@ -1237,6 +1343,16 @@ class AppWindow(QMainWindow):
         
         self._setup_shortcuts()
 
+    def _save_battery_state(self):
+        """Saves the battery state to a JSON file to survive reboots."""
+        import json
+        try:
+            state_file = project_root / "battery_state.json"
+            with open(state_file, "w") as f:
+                json.dump({"percentage": self.current_battery_percentage}, f)
+        except Exception as e:
+            print(f"Failed to save battery state: {e}")
+
     def _update_vtt_context_label(self) -> None:
         project_root = Path(__file__).resolve().parent.parent.parent
         context_file = project_root / "ML-classifications" / "visual_context.txt"
@@ -1253,6 +1369,22 @@ class AppWindow(QMainWindow):
             self.voice.lbl_context.setText(f"Context: {context_words}")
         else:
             self.voice.lbl_context.setText("Context: None (Default)")
+
+    def _on_battery_clicked(self, event):
+        """Triggered when the user taps the battery percentage in the top right."""
+        dialog = BatteryInputDialog(self)
+        if dialog.exec():
+            new_pct = dialog.get_percentage()
+            if new_pct != -1:
+                import time
+                self.current_battery_percentage = float(new_pct)
+                self.last_battery_calc_time = time.time()
+                
+                # --- NEW: Save the manual override to disk ---
+                self.last_saved_percentage = new_pct
+                self._save_battery_state()
+                
+                self._update_status() # Instantly reflect the change
     
     def _on_reset_context_clicked(self) -> None:
         self.vm.reset_voice_context()
@@ -1702,19 +1834,59 @@ class AppWindow(QMainWindow):
                     sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
                     top3 = [{"label": k, "confidence": v} for k, v in sorted_scores[:3]]
 
-        alt_parts = []
+        while self.classified.alternatives_layout.count():
+            child = self.classified.alternatives_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        alt_entries = []
         if top3 and len(top3) >= 2:
             conf2 = float(top3[1].get("confidence", 0.0))
             if conf2 > 0:
-                alt_parts.append(f"{top3[1].get('label', '').upper()} (conf: {int(conf2 * 100)}%)")
+                alt_entries.append((top3[1].get("label", ""), conf2))
         if top3 and len(top3) >= 3:
             conf3 = float(top3[2].get("confidence", 0.0))
             if conf3 > 0:
-                alt_parts.append(f"{top3[2].get('label', '').upper()} (conf: {int(conf3 * 100)}%)")
-        if alt_parts:
-            self.classified.lbl_alternatives.setText("Alternatively: " + ",  ".join(alt_parts))
-        else:
-            self.classified.lbl_alternatives.setText("")
+                alt_entries.append((top3[2].get("label", ""), conf3))
+
+        if alt_entries:
+            lbl = QLabel("Alternatively:")
+            lbl.setStyleSheet("font-size: 12px; color: #888;")
+            self.classified.alternatives_layout.addWidget(lbl)
+            alt_buttons = []
+            for alt_label, alt_conf in alt_entries:
+                btn = blue_button(f"{alt_label.upper()}\nconf: {int(alt_conf * 100)}%")
+                btn.setStyleSheet(
+                    "font-size: 14px; background-color: #95b7dc; color: #385573;"
+                )
+                btn.setObjectName("joystick_skip")
+                alt_buttons.append(btn)
+                self.classified.alternatives_layout.addWidget(btn)
+
+            original_label = result.label
+            original_conf  = result.confidence
+            selected = [None]
+
+            def _on_alt_clicked(_checked, chosen_label, chosen_conf, chosen_btn):
+                unselected_style = "font-size: 14px; background-color: #95b7dc; color: #385573;"
+                selected_style   = "font-size: 14px; background-color: #385573; color: #f5f6f4;"
+                if selected[0] is chosen_btn:
+                    chosen_btn.setStyleSheet(unselected_style)
+                    selected[0] = None
+                    self.vm.override_classification_label(original_label, original_conf)
+                else:
+                    for b in alt_buttons:
+                        b.setStyleSheet(unselected_style)
+                    chosen_btn.setStyleSheet(selected_style)
+                    selected[0] = chosen_btn
+                    self.vm.override_classification_label(chosen_label, chosen_conf)
+
+            for btn, (alt_label, alt_conf) in zip(alt_buttons, alt_entries):
+                btn.clicked.connect(
+                    lambda _checked, l=alt_label, c=alt_conf, b=btn: _on_alt_clicked(_checked, l, c, b)
+                )
+
+            self.classified.alternatives_layout.addStretch()
 
         raw = result.raw or {}
         features = raw.get("features") or {}
@@ -2423,22 +2595,24 @@ class AppWindow(QMainWindow):
         self.lbl_time.setText(time_str)
         self.lbl_date.setText(date_str)
         
-        # --- DEAD RECKONING BATTERY HACK ---
-        # Assuming the 10,000 mAh INIU Power Bank (~186 minutes total runtime)
-        MAX_BATTERY_MINUTES = 378 
-        MAX_BATTERY_SECONDS = MAX_BATTERY_MINUTES * 60
+        # --- NEW SMART DEAD RECKONING BATTERY HACK ---
+        current_time = time.time()
+        delta_seconds = current_time - self.last_battery_calc_time
+        self.last_battery_calc_time = current_time
         
-        # Calculate how long the app has been running
-        elapsed_seconds = time.time() - self.session_start_time
+        percentage_drop = (delta_seconds / self.MAX_BATTERY_SECONDS) * 100.0
+        self.current_battery_percentage -= percentage_drop
+        self.current_battery_percentage = math.ceil(max(0.0, min(100.0, self.current_battery_percentage)))
         
-        # Calculate the remaining percentage (preventing it from dropping below 0%)
-        remaining_ratio = 1.0 - (elapsed_seconds / MAX_BATTERY_SECONDS)
-        percentage = max(0, int(remaining_ratio * 79))
+        display_percentage = int(self.current_battery_percentage)
         
-        # Change the icon if it gets dangerously low (under 15%)
-        icon = "🪫" if percentage < 15 else "🔋"
-        
-        self.lbl_battery.setText(f"{percentage}% {icon}")
+        # --- NEW: Save to disk only when the visible number changes ---
+        if display_percentage != self.last_saved_percentage:
+            self._save_battery_state()
+            self.last_saved_percentage = display_percentage
+            
+        icon = "🪫" if display_percentage < 15 else "🔋"
+        self.lbl_battery.setText(f"{display_percentage}% {icon}")
             
 
 class Keyboard(QDialog):

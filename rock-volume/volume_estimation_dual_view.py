@@ -53,8 +53,9 @@ class DualViewVolumeResult:
 def detect_apriltag_side_px(image, tag_dict_name="DICT_APRILTAG_36h11"):
     """Detect an AprilTag and return the average side length in pixels.
 
-    We try a few preprocessing variants to make detection more robust to
-    lighting/contrast. If no tag is found, a RuntimeError is raised.
+    Tries many preprocessing variants × parameter configurations to maximise
+    robustness under field conditions (bright sun, shadow, motion blur, small
+    tag, angled shot).  If no tag is found, a RuntimeError is raised.
     """
     if not hasattr(cv2, "aruco"):
         raise RuntimeError("OpenCV aruco module not available; install opencv-contrib-python")
@@ -62,63 +63,137 @@ def detect_apriltag_side_px(image, tag_dict_name="DICT_APRILTAG_36h11"):
     aruco = cv2.aruco
     dictionary = getattr(aruco, "getPredefinedDictionary")(getattr(aruco, tag_dict_name))
 
-    # Build a list of grayscale candidates (raw, CLAHE, slightly blurred)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    candidates = [gray]
+    h, w = gray.shape[:2]
+
+    # ------------------------------------------------------------------ #
+    # Build a prioritised list of grayscale preprocessing candidates       #
+    # ------------------------------------------------------------------ #
+    candidates = []
+
+    # 1. Raw
+    candidates.append(gray)
+
+    # 2. CLAHE variants (mild → aggressive)
+    for clip in (2.0, 4.0, 8.0):
+        try:
+            clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=(8, 8))
+            candidates.append(clahe.apply(gray))
+        except Exception:
+            pass
+
+    # 3. Unsharp-mask sharpening (helps with mild blur)
     try:
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        candidates.append(clahe.apply(gray))
+        blur_for_sharp = cv2.GaussianBlur(gray, (0, 0), 3)
+        sharpened = cv2.addWeighted(gray, 1.5, blur_for_sharp, -0.5, 0)
+        candidates.append(sharpened)
+        # Sharpen on top of CLAHE as well
+        clahe2 = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        clahe_gray = clahe2.apply(gray)
+        blur_c = cv2.GaussianBlur(clahe_gray, (0, 0), 3)
+        candidates.append(cv2.addWeighted(clahe_gray, 1.5, blur_c, -0.5, 0))
     except Exception:
         pass
+
+    # 4. Bilateral filter (edge-preserving noise reduction)
+    try:
+        candidates.append(cv2.bilateralFilter(gray, 9, 75, 75))
+    except Exception:
+        pass
+
+    # 5. Gaussian blur (reduces fine-grain noise for clean prints)
     candidates.append(cv2.GaussianBlur(gray, (5, 5), 0))
+    candidates.append(cv2.GaussianBlur(gray, (3, 3), 0))
 
-    # If the image is very large, also test a downscaled copy to reduce noise
-    h, w = gray.shape[:2]
-    if max(h, w) > 2000:
-        scale = 1600.0 / float(max(h, w))
-        small = cv2.resize(gray, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-        candidates.append(small)
-
-    def _make_params_new():
-        p = aruco.DetectorParameters()
-        if hasattr(aruco, "CORNER_REFINE_SUBPIX"):
-            p.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
-        p.adaptiveThreshWinSizeMin = 3
-        p.adaptiveThreshWinSizeMax = 23
-        p.adaptiveThreshWinSizeStep = 10
-        return p
-
-    def _make_params_legacy():
-        p = aruco.DetectorParameters_create()
-        if hasattr(aruco, "CORNER_REFINE_SUBPIX"):
+    # 6. Rescaled copies — downscale for large images, upscale for small ones
+    max_dim = max(h, w)
+    if max_dim > 2000:
+        for target in (1600, 1024):
+            sc = target / float(max_dim)
+            small = cv2.resize(gray, (int(w * sc), int(h * sc)), interpolation=cv2.INTER_AREA)
+            candidates.append(small)
+            # CLAHE on downscaled as well
             try:
-                p.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
+                clahe_s = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+                candidates.append(clahe_s.apply(small))
             except Exception:
                 pass
+    if max_dim < 800:
+        # Upscale tiny images so the tag has more pixels to work with
+        sc = 800.0 / float(max_dim)
+        big = cv2.resize(gray, (int(w * sc), int(h * sc)), interpolation=cv2.INTER_CUBIC)
+        candidates.append(big)
+
+    # 7. Histogram equalisation as a last resort
+    candidates.append(cv2.equalizeHist(gray))
+
+    # ------------------------------------------------------------------ #
+    # Parameter configurations to try (vary window size range)            #
+    # ------------------------------------------------------------------ #
+    param_configs = [
+        # (adaptiveThreshWinSizeMin, adaptiveThreshWinSizeMax, adaptiveThreshWinSizeStep,
+        #  minMarkerPerimeterRate, errorCorrectionRate)
+        (3,  23, 10, 0.03, 0.6),   # default — good starting point
+        (3,  53, 10, 0.03, 0.6),   # wider window — catches larger tags in frame
+        (3,  23,  4, 0.02, 0.6),   # finer step + looser perimeter
+        (5,  51,  4, 0.02, 0.6),   # medium windows, fine step
+        (3,  23, 10, 0.01, 0.6),   # very small perimeter allowed (tiny tag)
+        (7,  53, 10, 0.03, 0.6),   # coarser minimum window
+    ]
+
+    def _apply_params(p, cfg):
+        min_w, max_w, step, min_perim, err_corr = cfg
         try:
-            p.adaptiveThreshWinSizeMin = 3
-            p.adaptiveThreshWinSizeMax = 23
-            p.adaptiveThreshWinSizeStep = 10
+            p.adaptiveThreshWinSizeMin = min_w
+            p.adaptiveThreshWinSizeMax = max_w
+            p.adaptiveThreshWinSizeStep = step
+            p.minMarkerPerimeterRate = min_perim
+            p.errorCorrectionRate = err_corr
         except Exception:
             pass
         return p
 
+    def _try_detect(cand_img, cfg):
+        """Try detection with new API, fall back to legacy."""
+        try:
+            p = aruco.DetectorParameters()
+            if hasattr(aruco, "CORNER_REFINE_SUBPIX"):
+                p.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
+            p = _apply_params(p, cfg)
+            detector = aruco.ArucoDetector(dictionary, p)
+            c, i, _ = detector.detectMarkers(cand_img)
+        except AttributeError:
+            try:
+                p = aruco.DetectorParameters_create()
+            except AttributeError:
+                return None, None
+            try:
+                if hasattr(aruco, "CORNER_REFINE_SUBPIX"):
+                    p.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
+            except Exception:
+                pass
+            p = _apply_params(p, cfg)
+            c, i, _ = aruco.detectMarkers(cand_img, dictionary, parameters=p)
+        return c, i
+
     corners = ids = None
 
-    for idx, cand in enumerate(candidates):
-        try:
-            parameters = _make_params_new()
-            detector = aruco.ArucoDetector(dictionary, parameters)
-            corners, ids, _ = detector.detectMarkers(cand)
-        except AttributeError:
-            parameters = _make_params_legacy()
-            corners, ids, _ = aruco.detectMarkers(cand, dictionary, parameters=parameters)
-
+    for cand in candidates:
+        for cfg in param_configs:
+            c, i = _try_detect(cand, cfg)
+            if c is not None and len(c) > 0:
+                corners, ids = c, i
+                break
         if corners is not None and len(corners) > 0:
             break
 
     if corners is None or len(corners) == 0:
-        raise RuntimeError("No AprilTag (tag36h11) detected; ensure the tag is fully in frame, sharp, and high contrast")
+        raise RuntimeError(
+            "No AprilTag (tag36h11) detected. "
+            "Tips: ensure the tag fills at least 5% of the frame, is printed on "
+            "high-contrast matte paper, is fully visible (not folded/occluded), "
+            "and is reasonably flat. Avoid heavy shadows across the tag."
+        )
 
     # Use the largest detected tag to stay stable when multiple are visible
     if len(corners) > 1:
