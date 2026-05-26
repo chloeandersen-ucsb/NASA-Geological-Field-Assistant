@@ -24,7 +24,8 @@ parser.add_argument("--raw-asr", action="store_true", help="Disable dictionary c
 args = parser.parse_args()
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_FILE = os.path.join(SCRIPT_DIR, "newest_model.nemo")
+target_model_name = os.environ.get("SAGE_MODEL_FILENAME", "newest_model.nemo")
+MODEL_FILE = os.path.join(SCRIPT_DIR, target_model_name)
 
 # This is the path to the bridge file
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "../../"))

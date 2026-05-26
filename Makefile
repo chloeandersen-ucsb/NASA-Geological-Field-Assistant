@@ -1,4 +1,4 @@
-.PHONY: help setup run run-raw run-base run-base-raw run-mock run-mock-ml clean check
+.PHONY: help setup run run-fine-tuned run-raw run-base run-base-raw run-mock run-mock-ml clean check
 
 # Project configuration
 PYTHON := python3
@@ -46,6 +46,46 @@ run:
 	@cd "$(LED_DISPLAY_DIR)" && \
 		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
 		export SAGE_USE_BASE_MODEL=1 && \
+		export JETSON_PLATFORM=$(IS_JETSON) && \
+		$(PYTHON) main.py
+
+run-fine-tuned:
+	@echo "Platform: $(JETSON_DETECT)"
+	@echo "Data directory: $(SAGE_STORE_DIR)"
+	@echo "Mode: Fine-tuned model (with full post-processing)"
+	@cd "$(LED_DISPLAY_DIR)" && \
+		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
+		export JETSON_PLATFORM=$(IS_JETSON) && \
+		$(PYTHON) main.py
+
+run-phase-1:
+	@echo "Platform: $(JETSON_DETECT)"
+	@echo "Data directory: $(SAGE_STORE_DIR)"
+	@echo "Mode: Phase 1 Fine-tuned model (Geology Vocabulary)"
+	@cd "$(LED_DISPLAY_DIR)" && \
+		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
+		export SAGE_MODEL_FILENAME="geology_fastconformer_v1_phase1.nemo" && \
+		export JETSON_PLATFORM=$(IS_JETSON) && \
+		$(PYTHON) main.py
+
+run-phase-2:
+	@echo "Platform: $(JETSON_DETECT)"
+	@echo "Data directory: $(SAGE_STORE_DIR)"
+	@echo "Mode: Phase 2 Fine-tuned model (Geology Vocab + Acoustic Adaptation)"
+	@cd "$(LED_DISPLAY_DIR)" && \
+		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
+		export SAGE_MODEL_FILENAME="geology_fastconformer_v1_final.nemo" && \
+		export JETSON_PLATFORM=$(IS_JETSON) && \
+		$(PYTHON) main.py
+
+run-phase-2-raw:
+	@echo "Platform: $(JETSON_DETECT)"
+	@echo "Data directory: $(SAGE_STORE_DIR)"
+	@echo "Mode: Phase 2 (RAW ASR - No Spellchecker Sabotage)"
+	@cd "$(LED_DISPLAY_DIR)" && \
+		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
+		export SAGE_MODEL_FILENAME="geology_fastconformer_v1_final.nemo" && \
+		export SAGE_RAW_ASR=1 && \
 		export JETSON_PLATFORM=$(IS_JETSON) && \
 		$(PYTHON) main.py
 
