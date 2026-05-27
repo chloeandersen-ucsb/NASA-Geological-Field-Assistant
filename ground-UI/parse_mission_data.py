@@ -15,6 +15,7 @@ import re
 def get_image_files(images_dir):
     """Get all JPG files from images directory with their timestamps.
     Returns paths relative to sage_ground_data root: images/YYYYMMDD/filename.jpg
+    Key by filename to avoid collisions when multiple images share the same second.
     """
     images = {}
     if not images_dir.exists():
@@ -34,9 +35,11 @@ def get_image_files(images_dir):
                         ts = dt.timestamp()
                         # Path relative to sage_ground_data root: RUNNAME/images/YYYYMMDD/filename.jpg
                         relative_path = f"{images_dir.parent.name}/images/{date_folder.name}/{img_file.name}"
-                        images[ts] = {
+                        # Key by filename to avoid timestamp collision overwrites
+                        images[img_file.name] = {
                             'path': relative_path,
                             'filename': img_file.name,
+                            'timestamp': ts,
                             'date_folder': date_folder.name
                         }
                     except ValueError:
@@ -64,10 +67,9 @@ def parse_mission_data(ground_data_path):
         if not rocks_file.exists():
             continue
         
-        # Get all available images
+        # Get all available images (keyed by filename to avoid timestamp collisions)
         available_images = get_image_files(images_dir)
-        image_timestamps = sorted(available_images.keys())
-        images_by_filename = {img['filename']: img['path'] for img in available_images.values()}
+        images_by_filename = {filename: img['path'] for filename, img in available_images.items()}
         
         # Parse rocks
         rocks = {}
@@ -120,6 +122,10 @@ def parse_mission_data(ground_data_path):
                 nearest_rock_id = min(rock_timestamps, key=lambda rid: abs(rock_timestamps[rid] - note['timestamp']))
                 if abs(rock_timestamps[nearest_rock_id] - note['timestamp']) < 10800:
                     voice_notes[nearest_rock_id].append(note)
+                    note['_assigned'] = True
+        
+        # Mark notes that were not assigned to any rock as unlinked so the UI can show them
+        remaining_unlinked = [n for n in unmatched_voice_notes if not n.get('_assigned')]
 
         samples = []
         for rock_id in sorted_rock_ids:
@@ -127,31 +133,23 @@ def parse_mission_data(ground_data_path):
             dt = datetime.fromtimestamp(rock['timestamp'])
             timestamp_utc = dt.isoformat() + 'Z'
 
-            # Prefer explicit image filenames from model output.
-            image_file = None
-            explicit_candidates = []
-            if rock.get('side_image_path'):
-                explicit_candidates.append(Path(rock['side_image_path']).name)
-            if rock.get('image_path'):
-                explicit_candidates.append(Path(rock['image_path']).name)
+            classification = str(rock.get('classification') or '').strip()
+            if not classification or classification.lower() == 'unknown':
+                continue
 
-            for candidate_name in explicit_candidates:
-                mapped = images_by_filename.get(candidate_name)
-                if mapped:
-                    image_file = mapped
-                    break
+            top_image_name = Path(rock['image_path']).name if rock.get('image_path') else None
+            side_image_name = Path(rock['side_image_path']).name if rock.get('side_image_path') else None
+            top_image_file = images_by_filename.get(top_image_name) if top_image_name else None
+            side_image_file = images_by_filename.get(side_image_name) if side_image_name else None
 
-            # Fallback: closest image by timestamp (wider tolerance).
-            if image_file is None and image_timestamps:
-                closest_ts = min(image_timestamps, key=lambda x: abs(x - rock['timestamp']))
-                if abs(closest_ts - rock['timestamp']) < 10800:  # Within 3 hours
-                    image_file = available_images[closest_ts]['path']
+            if not top_image_file or not side_image_file:
+                continue
 
             sample = {
                 'id': rock['id'],
                 'full_id': rock['full_id'],
                 'timestampUtc': timestamp_utc,
-                'classification': rock['classification'],
+                'classification': classification,
                 'confidence': rock['confidence'],
                 'predictionTimestamp': timestamp_utc,
                 'volumeCm3': rock['volume'] or 0,
@@ -165,8 +163,10 @@ def parse_mission_data(ground_data_path):
                 'estimationMethod': 'Stored metadata',
                 'scaleTop': 0.12,
                 'scaleSide': 0.11,
-                'hasImagePair': bool(image_file),
-                'imagePath': image_file,
+                'hasImagePair': True,
+                'imagePath': top_image_file,
+                'topImagePath': top_image_file,
+                'sideImagePath': side_image_file,
                 'notes': '',
                 'voiceNotes': voice_notes.get(rock['full_id'], [])
             }
@@ -177,7 +177,8 @@ def parse_mission_data(ground_data_path):
                 'id': mission_id,
                 'operator': 'Ground Analyst',
                 'samples': samples,
-                'audioFiles': []
+                'audioFiles': [],
+                'unlinkedVoiceNotes': remaining_unlinked,
             }
     
     return missions
