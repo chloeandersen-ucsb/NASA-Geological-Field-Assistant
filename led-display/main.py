@@ -23,60 +23,13 @@ class ModelLoaderThread(QThread):
         try:
             self.status_update.emit("Importing modules...")
             from core.viewmodel import ViewModel
-            from core.viewmodel import Store
-            from services.process_service import CameraService, ClassificationService, TranscriptionService, VolumeService
 
-            self.status_update.emit("Setting up data store...")
+            self.status_update.emit("Setting up storage...")
             store_dir = connector.ensure_data_dir()
             voice_notes_data_dir = connector.ensure_voice_notes_data_dir()
 
-            # Patch ViewModel.__init__ steps with status signals
-            original_init = ViewModel.__init__
-
-            loader = self
-
-            def instrumented_init(self_vm, store_dir, voice_notes_data_dir, parent=None):
-                from PySide6.QtCore import QObject
-                QObject.__init__(self_vm, parent)
-                self_vm._last_captured_path = None
-
-                loader.status_update.emit("Loading data store...")
-                self_vm.store = Store(store_dir, voice_notes_data_dir)
-
-                loader.status_update.emit("Setting up camera...")
-                self_vm.camera = CameraService(self_vm)
-
-                loader.status_update.emit("Loading classification model...")
-                self_vm.classifier = ClassificationService(self_vm)
-
-                loader.status_update.emit("Starting up voice transcription...")
-                self_vm.transcriber = TranscriptionService(self_vm)
-
-                loader.status_update.emit("Starting volume service...")
-                self_vm.volume_service = VolumeService(self_vm)
-
-                loader.status_update.emit("Booting transcription model...")
-                self_vm.transcriber.boot_model()
-
-                # Restore remaining ViewModel.__init__ state
-                from core.viewmodel import AppStateType
-                self_vm.state = AppStateType.HOME
-                self_vm.current_classification = None
-                self_vm.transcription_text = ""
-                self_vm.mission_name_text = ""
-                self_vm.active_mission_id = self_vm.store.get_current_mission_id()
-                self_vm.active_rock_id = None
-                self_vm._capture_phase = None
-                self_vm._pending_top_path = None
-                self_vm._pending_side_path = None
-                self_vm._last_top_path = None
-                self_vm._last_side_path = None
-
-            ViewModel.__init__ = instrumented_init
-            try:
-                vm = ViewModel(store_dir=str(store_dir), voice_notes_data_dir=str(voice_notes_data_dir))
-            finally:
-                ViewModel.__init__ = original_init
+            self.status_update.emit("Loading models (this may take a moment)...")
+            vm = ViewModel(store_dir=str(store_dir), voice_notes_data_dir=str(voice_notes_data_dir))
 
             self.status_update.emit("Almost ready...")
             # CRITICAL: Transfer ownership of the ViewModel back to the main GUI thread
