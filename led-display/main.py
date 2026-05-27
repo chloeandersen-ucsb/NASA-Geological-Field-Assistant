@@ -74,6 +74,8 @@ class SplashScreen(QWidget):
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("font-size: 13px; color: #344f41; background: transparent;")
         self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setWordWrap(True)
+        self.status_label.setMaximumWidth(460)
 
         # Progress Bar Styling
         self.progress = QProgressBar()
