@@ -536,8 +536,12 @@ def load_checkpoint(
     device: torch.device,
     strict: bool = True,
 ) -> tuple[RockNetV2, dict]:
-    payload    = torch.load(str(path), map_location=device, weights_only=False)
-    model      = RockNetV2().to(device)
+    # Load tensors to CPU first so peak CUDA usage is ~1x model size instead of
+    # ~2x (checkpoint tensors + model params simultaneously). Matters on Jetson's
+    # unified NvMap memory pool when the camera pipeline holds buffers.
+    payload    = torch.load(str(path), map_location="cpu", weights_only=False)
+    model      = RockNetV2()
     state_dict = payload.get("state_dict", payload)
     model.load_state_dict(state_dict, strict=strict)
+    model = model.to(device)
     return model, payload.get("metadata", {})

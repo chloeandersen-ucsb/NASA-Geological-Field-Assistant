@@ -23,6 +23,7 @@
   --gradient-color: rgba(97, 124, 50, 0.04);
   --gradient-color-soft: rgba(105, 125, 106, 0.02);
   --gradient-accent-top: rgba(97, 124, 50, 0.06);
+  --image-bg: #f5f6f4;
 }
 
 [data-theme="dark"] {
@@ -47,6 +48,7 @@
   --gradient-color: rgba(102, 209, 122, 0.07);
   --gradient-color-soft: rgba(102, 209, 122, 0.03);
   --gradient-accent-top: rgba(102, 209, 122, 0.04);
+  --image-bg: #000000;
 }
 
 * {
@@ -448,7 +450,7 @@ textarea {
 
 .image-frame {
   border: 1px solid var(--border);
-  background: #f5f6f4;
+  background: var(--image-bg);
   aspect-ratio: 4 / 3;
   display: flex;
   align-items: center;
@@ -754,7 +756,7 @@ textarea {
   border: 1px solid var(--border);
   object-fit: contain;
   object-position: center;
-  background: #f5f6f4;
+  background: var(--image-bg);
 }
 
 .sample-card-grid {

@@ -36,6 +36,7 @@ led-display/sage_data/voice_notes.jsonl
 *.log
 voiceNotes/data/
 rock-volume/outputs/
+battery_state.json
 
 # Models / large files
 led-display/models/
@@ -55,3 +56,6 @@ build/
 # GroundUI Testing
 sample_groundui_folder/
 sage_ground_data/
+junk/
+outputs/
+.venv311/

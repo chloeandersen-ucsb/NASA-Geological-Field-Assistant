@@ -63,6 +63,9 @@ def main() -> None:
 
     device = select_device()
 
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+
     # Load model
     model, metadata = load_checkpoint(args.weights, device=device)
     if metadata:

@@ -113,6 +113,11 @@ def get_rocknet_script_path() -> Path:
     return get_ml_classifications_dir() / "scripts/rocknet_infer.py"
 
 
+def get_rocknet_daemon_script_path() -> Path:
+    """Get the path to rocknet_daemon.py (persistent model server)."""
+    return get_ml_classifications_dir() / "scripts/rocknet_daemon.py"
+
+
 def get_rocknet_weights_path() -> Path:
     """
     Get the path to best_rocknet.pt model weights.

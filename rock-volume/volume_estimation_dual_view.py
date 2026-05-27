@@ -62,22 +62,40 @@ def detect_apriltag_side_px(image, tag_dict_name="DICT_APRILTAG_36h11"):
     aruco = cv2.aruco
     dictionary = getattr(aruco, "getPredefinedDictionary")(getattr(aruco, tag_dict_name))
 
-    # Build a list of grayscale candidates (raw, CLAHE, slightly blurred)
+    # Build a small fallback set that keeps the user workflow unchanged while
+    # improving detection under soft or low-contrast lighting.
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    candidates = [gray]
+
+    def _gamma_correct(src: np.ndarray, gamma: float) -> np.ndarray:
+        inv_gamma = 1.0 / float(gamma)
+        table = np.array([((i / 255.0) ** inv_gamma) * 255.0 for i in range(256)], dtype=np.float32)
+        return cv2.LUT(src, table.astype(np.uint8))
+
+    def _unsharp_mask(src: np.ndarray, sigma: float = 3.0, amount: float = 1.5) -> np.ndarray:
+        blurred = cv2.GaussianBlur(src, (0, 0), sigma)
+        return cv2.addWeighted(src, 1.0 + amount, blurred, -amount, 0)
+
+    candidates = [("raw", gray)]
     try:
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        candidates.append(clahe.apply(gray))
+        clahe_img = clahe.apply(gray)
+        candidates.append(("clahe", clahe_img))
+        candidates.append(("clahe_strong", cv2.createCLAHE(clipLimit=3.5, tileGridSize=(8, 8)).apply(gray)))
     except Exception:
+        clahe_img = gray
         pass
-    candidates.append(cv2.GaussianBlur(gray, (5, 5), 0))
+    candidates.append(("blur", cv2.GaussianBlur(gray, (5, 5), 0)))
+    candidates.append(("gamma_085", _gamma_correct(gray, 0.85)))
+    candidates.append(("gamma_075", _gamma_correct(gray, 0.75)))
+    candidates.append(("unsharp", _unsharp_mask(gray)))
+    candidates.append(("unsharp_clahe", _unsharp_mask(clahe_img)))
 
     # If the image is very large, also test a downscaled copy to reduce noise
     h, w = gray.shape[:2]
     if max(h, w) > 2000:
         scale = 1600.0 / float(max(h, w))
         small = cv2.resize(gray, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-        candidates.append(small)
+        candidates.append(("small", small))
 
     def _make_params_new():
         p = aruco.DetectorParameters()
@@ -105,7 +123,7 @@ def detect_apriltag_side_px(image, tag_dict_name="DICT_APRILTAG_36h11"):
 
     corners = ids = None
 
-    for idx, cand in enumerate(candidates):
+    for idx, (candidate_name, cand) in enumerate(candidates):
         try:
             parameters = _make_params_new()
             detector = aruco.ArucoDetector(dictionary, parameters)
@@ -115,6 +133,8 @@ def detect_apriltag_side_px(image, tag_dict_name="DICT_APRILTAG_36h11"):
             corners, ids, _ = aruco.detectMarkers(cand, dictionary, parameters=parameters)
 
         if corners is not None and len(corners) > 0:
+            if idx > 0:
+                print(f"    AprilTag fallback succeeded with {candidate_name}")
             break
 
     if corners is None or len(corners) == 0:
