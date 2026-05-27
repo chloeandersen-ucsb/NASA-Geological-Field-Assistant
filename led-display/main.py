@@ -68,6 +68,8 @@ class SplashScreen(QWidget):
         self.loading_text = QLabel("Loading SAGE...")
         self.loading_text.setStyleSheet("font-size: 24px; font-weight: bold; background: transparent;")
         self.loading_text.setAlignment(Qt.AlignCenter)
+        self.loading_text.setWordWrap(True)
+        self.loading_text.setMaximumWidth(460)
 
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("font-size: 13px; color: #344f41; background: transparent;")
