@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace as dc_replace
 from enum import Enum, auto
 from pathlib import Path
 from typing import Optional, List, Union
 import datetime
+import hashlib
+import importlib.util
 import json
 import os
 import sys
 import time
 import uuid
 
-from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtCore import QObject, Signal, QThread, QTimer
 
 from services.process_service import CameraService, ClassificationService, TranscriptionService, VolumeService
 #from voiceNotes.ilai_files import transcriber_fine_tuned
@@ -45,14 +47,74 @@ class RockEntry:
     ts: float
     result: ClassificationResult
     session_id: Optional[str] = None
+    mission_id: Optional[str] = None
+    ai_summary: Optional[str] = None
+    ai_summary_signature: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class MissionEntry:
+    mission_id: str
+    name: str
+    created_ts: float
+    updated_ts: float
+
+
+@dataclass(frozen=True)
+class MissionSummary:
+    mission: MissionEntry
+    rocks: List[RockEntry]
+    voice_notes: List[dict]
+    total_volume: float
+    total_weight: float
 
 
 @dataclass(frozen=True)
 class TripSummary:
-    rocks: List[RockEntry]
-    total_volume: float
-    total_weight: float
-    voice_notes: List[dict]
+    missions: List[MissionSummary]
+    current_mission_id: Optional[str]
+
+
+class RockSummaryWorker(QThread):
+    summary_ready = Signal(str, str)
+    summary_failed = Signal(str, str)
+
+    def __init__(self, rock_id: str, payload: dict, parent=None):
+        super().__init__(parent)
+        self._rock_id = rock_id
+        self._payload = payload
+
+    def run(self) -> None:
+        try:
+            script_path = Path(__file__).resolve().parent.parent / "scripts" / "rock_summary.py"
+            spec = importlib.util.spec_from_file_location("rock_summary_runtime", script_path)
+            if spec is None or spec.loader is None:
+                raise RuntimeError("Unable to load rock summarizer module")
+
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            if self.isInterruptionRequested():
+                return
+
+            result = module.summarize_payload(dict(self._payload))
+            summary = str(result.get("summary", "")).strip() or "AI summary unavailable."
+
+            if self.isInterruptionRequested():
+                return
+            self.summary_ready.emit(self._rock_id, summary)
+            
+        except Exception as e:
+            # --- NEW: FORCE THE TERMINAL TO SHOW US THE REAL CRASH ---
+            import sys
+            import traceback
+            print(f"\n[CRITICAL AI ERROR] {type(e).__name__}: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            # ---------------------------------------------------------
+            
+            if self.isInterruptionRequested():
+                return
+            self.summary_failed.emit(self._rock_id, str(e))
 
 
 class Store:
@@ -62,9 +124,316 @@ class Store:
         os.makedirs(self.base_dir, exist_ok=True)
         self.rocks_path = os.path.join(self.base_dir, "rocks.jsonl")
         self.voice_path = os.path.join(self.base_dir, "voice_notes.jsonl")
+        self.missions_path = os.path.join(self.base_dir, "missions.json")
         
         # --- NEW: Generate a permanent ID for this specific app launch ---
-        self.session_id = str(uuid.uuid4()) 
+        self.session_id = str(uuid.uuid4())
+        self._migrate_legacy_trip_data()
+        self._prune_empty_imported_missions()
+        self._set_current_mission_to_most_recent()
+
+    def _load_missions_payload(self) -> dict:
+        if not os.path.exists(self.missions_path):
+            return {"current_mission_id": None, "missions": []}
+        try:
+            with open(self.missions_path, "r", encoding="utf-8") as fp:
+                payload = json.load(fp)
+        except (json.JSONDecodeError, OSError):
+            return {"current_mission_id": None, "missions": []}
+        if not isinstance(payload, dict):
+            return {"current_mission_id": None, "missions": []}
+        payload.setdefault("current_mission_id", None)
+        payload.setdefault("missions", [])
+        if not isinstance(payload["missions"], list):
+            payload["missions"] = []
+        return payload
+
+    def _save_missions_payload(self, payload: dict) -> None:
+        with open(self.missions_path, "w", encoding="utf-8") as fp:
+            json.dump(payload, fp, ensure_ascii=False, indent=2)
+
+    def _mission_from_record(self, rec: dict) -> MissionEntry:
+        return MissionEntry(
+            mission_id=str(rec.get("mission_id", "")),
+            name=str(rec.get("name", "Untitled Mission")),
+            created_ts=float(rec.get("created_ts", time.time())),
+            updated_ts=float(rec.get("updated_ts", rec.get("created_ts", time.time()))),
+        )
+
+    def _default_mission_name(self, payload: Optional[dict] = None) -> str:
+        payload = payload or self._load_missions_payload()
+        return f"Mission {len(payload.get('missions', [])) + 1}"
+
+    def _touch_mission(self, mission_id: str, ts: Optional[float] = None) -> None:
+        payload = self._load_missions_payload()
+        now = float(ts if ts is not None else time.time())
+        changed = False
+        for rec in payload["missions"]:
+            if rec.get("mission_id") == mission_id:
+                rec["updated_ts"] = now
+                changed = True
+                break
+        if changed:
+            payload["current_mission_id"] = mission_id
+            self._save_missions_payload(payload)
+
+    def _rewrite_rocks(self, transform) -> None:
+        if not os.path.exists(self.rocks_path):
+            return
+        updated_records = []
+        changed = False
+        with open(self.rocks_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                new_rec = transform(rec)
+                if new_rec != rec:
+                    changed = True
+                if new_rec is not None:
+                    updated_records.append(new_rec)
+        if not changed:
+            return
+        with open(self.rocks_path, "w", encoding="utf-8") as f:
+            for rec in updated_records:
+                f.write(json.dumps(rec) + "\n")
+
+    def _rewrite_voice_notes(self, transform) -> None:
+        if not os.path.isdir(self.voice_notes_data_dir):
+            return
+        for root, _dirs, files in os.walk(self.voice_notes_data_dir, topdown=True):
+            for filename in files:
+                if not filename.endswith(".json"):
+                    continue
+                path = os.path.join(root, filename)
+                try:
+                    with open(path, "r", encoding="utf-8") as fp:
+                        rec = json.load(fp)
+                except (json.JSONDecodeError, OSError):
+                    continue
+                new_rec = transform(rec)
+                if new_rec is None:
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+                    continue
+                if new_rec != rec:
+                    try:
+                        with open(path, "w", encoding="utf-8") as fp:
+                            json.dump(new_rec, fp, ensure_ascii=False)
+                    except OSError:
+                        continue
+
+    def _migrate_legacy_trip_data(self) -> None:
+        payload = self._load_missions_payload()
+        item_timestamps: List[float] = []
+        needs_migration = False
+
+        if os.path.exists(self.rocks_path):
+            with open(self.rocks_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    rec = json.loads(line)
+                    if rec.get("type") != "rock":
+                        continue
+                    if not rec.get("mission_id"):
+                        needs_migration = True
+                    if rec.get("ts") is not None:
+                        item_timestamps.append(float(rec["ts"]))
+
+        if os.path.isdir(self.voice_notes_data_dir):
+            for root, _dirs, files in os.walk(self.voice_notes_data_dir, topdown=True):
+                for filename in files:
+                    if not filename.endswith(".json"):
+                        continue
+                    path = os.path.join(root, filename)
+                    try:
+                        with open(path, "r", encoding="utf-8") as fp:
+                            rec = json.load(fp)
+                    except (json.JSONDecodeError, OSError):
+                        continue
+                    if not rec.get("mission_id"):
+                        needs_migration = True
+                    if rec.get("ts") is not None:
+                        item_timestamps.append(float(rec["ts"]))
+
+        if not needs_migration:
+            return
+
+        created_ts = min(item_timestamps) if item_timestamps else time.time()
+        updated_ts = max(item_timestamps) if item_timestamps else created_ts
+        mission_id = str(uuid.uuid4())
+        payload["missions"].append({
+            "mission_id": mission_id,
+            "name": "Imported Mission",
+            "created_ts": created_ts,
+            "updated_ts": updated_ts,
+        })
+        payload["current_mission_id"] = mission_id
+        self._save_missions_payload(payload)
+
+        def assign_mission_to_rock(rec: dict) -> Optional[dict]:
+            if rec.get("type") == "rock" and not rec.get("mission_id"):
+                rec["mission_id"] = mission_id
+            return rec
+
+        def assign_mission_to_note(rec: dict) -> Optional[dict]:
+            if rec.get("type") == "voice" and not rec.get("mission_id"):
+                rec["mission_id"] = mission_id
+            return rec
+
+        self._rewrite_rocks(assign_mission_to_rock)
+        self._rewrite_voice_notes(assign_mission_to_note)
+
+    def _set_current_mission_to_most_recent(self) -> None:
+        payload = self._load_missions_payload()
+        missions = payload.get("missions", [])
+        if not missions:
+            if payload.get("current_mission_id") is not None:
+                payload["current_mission_id"] = None
+                self._save_missions_payload(payload)
+            return
+        most_recent = max(
+            missions,
+            key=lambda rec: (float(rec.get("updated_ts", 0)), float(rec.get("created_ts", 0))),
+        )
+        if payload.get("current_mission_id") != most_recent.get("mission_id"):
+            payload["current_mission_id"] = most_recent.get("mission_id")
+            self._save_missions_payload(payload)
+
+    def _prune_empty_imported_missions(self) -> None:
+        payload = self._load_missions_payload()
+        if not payload.get("missions"):
+            return
+
+        mission_ids_with_items: set[str] = set()
+
+        if os.path.exists(self.rocks_path):
+            with open(self.rocks_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    rec = json.loads(line)
+                    mission_id = rec.get("mission_id")
+                    if rec.get("type") == "rock" and mission_id:
+                        mission_ids_with_items.add(mission_id)
+
+        if os.path.isdir(self.voice_notes_data_dir):
+            for root, _dirs, files in os.walk(self.voice_notes_data_dir, topdown=True):
+                for filename in files:
+                    if not filename.endswith(".json"):
+                        continue
+                    path = os.path.join(root, filename)
+                    try:
+                        with open(path, "r", encoding="utf-8") as fp:
+                            rec = json.load(fp)
+                    except (json.JSONDecodeError, OSError):
+                        continue
+                    mission_id = rec.get("mission_id")
+                    if rec.get("type") == "voice" and mission_id:
+                        mission_ids_with_items.add(mission_id)
+
+        original_count = len(payload["missions"])
+        payload["missions"] = [
+            rec for rec in payload["missions"]
+            if not (
+                rec.get("name") == "Imported Mission"
+                and rec.get("mission_id") not in mission_ids_with_items
+            )
+        ]
+
+        if len(payload["missions"]) == original_count:
+            return
+
+        current_mission_id = payload.get("current_mission_id")
+        remaining_ids = {rec.get("mission_id") for rec in payload["missions"]}
+        if current_mission_id not in remaining_ids:
+            payload["current_mission_id"] = None
+
+        self._save_missions_payload(payload)
+
+    def list_missions(self) -> List[MissionEntry]:
+        payload = self._load_missions_payload()
+        missions = [self._mission_from_record(rec) for rec in payload.get("missions", [])]
+        missions.sort(key=lambda m: (m.updated_ts, m.created_ts), reverse=True)
+        return missions
+
+    def get_current_mission_id(self) -> Optional[str]:
+        payload = self._load_missions_payload()
+        current_mission_id = payload.get("current_mission_id")
+        mission_ids = {rec.get("mission_id") for rec in payload.get("missions", [])}
+        if current_mission_id in mission_ids:
+            return current_mission_id
+        return self.list_missions()[0].mission_id if self.list_missions() else None
+
+    def create_mission(self, name: str) -> MissionEntry:
+        cleaned_name = " ".join(name.strip().split())
+        if not cleaned_name:
+            cleaned_name = self._default_mission_name()
+        payload = self._load_missions_payload()
+        existing_names = {
+            " ".join(str(rec.get("name", "")).strip().split()).casefold()
+            for rec in payload.get("missions", [])
+        }
+        if cleaned_name.casefold() in existing_names:
+            raise ValueError("This name is taken. Please choose a different name.")
+        now = time.time()
+        rec = {
+            "mission_id": str(uuid.uuid4()),
+            "name": cleaned_name,
+            "created_ts": now,
+            "updated_ts": now,
+        }
+        payload["missions"].append(rec)
+        payload["current_mission_id"] = rec["mission_id"]
+        self._save_missions_payload(payload)
+        return self._mission_from_record(rec)
+
+    def ensure_current_mission(self) -> MissionEntry:
+        current_mission_id = self.get_current_mission_id()
+        if current_mission_id:
+            for mission in self.list_missions():
+                if mission.mission_id == current_mission_id:
+                    return mission
+        return self.create_mission(self._default_mission_name())
+
+    def set_current_mission(self, mission_id: str) -> None:
+        payload = self._load_missions_payload()
+        found = False
+        for rec in payload["missions"]:
+            if rec.get("mission_id") == mission_id:
+                found = True
+                break
+        if not found:
+            return
+        payload["current_mission_id"] = mission_id
+        self._save_missions_payload(payload)
+
+    def delete_mission(self, mission_id: str) -> None:
+        payload = self._load_missions_payload()
+        payload["missions"] = [rec for rec in payload.get("missions", []) if rec.get("mission_id") != mission_id]
+        if payload.get("current_mission_id") == mission_id:
+            payload["current_mission_id"] = None
+        self._save_missions_payload(payload)
+
+        def keep_rock(rec: dict) -> Optional[dict]:
+            if rec.get("type") == "rock" and rec.get("mission_id") == mission_id:
+                return None
+            return rec
+
+        def keep_note(rec: dict) -> Optional[dict]:
+            if rec.get("type") == "voice" and rec.get("mission_id") == mission_id:
+                return None
+            return rec
+
+        self._rewrite_rocks(keep_rock)
+        self._rewrite_voice_notes(keep_note)
+        self._set_current_mission_to_most_recent()
 
     def update_voice_note_rock_id(self, ts: float, rock_id: str) -> None:
         """Updates an existing voice note to link it to a specific rock."""
@@ -89,6 +458,7 @@ class Store:
         """Empties both the rocks and voice notes database files."""
         if os.path.exists(self.rocks_path):
             open(self.rocks_path, 'w').close()
+        self._save_missions_payload({"current_mission_id": None, "missions": []})
             
         if os.path.isdir(self.voice_notes_data_dir):
             import shutil
@@ -99,22 +469,31 @@ class Store:
                 else:
                     os.remove(item_path)
 
-    def save_rock(self, result: ClassificationResult) -> RockEntry:
+    def save_rock(self, result: ClassificationResult, mission_id: Optional[str] = None) -> RockEntry:
+        mission = self.ensure_current_mission() if mission_id is None else None
+        mission_id = mission_id or mission.mission_id
         entry = RockEntry(
             rock_id=str(uuid.uuid4()),
             ts=time.time(),
             result=result,
-            session_id=self.session_id # Attach session ID
+            session_id=self.session_id, # Attach session ID
+            mission_id=mission_id,
+            ai_summary=None,
+            ai_summary_signature=None
         )
         rec = {
             "type": "rock",
             "rock_id": entry.rock_id,
             "ts": entry.ts,
             "session_id": entry.session_id, # Save to JSONL
+            "mission_id": entry.mission_id,
+            "ai_summary": entry.ai_summary,
+            "ai_summary_signature": entry.ai_summary_signature,
             "result": asdict(entry.result),
         }
         with open(self.rocks_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec) + "\n")
+        self._touch_mission(mission_id, entry.ts)
         return entry
 
     def list_rocks(self) -> List[RockEntry]:
@@ -140,11 +519,16 @@ class Store:
                     rock_id=rec["rock_id"], 
                     ts=rec["ts"], 
                     result=result,
-                    session_id=rec.get("session_id") # Read from JSONL
+                    session_id=rec.get("session_id"), # Read from JSONL
+                    mission_id=rec.get("mission_id"),
+                    ai_summary=rec.get("ai_summary"),
+                    ai_summary_signature=rec.get("ai_summary_signature")
                 ))
         return rocks
 
-    def save_voice_note(self, transcript: str, cleaned: Optional[str] = None, rock_id: Optional[str] = None) -> None:
+    def save_voice_note(self, transcript: str, cleaned: Optional[str] = None, rock_id: Optional[str] = None, mission_id: Optional[str] = None) -> None:
+        mission = self.ensure_current_mission() if mission_id is None else None
+        mission_id = mission_id or mission.mission_id
         ts = time.time()
         now = datetime.datetime.fromtimestamp(ts)
         date_dir = os.path.join(self.voice_notes_data_dir, now.strftime("%Y%m%d"))
@@ -155,12 +539,14 @@ class Store:
             "type": "voice",
             "ts": time.time(),
             "session_id": getattr(self, "session_id", None),
+            "mission_id": mission_id,
             "rock_id": rock_id,
             "transcript": transcript,
             "cleaned": cleaned or transcript,
         }
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(rec, f, ensure_ascii=False)
+        self._touch_mission(mission_id, rec["ts"])
 
     def delete_rock(self, rock_id: str) -> None:
         if not os.path.exists(self.rocks_path): return
@@ -210,6 +596,25 @@ class Store:
             for rec in lines:
                 f.write(json.dumps(rec) + "\n")
 
+    def update_rock_summary(self, rock_id: str, signature: str, summary: str) -> None:
+        """Saves the AI summary permanently to the rocks.jsonl file."""
+        if not os.path.exists(self.rocks_path):
+            return
+        lines = []
+        with open(self.rocks_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                if rec.get("type") == "rock" and rec.get("rock_id") == rock_id:
+                    rec["ai_summary_signature"] = signature
+                    rec["ai_summary"] = summary
+                lines.append(rec)
+        with open(self.rocks_path, "w", encoding="utf-8") as f:
+            for rec in lines:
+                f.write(json.dumps(rec) + "\n")
+
     def list_voice_notes(self) -> List[dict]:
         if not os.path.isdir(self.voice_notes_data_dir):
             return []
@@ -235,7 +640,11 @@ class ViewModel(QObject):
     classification_changed = Signal(object)
     volume_display_changed = Signal(str)
     transcription_changed = Signal(str)
+    transcription_formatted = Signal()
     recording_status_changed = Signal(bool)
+    mission_name_transcription_changed = Signal(str)
+    mission_name_recording_status_changed = Signal(bool)
+    rock_summary_changed = Signal(str, str)
     trip_changed = Signal(object)
     error = Signal(str)
     two_step_capture_message = Signal(str)
@@ -286,12 +695,14 @@ class ViewModel(QObject):
             import traceback
             traceback.print_exc(file=sys.stderr)
             raise
-
         self.transcriber.boot_model()
 
         self.state = AppStateType.HOME
         self.current_classification: ClassificationResult | None = None
         self.transcription_text = ""
+        self.mission_name_text = ""
+        self.active_mission_id: Optional[str] = self.store.get_current_mission_id()
+        self.active_rock_id: Optional[str] = None
 
         self._capture_phase: Optional[str] = None
         self._pending_top_path: Optional[str] = None
@@ -326,15 +737,55 @@ class ViewModel(QObject):
 
         self.vtt_active = False
         self._was_session_finalized = False
+        self._transcription_target: str | None = None
+        self._mission_name_accept_transcript = True
+        self._rock_summary_cache: dict[str, tuple[str, str]] = {}
+        self._rock_summary_pending_request: Optional[tuple[str, str]] = None
+        self._rock_summary_worker: Optional[RockSummaryWorker] = None
+        
+        self._clear_active_rock_context()
+
+    def _clear_active_rock_context(self) -> None:
+        self.active_rock_id = None
+        project_root = Path(__file__).resolve().parent.parent.parent
+        context_file = project_root / "ML-classifications" / "visual_context.txt"
+        try:
+            with open(context_file, "w") as f:
+                f.write("")
+        except Exception:
+            pass
+
+    def create_mission(self, name: str) -> MissionEntry:
+        mission = self.store.create_mission(name)
+        self.active_mission_id = mission.mission_id
+        self._clear_active_rock_context()
+        self._publish_trip()
+        return mission
+
+    def make_mission_current(self, mission_id: str) -> None:
+        self.store.set_current_mission(mission_id)
+        self.active_mission_id = mission_id
+        self._clear_active_rock_context()
+        self._publish_trip()
+
+    def delete_mission(self, mission_id: str) -> None:
+        self.store.delete_mission(mission_id)
+        self.active_mission_id = self.store.get_current_mission_id()
+        self._clear_active_rock_context()
+        self._publish_trip()
 
     def assign_note_to_rock(self, note_ts: float, rock_id: str) -> None:
         self.store.update_voice_note_rock_id(note_ts, rock_id)
+        self._rock_summary_cache.pop(rock_id, None)
         self._publish_trip() # Refresh the UI to show it moved!
     
     def clear_all_trip_data(self) -> None:
         """Wipes all trip data and refreshes the UI."""
         self.store.delete_all_data()
-        self.active_rock_id = None
+        self.active_mission_id = None
+        self._clear_active_rock_context()
+        self._cancel_rock_summary_worker()
+        self._rock_summary_cache.clear()
         self._publish_trip() # Refreshes the UI to show an empty list!
 
     def _set_state(self, new_state: AppStateType) -> None:
@@ -346,6 +797,7 @@ class ViewModel(QObject):
             print("[VIEWMODEL] start_background_recording: already recording, ignoring", file=sys.stderr)
             return
         print("[VIEWMODEL] start_background_recording: starting new session", file=sys.stderr)
+        self._transcription_target = "voice"
         self.transcription_text = ""
         self.transcription_changed.emit("")
         self.transcriber.start_recording()
@@ -456,6 +908,7 @@ class ViewModel(QObject):
                 except OSError:
                     pass
         self.current_classification = None
+        self._original_classification_label = None
         self._last_top_path = None
         self._last_side_path = None
         self.open_camera_preview()
@@ -545,6 +998,7 @@ class ViewModel(QObject):
             raw=payload,
         )
         self.current_classification = result
+        self._original_classification_label = result.label
         self.classification_changed.emit(result)
         if self._volume_pending:
             volume_str = "Volume = Calculating..."
@@ -557,12 +1011,24 @@ class ViewModel(QObject):
         self.volume_display_changed.emit(volume_str)
         self._set_state(AppStateType.CLASSIFIED)
 
+    def override_classification_label(self, label: str, confidence: Optional[float] = None) -> None:
+        if self.current_classification:
+            kwargs: dict = {"label": label}
+            if confidence is not None:
+                kwargs["confidence"] = confidence
+            self.current_classification = dc_replace(self.current_classification, **kwargs)
+
     def save_classification(self) -> None:
         if self.current_classification:
-            entry = self.store.save_rock(self.current_classification)
+            to_save = self.current_classification
+            if to_save.label != getattr(self, "_original_classification_label", to_save.label):
+                to_save = dc_replace(to_save, raw={})
+            mission = self.store.ensure_current_mission()
+            self.active_mission_id = mission.mission_id
+            entry = self.store.save_rock(to_save, mission_id=mission.mission_id)
             self.active_rock_id = entry.rock_id
             self._classification_saved_rock_id = entry.rock_id
-            label = self.current_classification.label
+            label = to_save.label
             
             # --- SHARED MAC PATH ---
             project_root = Path(__file__).resolve().parent.parent.parent
@@ -580,6 +1046,7 @@ class ViewModel(QObject):
         if self.current_classification:
             self._delete_classification_files(self.current_classification)
         self.current_classification = None
+        self._original_classification_label = None
         self.go_home()
 
     def _delete_classification_files(self, result: ClassificationResult) -> None:
@@ -718,7 +1185,7 @@ class ViewModel(QObject):
         if self._volume_ready_timer:
             self._volume_ready_timer.stop()
             self._volume_ready_timer = None
-        self.classifier.kill()
+        self.classifier.cancel()
         self.volume_service.kill()
         self._delete_pending_classification_files()
         self._classify_payload = None
@@ -744,7 +1211,11 @@ class ViewModel(QObject):
     def start_voice_to_text(self, silent: bool = False) -> None:
         import sys
         print("[VIEWMODEL] User-initiated VTT Start requested", file=sys.stderr)
-        
+
+        if self.transcriber.is_recording and self._transcription_target == "mission":
+            self.stop_mission_name_recording(abort=True)
+
+        self._transcription_target = "voice"
         self.vtt_active = True
         self._was_session_finalized = False
         self.transcription_text = "" 
@@ -759,16 +1230,48 @@ class ViewModel(QObject):
 
     def stop_voice_to_text(self) -> None:
         import sys
+        import time
         print("[VIEWMODEL] stop_voice_to_text() called", file=sys.stderr)
         self.vtt_active = False #!!!!!
+        
+        # --- NEW: Track exactly when we hit stop ---
+        self._stop_time = time.time()
+        
         self.transcriber.stop_recording()
+        if self._transcription_target == "voice":
+            self._transcription_target = None
         self.recording_status_changed.emit(False)
+
+    def start_mission_name_recording(self) -> None:
+        if self.transcriber.is_recording:
+            if self._transcription_target == "voice":
+                self.stop_voice_to_text()
+            elif self._transcription_target == "mission":
+                self.stop_mission_name_recording(abort=True)
+
+        self._transcription_target = "mission"
+        self._mission_name_accept_transcript = True
+        self.mission_name_text = ""
+        self.mission_name_transcription_changed.emit("")
+        self.transcriber.start_recording()
+        self.mission_name_recording_status_changed.emit(True)
+
+    def stop_mission_name_recording(self, abort: bool = False) -> None:
+        if self._transcription_target != "mission" and not self.transcriber.is_recording:
+            return
+        if abort:
+            self._mission_name_accept_transcript = False
+        self.transcriber.stop_recording()
+        if self._transcription_target == "mission":
+            self._transcription_target = None
+        self.mission_name_recording_status_changed.emit(False)
 
     def redo_voice_to_text(self) -> None:
         import sys
         print("[VIEWMODEL] Redo requested", file=sys.stderr)
         
         self.transcriber.stop_recording()
+        self._transcription_target = None
         self.transcription_text = ""
         self.transcription_changed.emit("")
         self.recording_status_changed.emit(False)
@@ -779,8 +1282,16 @@ class ViewModel(QObject):
         self._was_session_finalized = True
         text = self.transcription_text.strip()
         if text:
+            mission = self.store.ensure_current_mission()
+            self.active_mission_id = mission.mission_id
             # Pass the explicit rock_id so it links permanently!
-            self.store.save_voice_note(text, cleaned=text, rock_id=getattr(self, "active_rock_id", None))
+            self.store.save_voice_note(
+                text,
+                cleaned=text,
+                rock_id=getattr(self, "active_rock_id", None),
+                mission_id=mission.mission_id,
+            )
+            self._publish_trip()
 
         self.stop_voice_to_text()
         self.vtt_active = False
@@ -792,6 +1303,9 @@ class ViewModel(QObject):
     
     def make_rock_current(self, entry: RockEntry) -> None:
         """Sets an old rock as the target for new voice notes and updates the AI transcriber context."""
+        if entry.mission_id:
+            self.store.set_current_mission(entry.mission_id)
+            self.active_mission_id = entry.mission_id
         self.active_rock_id = entry.rock_id
         label = entry.result.label
         project_root = Path(__file__).resolve().parent.parent.parent
@@ -802,9 +1316,11 @@ class ViewModel(QObject):
             print(f"[VIEWMODEL] Context explicitly overridden to: {label}")
         except Exception as e:
             pass
+        self._publish_trip()
 
     def delete_rock_by_id(self, rock_id: str) -> None:
         self.store.delete_rock(rock_id)
+        self._rock_summary_cache.pop(rock_id, None)
         if getattr(self, "active_rock_id", None) == rock_id:
             self.active_rock_id = None
         self._publish_trip()
@@ -813,76 +1329,237 @@ class ViewModel(QObject):
         self.store.delete_voice_note(ts)
         self._publish_trip()
 
+    def _cancel_rock_summary_worker(self) -> None:
+        if self._rock_summary_worker and self._rock_summary_worker.isRunning():
+            self._rock_summary_worker.requestInterruption()
+
+    def request_rock_summary(self, entry: RockEntry, associated_notes: list[dict], force: bool = False) -> None:
+        self._cancel_rock_summary_worker()
+
+        features = self._extract_displayable_features(entry.result.raw)
+
+        notes = []
+        for note in associated_notes:
+            cleaned = note.get("cleaned", note.get("transcript", ""))
+            normalized = " ".join(str(cleaned).split())
+            if normalized:
+                notes.append(normalized)
+
+        if not notes and not features:
+            self._rock_summary_pending_request = None
+            self.rock_summary_changed.emit(entry.rock_id, "No associated recordings to summarize yet.")
+            return
+
+        signature = self._build_rock_summary_signature(associated_notes, features)
+        cached = self._rock_summary_cache.get(entry.rock_id)
+
+        if not cached and entry.ai_summary and entry.ai_summary_signature:
+            cached = (entry.ai_summary_signature, entry.ai_summary)
+            self._rock_summary_cache[entry.rock_id] = cached
+
+        if not force and cached and cached[0] == signature:
+            self._rock_summary_pending_request = None
+            self.rock_summary_changed.emit(entry.rock_id, cached[1])
+            return
+
+        self._rock_summary_pending_request = (entry.rock_id, signature)
+        payload = {
+            "rock_id": entry.rock_id,
+            "label": entry.result.label,
+            "notes": notes,
+            "features": features,
+            "estimated_volume": entry.result.estimated_volume,
+            "estimated_weight": entry.result.estimated_weight,
+            "is_retry": force,
+        }
+        worker = RockSummaryWorker(entry.rock_id, payload, self)
+        worker.summary_ready.connect(self._on_rock_summary_finished)
+        worker.summary_failed.connect(self._on_rock_summary_failed)
+        worker.finished.connect(self._on_rock_summary_thread_finished)
+        self._rock_summary_worker = worker
+        worker.start()
+
     def delete_transcription(self) -> None:
         import sys
         self._was_session_finalized = True
         self.vtt_active = False
         self.transcriber.stop_recording()
+        if self._transcription_target == "voice":
+            self._transcription_target = None
         self.transcription_text = ""
         self.transcription_changed.emit("")
         self.recording_status_changed.emit(False)
         self.go_home()
 
-    def _on_transcription_token(self, chunk: str) -> None:
-        import sys
-        print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
-        
-        # --- DEBUG FIX: Force every new chunk onto its own line ---
-        self.transcription_text += chunk.strip() + "\n"
-        
-        print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
-        self.transcription_changed.emit(self.transcription_text)
-
     # def _on_transcription_token(self, chunk: str) -> None:
     #     import sys
     #     print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
-    #     # if self.state == AppStateType.VOICE_TO_TEXT_LOADING:
-    #     #     self._set_state(AppStateType.VOICE_TO_TEXT)
-    #     self.transcription_text += chunk
+
+    #     if self._transcription_target == "mission":
+    #         if not self._mission_name_accept_transcript:
+    #             return
+    #         self.mission_name_text += chunk.strip() + "\n"
+    #         self.mission_name_transcription_changed.emit(self.mission_name_text)
+    #         return
+
+    #     self.transcription_text += chunk.strip() + "\n"
+
     #     print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
     #     self.transcription_changed.emit(self.transcription_text)
 
-    def _on_transcription_completed(self, final_text: str) -> None:
+    def _on_transcription_token(self, chunk: str) -> None:
         import sys
+        print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
         if self._was_session_finalized:
             return
+        self.transcription_text += chunk
+        print(f"[VIEWMODEL] Updated transcription_text (length: {len(self.transcription_text)}): '{self.transcription_text[:200]}'", file=sys.stderr)
+        self.transcription_changed.emit(self.transcription_text)
+
+    def _on_transcription_completed(self, final_text: str) -> None:
+        import sys
+        import time
+        
+        if self._transcription_target == "mission":
+            if not self._mission_name_accept_transcript:
+                return
+            if not final_text or not final_text.strip() or "No audio recorded" in final_text:
+                return
+            self.mission_name_text = final_text
+            self.mission_name_transcription_changed.emit(self.mission_name_text)
+            return
+            
+        if self._was_session_finalized:
+            return
+            
+        # --- THE REAL FIX ---
+        # The background service instantly fires a 'completed' signal the millisecond you hit stop, 
+        # passing the raw, unformatted text. If we let it through, it instantly kills the loading screen.
+        # Since we know the LLM takes at least a few seconds to run, we just ignore any non-empty 
+        # completed signal that arrives within 2.0 seconds of hitting stop!
+        if hasattr(self, '_stop_time'):
+            elapsed = time.time() - self._stop_time
+            if elapsed < 2.0 and final_text.strip() and "No audio recorded" not in final_text:
+                print(f"[VIEWMODEL] Ignoring premature raw text. Waiting for LLM...", file=sys.stderr)
+                return
+        # --------------------
+            
         if not final_text or not final_text.strip() or "No audio recorded" in final_text:
+            self.transcription_text = ""
+            self.transcription_changed.emit("")
+            self.transcription_formatted.emit()
             return
         
         print(f"[VIEWMODEL] CLEANUP: Replacing live text with final version", file=sys.stderr)
         self.transcription_text = final_text
         self.transcription_changed.emit(self.transcription_text)
+        self.transcription_formatted.emit()
+
+    def _on_rock_summary_finished(self, rock_id: str, summary: str) -> None:
+        if self.sender() is not self._rock_summary_worker or not rock_id:
+            return
+        pending_request = self._rock_summary_pending_request
+        self._rock_summary_pending_request = None
+        if pending_request and pending_request[0] == rock_id:
+            self._rock_summary_cache[rock_id] = (pending_request[1], summary)
+            self.store.update_rock_summary(rock_id, pending_request[1], summary)
+        self.rock_summary_changed.emit(rock_id, summary)
+
+    def _on_rock_summary_failed(self, rock_id: str, message: str) -> None:
+        if self.sender() is not self._rock_summary_worker:
+            return
+        pending_request = self._rock_summary_pending_request
+        self._rock_summary_pending_request = None
+        if not pending_request or pending_request[0] != rock_id:
+            return
+        self.rock_summary_changed.emit(rock_id, "AI summary unavailable.")
+
+    def _on_rock_summary_thread_finished(self) -> None:
+        worker = self.sender()
+        if worker is self._rock_summary_worker:
+            self._rock_summary_worker = None
+        if worker is not None:
+            worker.deleteLater()
+
+    def _extract_displayable_features(self, raw: Optional[dict]) -> dict[str, str]:
+        """Return {feature_name: humanized_value} for all displayable RockNet features."""
+        if not raw:
+            return {}
+        features_data = raw.get("features") or {}
+        result: dict[str, str] = {}
+        for name, feat in features_data.items():
+            if not isinstance(feat, dict) or not feat.get("display", False):
+                continue
+            value = feat.get("value", "")
+            if not value or value in ("n/a", "uncertain"):
+                continue
+            result[name] = value.replace("_", " ")
+        return result
+
+    def _build_rock_summary_signature(self, associated_notes: list[dict], features: Optional[dict] = None) -> str:
+        chunks: list[str] = []
+        for note in associated_notes:
+            ts = note.get("ts", 0)
+            rock_id = note.get("rock_id")
+            cleaned = note.get("cleaned", note.get("transcript", ""))
+            normalized = " ".join(str(cleaned).split())
+            chunks.append(f"{ts}|{rock_id}|{normalized}")
+        if features:
+            for k in sorted(features.keys()):
+                chunks.append(f"feat|{k}|{features[k]}")
+        joined = "\n".join(chunks)
+        return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
     def _on_transcription_failed(self, message: str) -> None:
         print(f"[VIEWMODEL] Transcription error (non-fatal): {message}", file=sys.stderr)
 
     def _publish_trip(self) -> None:
+        self._cancel_rock_summary_worker()
+        self._rock_summary_pending_request = None
         rocks = self.store.list_rocks()
         voice_notes = self.store.list_voice_notes()
-        total_volume = 0.0
-        total_weight = 0.0
-        for r in rocks:
-            if r.result.estimated_volume is not None:
-                try:
-                    total_volume += float(r.result.estimated_volume)
-                except (TypeError, ValueError):
-                    pass
-            w = r.result.estimated_weight
-            if w is not None:
-                if isinstance(w, (int, float)):
-                    total_weight += float(w)
-                elif isinstance(w, str):
+        missions = self.store.list_missions()
+        mission_summaries: List[MissionSummary] = []
+
+        for mission in missions:
+            mission_rocks = [rock for rock in rocks if rock.mission_id == mission.mission_id]
+            mission_notes = [note for note in voice_notes if note.get("mission_id") == mission.mission_id]
+            total_volume = 0.0
+            total_weight = 0.0
+
+            for rock in mission_rocks:
+                if rock.result.estimated_volume is not None:
                     try:
-                        a, b = w.replace(" kg", "").split("–")
-                        total_weight += (float(a) + float(b)) / 2 # using average of min and max weight
+                        total_volume += float(rock.result.estimated_volume)
+                    except (TypeError, ValueError):
+                        pass
+                weight = rock.result.estimated_weight
+                if weight is None:
+                    continue
+                if isinstance(weight, (int, float)):
+                    total_weight += float(weight)
+                elif isinstance(weight, str):
+                    try:
+                        a, b = weight.replace(" kg", "").split("–")
+                        total_weight += (float(a) + float(b)) / 2
                     except (ValueError, TypeError):
                         pass
-        summary = TripSummary(rocks=rocks, total_volume=total_volume, total_weight=total_weight, voice_notes=voice_notes)
+
+            mission_summaries.append(MissionSummary(
+                mission=mission,
+                rocks=mission_rocks,
+                voice_notes=mission_notes,
+                total_volume=total_volume,
+                total_weight=total_weight,
+            ))
+
+        current_mission_id = self.store.get_current_mission_id()
+        self.active_mission_id = current_mission_id
+        summary = TripSummary(missions=mission_summaries, current_mission_id=current_mission_id)
         self.trip_changed.emit(summary)
 
     def _fail(self, message: str) -> None:
         import sys
         print(f"\n[CRITICAL DEBUG] Failure detected: {message}", file=sys.stderr)
         # self._abort_classification(message)  <-- Comment this out!
-
