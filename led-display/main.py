@@ -5,7 +5,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QProgressBar
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QProgressBar, QPushButton
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
 
@@ -17,22 +17,72 @@ import connector
 class ModelLoaderThread(QThread):
     models_ready = Signal(object)
     error_occurred = Signal(str)
+    status_update = Signal(str)
 
     def run(self):
         try:
-            # Import heavily modules inside the background thread
+            self.status_update.emit("Importing modules...")
             from core.viewmodel import ViewModel
-            
+            from core.viewmodel import Store
+            from services.process_service import CameraService, ClassificationService, TranscriptionService, VolumeService
+
+            self.status_update.emit("Setting up data store...")
             store_dir = connector.ensure_data_dir()
             voice_notes_data_dir = connector.ensure_voice_notes_data_dir()
-            
-            # This triggers the 10-20 second model boot time
-            vm = ViewModel(store_dir=str(store_dir), voice_notes_data_dir=str(voice_notes_data_dir))
-            
+
+            # Patch ViewModel.__init__ steps with status signals
+            original_init = ViewModel.__init__
+
+            loader = self
+
+            def instrumented_init(self_vm, store_dir, voice_notes_data_dir, parent=None):
+                from PySide6.QtCore import QObject
+                QObject.__init__(self_vm, parent)
+                self_vm._last_captured_path = None
+
+                loader.status_update.emit("Loading data store...")
+                self_vm.store = Store(store_dir, voice_notes_data_dir)
+
+                loader.status_update.emit("Setting up camera...")
+                self_vm.camera = CameraService(self_vm)
+
+                loader.status_update.emit("Loading classification model...")
+                self_vm.classifier = ClassificationService(self_vm)
+
+                loader.status_update.emit("Starting up voice transcription...")
+                self_vm.transcriber = TranscriptionService(self_vm)
+
+                loader.status_update.emit("Starting volume service...")
+                self_vm.volume_service = VolumeService(self_vm)
+
+                loader.status_update.emit("Booting transcription model...")
+                self_vm.transcriber.boot_model()
+
+                # Restore remaining ViewModel.__init__ state
+                from core.viewmodel import AppStateType
+                self_vm.state = AppStateType.HOME
+                self_vm.current_classification = None
+                self_vm.transcription_text = ""
+                self_vm.mission_name_text = ""
+                self_vm.active_mission_id = self_vm.store.get_current_mission_id()
+                self_vm.active_rock_id = None
+                self_vm._capture_phase = None
+                self_vm._pending_top_path = None
+                self_vm._pending_side_path = None
+                self_vm._last_top_path = None
+                self_vm._last_side_path = None
+
+            ViewModel.__init__ = instrumented_init
+            try:
+                vm = ViewModel(store_dir=str(store_dir), voice_notes_data_dir=str(voice_notes_data_dir))
+            finally:
+                ViewModel.__init__ = original_init
+
+            self.status_update.emit("Almost ready...")
             # CRITICAL: Transfer ownership of the ViewModel back to the main GUI thread
             # so the AppWindow can use its QTimers and signals safely.
             vm.moveToThread(QApplication.instance().thread())
-            
+
             self.models_ready.emit(vm)
         except Exception as e:
             import traceback
@@ -66,6 +116,10 @@ class SplashScreen(QWidget):
         self.loading_text.setStyleSheet("font-size: 24px; font-weight: bold; background: transparent;")
         self.loading_text.setAlignment(Qt.AlignCenter)
 
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("font-size: 13px; color: #344f41; background: transparent;")
+        self.status_label.setAlignment(Qt.AlignCenter)
+
         # Progress Bar Styling
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
@@ -88,13 +142,21 @@ class SplashScreen(QWidget):
             }
         """)
         
+        quit_btn = QPushButton("QUIT")
+        quit_btn.setMinimumHeight(50)
+        quit_btn.setStyleSheet("font-size: 20px; background-color: #344f41; color: #cad2c5;")
+        quit_btn.clicked.connect(QApplication.quit)
+
         layout.addStretch(1)
         layout.addWidget(logo)
         layout.addSpacing(40)
         layout.addWidget(self.loading_text)
-        layout.addSpacing(15)
+        layout.addSpacing(8)
+        layout.addWidget(self.status_label)
+        layout.addSpacing(10)
         layout.addWidget(self.progress)
         layout.addStretch(1)
+        layout.addWidget(quit_btn)
 
         # --- High-Precision Animation Trackers ---
         self.exact_progress = 0.0 
@@ -109,6 +171,14 @@ class SplashScreen(QWidget):
         if self.exact_progress < 100.0:
             self.exact_progress += (100.0 - self.exact_progress) * 0.01
             self.progress.setValue(int(self.exact_progress))
+
+    def set_status(self, msg: str):
+        self.status_label.setStyleSheet("font-size: 13px; color: #344f41; background: transparent;")
+        self.status_label.setText(msg)
+
+    def set_error(self, msg: str):
+        self.status_label.setStyleSheet("font-size: 13px; color: #8b0000; background: transparent;")
+        self.status_label.setText(f"Error: {msg}")
 
     def finish_progress(self):
         self.timer.stop()
@@ -176,13 +246,15 @@ def main() -> int:
         splash.close()
 
     def on_error(err_msg):
-        splash.loading_text.setText("Error Loading Models!")
+        splash.loading_text.setText("Error loading models!")
+        splash.set_error(err_msg)
         print(f"FATAL ERROR: {err_msg}", file=sys.stderr)
 
     # Start the background thread
     loader_thread = ModelLoaderThread(app)
     loader_thread.models_ready.connect(on_models_ready)
     loader_thread.error_occurred.connect(on_error)
+    loader_thread.status_update.connect(splash.set_status)
     loader_thread.start()
 
     return app.exec()
