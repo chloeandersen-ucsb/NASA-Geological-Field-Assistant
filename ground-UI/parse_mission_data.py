@@ -122,6 +122,10 @@ def parse_mission_data(ground_data_path):
                 nearest_rock_id = min(rock_timestamps, key=lambda rid: abs(rock_timestamps[rid] - note['timestamp']))
                 if abs(rock_timestamps[nearest_rock_id] - note['timestamp']) < 10800:
                     voice_notes[nearest_rock_id].append(note)
+                    note['_assigned'] = True
+        
+        # Mark notes that were not assigned to any rock as unlinked so the UI can show them
+        remaining_unlinked = [n for n in unmatched_voice_notes if not n.get('_assigned')]
 
         samples = []
         for rock_id in sorted_rock_ids:
@@ -173,7 +177,8 @@ def parse_mission_data(ground_data_path):
                 'id': mission_id,
                 'operator': 'Ground Analyst',
                 'samples': samples,
-                'audioFiles': []
+                'audioFiles': [],
+                'unlinkedVoiceNotes': remaining_unlinked,
             }
     
     return missions

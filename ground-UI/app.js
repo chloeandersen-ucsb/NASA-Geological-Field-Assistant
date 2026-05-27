@@ -292,7 +292,9 @@ async function parseFolderImport(fileList) {
           if (!voiceNotes.has(nearestRockId)) {
             voiceNotes.set(nearestRockId, []);
           }
-          voiceNotes.get(nearestRockId).push(note);
+            voiceNotes.get(nearestRockId).push(note);
+            // mark this unmatched note as assigned so we can expose remaining unlinked notes
+            try { note._assigned = true; } catch (e) { /* noop */ }
         }
       });
     }
@@ -339,6 +341,7 @@ async function parseFolderImport(fileList) {
         operator: "Ground Analyst",
         samples,
         audioFiles: [],
+        unlinkedVoiceNotes: unmatchedVoiceNotes.filter((n) => !n._assigned),
       });
     }
   }
@@ -443,6 +446,12 @@ function getDefaultSampleIdForMission(mission) {
   return mission.samples[0].id;
 }
 
+function formatClassificationLabel(raw) {
+  const s = String(raw || "Unknown").trim();
+  if (!s) return "Unknown";
+  return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function getDefaultTranscriptIdForMission(mission) {
   if (!mission?.samples?.length) {
     return "";
@@ -452,6 +461,11 @@ function getDefaultTranscriptIdForMission(mission) {
     if (sample.voiceNotes && sample.voiceNotes.length > 0) {
       return `${sample.full_id}_0`;
     }
+  }
+
+  // If no sample-attached transcripts, but there are unlinked voice notes, pick the first
+  if (mission.unlinkedVoiceNotes && mission.unlinkedVoiceNotes.length > 0) {
+    return `unlinked_${mission.id}_0`;
   }
 
   return "";
@@ -480,6 +494,21 @@ function getAllTranscripts() {
       });
     }
   });
+  // include unlinked voice notes (not attached to any sample)
+  if (mission.unlinkedVoiceNotes && mission.unlinkedVoiceNotes.length > 0) {
+    mission.unlinkedVoiceNotes.forEach((note, idx) => {
+      transcripts.push({
+        id: `unlinked_${mission.id}_${idx}`,
+        sampleId: null,
+        sampleFullId: null,
+        timestamp: note.timestamp,
+        timestampUtc: new Date((note.timestamp || 0) * 1000).toISOString(),
+        transcript: note.transcript,
+        sessionId: note.session_id,
+        unlinked: true
+      });
+    });
+  }
   return transcripts.sort((a, b) => a.timestamp - b.timestamp);
 }
 
@@ -542,7 +571,7 @@ function getFilteredSamples() {
       sample.id.toLowerCase().includes(normalizedSearch) ||
       sample.timestampUtc.toLowerCase().includes(normalizedSearch);
 
-    const classMatch = uiState.classFilter === "all" || sample.classification === uiState.classFilter;
+    const classMatch = uiState.classFilter === "all" || formatClassificationLabel(sample.classification || "Unknown") === uiState.classFilter;
 
     let volumeMatch = true;
     if (uiState.volumeFilter === "small") {
@@ -582,7 +611,7 @@ function getClassificationLabel(samples, targetSample) {
   const sampleOrder = [];
 
   samples.forEach((sample) => {
-    const cls = sample.classification || "Unknown";
+    const cls = formatClassificationLabel(sample.classification || "Unknown");
     if (!classificationCounts[cls]) {
       classificationCounts[cls] = 0;
     }
@@ -593,7 +622,7 @@ function getClassificationLabel(samples, targetSample) {
   });
 
   const count = sampleOrder[0] || 1;
-  return `${targetSample.classification || "Unknown"}${count}`;
+  return `${formatClassificationLabel(targetSample.classification || "Unknown")}${count}`;
 }
 
 function refreshFilters() {
@@ -610,7 +639,8 @@ function refreshFilters() {
 
   classificationFilterEl.innerHTML = `<option value="all">All</option>`;
   classes.forEach((cls) => {
-    classificationFilterEl.innerHTML += `<option value="${cls}">${cls}</option>`;
+    const label = formatClassificationLabel(cls || "Unknown");
+    classificationFilterEl.innerHTML += `<option value="${label}">${label}</option>`;
   });
 
   dateFilterEl.innerHTML = `<option value="all">All</option>`;
@@ -764,7 +794,7 @@ function renderSampleViewer() {
   sampleInfoStripEl.innerHTML = `
     <div class="strip-cell strip-cell-sample"><span class="strip-label">Sample ID</span><span class="strip-value strip-value-strong">${sample.id}</span></div>
     <div class="strip-cell strip-cell-sample"><span class="strip-label">Timestamp (UTC)</span><span class="strip-value mono">${utcLabel(sample.timestampUtc)}</span></div>
-    <div class="strip-cell strip-cell-sample strip-cell-emphasis"><span class="strip-label">Classification</span><span class="strip-value strip-value-accent">${sample.classification}</span></div>
+    <div class="strip-cell strip-cell-sample strip-cell-emphasis"><span class="strip-label">Classification</span><span class="strip-value strip-value-accent">${formatClassificationLabel(sample.classification)}</span></div>
     <div class="strip-cell strip-cell-sample strip-cell-emphasis"><span class="strip-label">Estimated Volume</span><span class="strip-value strip-value-accent numeric-emphasis">${sample.volumeCm3.toFixed(1)} cm3</span></div>
   `;
 
@@ -774,7 +804,7 @@ function renderSampleViewer() {
   ]);
 
   kvRows(classificationGridEl, [
-    { key: "Predicted Class", value: sample.classification },
+    { key: "Predicted Class", value: formatClassificationLabel(sample.classification) },
     { key: "Confidence Score", value: `${(sample.confidence * 100).toFixed(1)}%`, numeric: true }
   ]);
 
@@ -784,10 +814,11 @@ function renderSampleViewer() {
   const transcriptTextEl = transcriptContentEl?.querySelector(".transcript-text");
 
   if (transcript) {
+    const sampleLabel = transcript.unlinked ? "Unlinked" : (transcript.sampleId || "");
     transcriptMetadataGridEl.innerHTML = `
-      <div class="kv-row"><span class="kv-key">Sample</span><span class="kv-value">${transcript.sampleId}</span></div>
+      <div class="kv-row"><span class="kv-key">Sample</span><span class="kv-value">${sampleLabel}</span></div>
       <div class="kv-row"><span class="kv-key">Timestamp (UTC)</span><span class="kv-value">${utcLabel(transcript.timestampUtc)}</span></div>
-    `;
+`;
     transcriptContentEl?.classList.remove("hidden");
     if (transcriptTextEl) {
       const transcriptText = (transcript.transcript || "").trim();
@@ -817,7 +848,7 @@ function renderStrip() {
   } else if (uiState.sortBy === "volume") {
     samples.sort((a, b) => b.volumeCm3 - a.volumeCm3);
   } else {
-    samples.sort((a, b) => a.classification.localeCompare(b.classification));
+    samples.sort((a, b) => formatClassificationLabel(a.classification || "").localeCompare(formatClassificationLabel(b.classification || "")));
   }
 
   sampleStripEl.innerHTML = "";
@@ -828,7 +859,7 @@ function renderStrip() {
       <img class="sample-thumb" alt="${sample.id} thumbnail" />
       <div class="sample-card-grid">
         <strong>${sample.id}</strong>
-        <span>${sample.classification}</span>
+        <span>${formatClassificationLabel(sample.classification)}</span>
         <span class="numeric-emphasis">${sample.volumeCm3.toFixed(1)} cm3</span>
         <span class="mono">${utcLabel(sample.timestampUtc)}</span>
       </div>
