@@ -682,6 +682,41 @@ class ConfirmPage(QWidget):
         self._on_cancel_cb = on_cancel
 
 
+class RockDeletePage(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setSpacing(20)
+
+        self._lbl = QLabel()
+        self._lbl.setAlignment(Qt.AlignCenter)
+        self._lbl.setWordWrap(True)
+        self._lbl.setStyleSheet("font-size: 20px; color: #344f41;")
+        layout.addWidget(self._lbl, stretch=1)
+
+        self._btn_both = green_button("DELETE ROCK && ALL NOTES")
+        layout.addWidget(self._btn_both)
+
+        self._btn_only = green_button("DELETE ROCK ONLY")
+        layout.addWidget(self._btn_only)
+
+        self._btn_cancel = blue_button("CANCEL")
+        layout.addWidget(self._btn_cancel)
+
+        self._on_both_cb = None
+        self._on_only_cb = None
+        self._on_cancel_cb = None
+        self._btn_both.clicked.connect(lambda: self._on_both_cb and self._on_both_cb())
+        self._btn_only.clicked.connect(lambda: self._on_only_cb and self._on_only_cb())
+        self._btn_cancel.clicked.connect(lambda: self._on_cancel_cb and self._on_cancel_cb())
+
+    def prepare(self, text: str, on_both, on_only, on_cancel) -> None:
+        self._lbl.setText(text)
+        self._on_both_cb = on_both
+        self._on_only_cb = on_only
+        self._on_cancel_cb = on_cancel
+
+
 class AlertPage(QWidget):
     def __init__(self):
         super().__init__()
@@ -1285,6 +1320,7 @@ class AppWindow(QMainWindow):
         self.voice = VoicePage()
         self.trip = TripLoadPage()
         self.confirm_page = ConfirmPage()
+        self.rock_delete_page = RockDeletePage()
         self.alert_page = AlertPage()
         self.mission_detail = MissionDetailPage()
         self.mission_create = MissionCreatePage()
@@ -1302,6 +1338,7 @@ class AppWindow(QMainWindow):
         self.stack.addWidget(self.voice)
         self.stack.addWidget(self.trip)
         self.stack.addWidget(self.confirm_page)
+        self.stack.addWidget(self.rock_delete_page)
         self.stack.addWidget(self.alert_page)
         self.stack.addWidget(self.mission_detail)
         self.stack.addWidget(self.mission_create)
@@ -2356,72 +2393,42 @@ class AppWindow(QMainWindow):
             self.stack.setCurrentWidget(self.confirm_page)
                 
         elif item_dict["type"] == "rock":
-            dialog = QDialog(self)
-            dialog.setWindowTitle("Delete Classification")
-            dialog.setStyleSheet("QDialog { background-color: #cbd2c5; }")
-            layout = QVBoxLayout(dialog)
-            
-            msg = QLabel("Are you sure? How would you like to delete this rock?")
-            msg.setStyleSheet("color: #344f41; font-size: 18px; font-weight: normal;")
-            msg.setWordWrap(True)
-            layout.addWidget(msg)
-            layout.addSpacing(10)
-            
-            btn_both = QPushButton("DELETE ROCK && ALL NOTES")
-            btn_both.setStyleSheet("background-color: #7e1f23; color: white; font-weight: bold; padding: 15px; font-size: 16px; border-radius: 6px;")
-            
-            btn_only = QPushButton("DELETE ROCK ONLY")
-            btn_only.setStyleSheet("background-color: #cc0000; color: white; font-weight: bold; padding: 15px; font-size: 16px; border-radius: 6px;")
-            
-            btn_cancel = QPushButton("CANCEL")
-            btn_cancel.setStyleSheet("background-color: #95b7dc; color: #385573; font-weight: bold; padding: 15px; font-size: 16px; border-radius: 6px;")
-            
-            layout.addWidget(btn_both)
-            layout.addWidget(btn_only)
-            layout.addWidget(btn_cancel)
-            
-            # Helper function to capture the choice and close the dialog
-            choice = [None]
-            def on_choice(c):
-                choice[0] = c
-                dialog.accept()
-                
-            btn_both.clicked.connect(lambda: on_choice("both"))
-            btn_only.clicked.connect(lambda: on_choice("only"))
-            btn_cancel.clicked.connect(dialog.reject)
-            
-            dialog.exec()
-            
-            if choice[0] == "only":
-                self.vm.delete_rock_by_id(item_dict["data"].rock_id)
-                
-            elif choice[0] == "both":
-                entry = item_dict["data"]
+            entry = item_dict["data"]
+
+            def on_only():
+                self.vm.delete_rock_by_id(entry.rock_id)
+                self.stack.setCurrentWidget(self.mission_detail)
+
+            def on_both():
                 associated_ts = []
                 mission_summary = self.mission_detail._summary
                 rocks_sorted = sorted(mission_summary.rocks, key=lambda r: r.ts)
-                
                 next_rock_ts = float('inf')
                 for r in rocks_sorted:
                     if r.ts > entry.ts:
                         next_rock_ts = r.ts
                         break
-                        
                 for n in mission_summary.voice_notes:
                     note_ts = n.get("ts", 0)
                     explicit_rock_id = n.get("rock_id")
-                    
                     if explicit_rock_id == entry.rock_id:
                         associated_ts.append(note_ts)
                     elif explicit_rock_id is None:
                         if entry.ts <= note_ts < next_rock_ts:
                             if n.get("session_id") == entry.session_id:
                                 associated_ts.append(note_ts)
-                
                 for ts in associated_ts:
                     self.vm.store.delete_voice_note(ts)
-                    
                 self.vm.delete_rock_by_id(entry.rock_id)
+                self.stack.setCurrentWidget(self.mission_detail)
+
+            self.rock_delete_page.prepare(
+                "Are you sure? Clicking CONFIRM will delete this rock permanently.",
+                on_both=on_both,
+                on_only=on_only,
+                on_cancel=lambda: self.stack.setCurrentWidget(self.mission_detail),
+            )
+            self.stack.setCurrentWidget(self.rock_delete_page)
 
     def _on_mission_clicked(self, item) -> None:
         index = self.trip.list.row(item)
