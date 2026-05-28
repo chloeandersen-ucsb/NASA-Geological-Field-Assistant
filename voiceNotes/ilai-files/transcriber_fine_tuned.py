@@ -1623,6 +1623,8 @@ try:
                 print("\nRECORDING NOW... (Fine-tuned Model)\n")
                 sys.stdout.flush()
             elif line == "stop":
+                if not recording_active:
+                    continue
                 stream.stop()
                 recording_active = False
  

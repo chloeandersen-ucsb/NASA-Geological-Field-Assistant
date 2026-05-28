@@ -1411,6 +1411,14 @@ class ViewModel(QObject):
     def _on_transcription_token(self, chunk: str) -> None:
         import sys
         print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
+
+        if self._transcription_target == "mission":
+            if not self._mission_name_accept_transcript:
+                return
+            self.mission_name_text += chunk
+            self.mission_name_transcription_changed.emit(self.mission_name_text)
+            return
+
         if self._was_session_finalized:
             return
         self.transcription_text += chunk
