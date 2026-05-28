@@ -1257,7 +1257,8 @@ class ViewModel(QObject):
         self.mission_name_recording_status_changed.emit(True)
 
     def stop_mission_name_recording(self, abort: bool = False) -> None:
-        if self._transcription_target != "mission" and not self.transcriber.is_recording:
+        # if self._transcription_target != "mission" and not self.transcriber.is_recording:
+        if self._transcription_target != "mission":
             return
         if abort:
             self._mission_name_accept_transcript = False
@@ -1437,11 +1438,11 @@ class ViewModel(QObject):
         # passing the raw, unformatted text. If we let it through, it instantly kills the loading screen.
         # Since we know the LLM takes at least a few seconds to run, we just ignore any non-empty 
         # completed signal that arrives within 2.0 seconds of hitting stop!
-        if hasattr(self, '_stop_time'):
-            elapsed = time.time() - self._stop_time
-            if elapsed < 2.0 and final_text.strip() and "No audio recorded" not in final_text:
-                print(f"[VIEWMODEL] Ignoring premature raw text. Waiting for LLM...", file=sys.stderr)
-                return
+        # if hasattr(self, '_stop_time'):
+        #     elapsed = time.time() - self._stop_time
+        #     if elapsed < 2.0 and final_text.strip() and "No audio recorded" not in final_text:
+        #         print(f"[VIEWMODEL] Ignoring premature raw text. Waiting for LLM...", file=sys.stderr)
+        #         return
         # --------------------
             
         if not final_text or not final_text.strip() or "No audio recorded" in final_text:
