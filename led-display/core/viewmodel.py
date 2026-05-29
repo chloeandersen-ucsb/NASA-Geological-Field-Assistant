@@ -1217,6 +1217,7 @@ class ViewModel(QObject):
 
         self._transcription_target = "voice"
         self.vtt_active = True
+        self.vtt_formating = False
         self._was_session_finalized = False
         self.transcription_text = "" 
         self.transcription_changed.emit("")

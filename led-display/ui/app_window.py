@@ -1500,7 +1500,8 @@ class AppWindow(QMainWindow):
             
         elif mode == "formatting":
             # Fire up the gray screen, spinner, and animated text!
-            v.loading_overlay.start()
+            if self.stack.currentWidget() == self.voice:
+                v.loading_overlay.start()
             
         elif mode == "review":
             v.btn_stop.setText("Edit")
@@ -1769,6 +1770,7 @@ class AppWindow(QMainWindow):
 
     def _on_transcription_formatted(self):
         """Called when the LLM finishes formatting the text."""
+        self.vm.vtt_formatting = False
         if self.stack.currentWidget() == self.voice:
             # Turn off the overlay and show the buttons!
             if not self.vm.transcription_text.strip():
@@ -1866,7 +1868,7 @@ class AppWindow(QMainWindow):
 
             # --- THE FIX: Wipe ghost text from late LLM flushes ---
             # If we enter this page and are NOT actively recording, start fresh!
-            if not getattr(self.vm, 'vtt_active', False):
+            if not getattr(self.vm, 'vtt_active', False) and not getattr(self.vm, 'transcription_text', '').strip():
                 self.vm.transcription_text = ""
                 self.voice.text.clear()
             # ------------------------------------------------------
@@ -1878,6 +1880,8 @@ class AppWindow(QMainWindow):
             # --- NEW: Trigger Dynamic Layout ---
             if getattr(self.vm, 'vtt_active', False):
                 self._update_voice_buttons("recording")
+            elif getattr(self.vm, 'vtt_formatting', False):
+                self._update_voice_buttons("formatting")
             elif current_text.strip():
                 self._update_voice_buttons("review")
             else:
@@ -2608,6 +2612,7 @@ class AppWindow(QMainWindow):
         self.camera_preview.mic_ctrl._update_ui_state(is_recording)
         
         if is_recording:
+            self.vm.vtt_formatting = False
             self.voice.btn_stop.setText("Stop")
             self.inline_keyboard.hide()
             self.voice.text.setReadOnly(True)
@@ -2616,6 +2621,7 @@ class AppWindow(QMainWindow):
             if self.stack.currentWidget() == self.voice:
                 self._update_voice_buttons("recording")
         else:
+            self.vm.vtt_formatting = True
             self.voice.btn_stop.setText("Edit")
             self.voice.btn_save.setEnabled(False)
             
