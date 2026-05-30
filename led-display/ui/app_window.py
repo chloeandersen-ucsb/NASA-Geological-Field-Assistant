@@ -2621,6 +2621,9 @@ class AppWindow(QMainWindow):
             if self.stack.currentWidget() == self.voice:
                 self._update_voice_buttons("recording")
         else:
+            if getattr(self.vm, '_is_redoing', False):
+                return
+                
             self.vm.vtt_formatting = True
             self.voice.btn_stop.setText("Edit")
             self.voice.btn_save.setEnabled(False)

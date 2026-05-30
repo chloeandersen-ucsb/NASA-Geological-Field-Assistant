@@ -1472,7 +1472,7 @@ LLM_MODEL_PATH = os.path.join(PROJECT_ROOT, "led-display", "models", "Phi-3-mini
 try:
     # n_gpu_layers=-1 offloads it to the Jetson's GPU for maximum speed
     # n_ctx=2048 gives enough room for prompt + long transcripts without cutoff
-    llm = Llama(model_path=LLM_MODEL_PATH, n_ctx=2048, n_gpu_layers=-1, verbose=False)
+    llm = Llama(model_path=LLM_MODEL_PATH, n_ctx=4096, n_gpu_layers=-1, verbose=False)
     print("LLM loaded successfully!")
 except Exception as e:
     print(f"Warning: Could not load LLM. Falling back to standard correction. Error: {e}")
@@ -1612,6 +1612,13 @@ try:
             
             if line == "start":
                 recording_active = True
+
+                while not audio_q.empty():
+                    try:
+                        audio_q.get_nowait()
+                    except queue.Empty:
+                        break
+
                 full_audio_buffer = []
                 rolling_buffer = np.zeros((1,0), dtype=np.float32)
                 total_frames_recorded = 0
@@ -1641,6 +1648,46 @@ try:
                         if new_part:
                             timestamp = datetime.now().strftime('%H:%M:%S')
                             print(f"[{timestamp}] {new_part}")
+                        final_transcript = new_full_transcript
+
+                import select
+                import time
+                # Wait up to 0.45s to ensure we catch the delayed 300ms 'start' from the UI
+                if select.select([sys.stdin], [], [], 0.45)[0]:
+                    # Vacuum up ALL queued commands in the pipe
+                    pending = []
+                    while select.select([sys.stdin], [], [], 0.0)[0]:
+                        cmd = sys.stdin.readline().strip().lower()
+                        if cmd in ["start", "stop"]: 
+                            pending.append(cmd)
+                        
+                    # Only start fresh if the VERY LAST command was a start
+                    if pending and pending[-1] == "start":
+                        print("\n[REDO DETECTED] Discarding audio. Starting fresh...\n")
+                        recording_active = True
+                        
+                        while not audio_q.empty():
+                            try: audio_q.get_nowait()
+                            except queue.Empty: break
+                                
+                        full_audio_buffer = []
+                        rolling_buffer = np.zeros((1,0), dtype=np.float32)
+                        total_frames_recorded = 0
+                        last_inference_frames = 0
+                        silence_chunks = 0
+                        last_raw_text = ""
+                        final_transcript = ""
+                        
+                        time.sleep(0.2) 
+                        try:
+                            stream.start()
+                            print("\nRECORDING NOW... (Fine-tuned Model)\n")
+                        except Exception as e:
+                            print(f"\n[MIC ERROR] Failed to restart mic: {e}\n")
+                            
+                        sys.stdout.flush()
+                        continue
+                # ------------------------------------
  
                 print("\n\nStopping stream... Preparing final transcript...")
                 
@@ -1662,6 +1709,10 @@ try:
                         transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
                         final_raw = transcripts[0].text if hasattr(transcripts[0], 'text') else str(transcripts[0])
                         
+                        if not final_raw.strip() and final_transcript.strip():
+                            print("\n[WARNING] Mic pop squashed buffer. Sending live text to LLM...")
+                            final_raw = final_transcript
+
                         probs = torch.softmax(logits, dim=-1)
                         top_probs, top_indices = torch.topk(probs, k=4, dim=-1)
                         vocab = asr_model.decoder.vocabulary
@@ -1726,22 +1777,26 @@ Raw ASR: {dictionary_cleaned_text}<|end|>
                         input_word_count = len(dictionary_cleaned_text.split())
                         llm_max_tokens = max(256, min(1024, int(input_word_count * 1.5)))
  
-                        response = llm(
-                            prompt, 
-                            max_tokens=llm_max_tokens, 
-                            stop=["<|end|>"],
-                            temperature=0.1 if not confidence_hint else 0.2
-                        )
-                        
-                        llm_output = response["choices"][0]["text"].strip()
-                        
-                        if "Here is the formatted text:" in llm_output:
-                            llm_output = llm_output.split("Here is the formatted text:")[-1].strip()
-                        elif "Here is the corrected text:" in llm_output:
-                            llm_output = llm_output.split("Here is the corrected text:")[-1].strip()
-                        
-                        if llm_output:
-                            final_clean_text = llm_output
+                        try:
+                            response = llm(
+                                prompt, 
+                                max_tokens=llm_max_tokens, 
+                                stop=["<|end|>"],
+                                temperature=0.1 if not confidence_hint else 0.2
+                            )
+                            
+                            llm_output = response["choices"][0]["text"].strip()
+                            
+                            if "Here is the formatted text:" in llm_output:
+                                llm_output = llm_output.split("Here is the formatted text:")[-1].strip()
+                            elif "Here is the corrected text:" in llm_output:
+                                llm_output = llm_output.split("Here is the corrected text:")[-1].strip()
+                            
+                            if llm_output:
+                                final_clean_text = llm_output
+                        except Exception as e:
+                            print(f"\n[LLM ERROR] Formatting failed: {e}")
+                            print("Falling back to dictionary cleaned text.")
     
                     print("\n" + "="*40)
                     print("FINAL TRANSCRIPT:")
