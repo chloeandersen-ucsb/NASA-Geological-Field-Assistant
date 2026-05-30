@@ -1837,6 +1837,8 @@ class AppWindow(QMainWindow):
             if not getattr(self.vm, 'vtt_active', False):
                 self.voice.text.clear()
                 self.vm.transcription_text = ""  # Wipes ghost text from memory!
+
+                self.vm.vtt_formatting = False
                 
                 # Reset the little camera-preview voice button
                 self.camera_preview.mic_ctrl.trigger_btn.setText("🎤")

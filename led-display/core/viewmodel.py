@@ -1316,6 +1316,7 @@ class ViewModel(QObject):
 
         self.transcription_changed.emit("")
         self.recording_status_changed.emit(False)
+        self.vtt_formatting = False
         self.go_home()
     
     def make_rock_current(self, entry: RockEntry) -> None:
@@ -1406,6 +1407,7 @@ class ViewModel(QObject):
         self.transcription_text = ""
         self.transcription_changed.emit("")
         self.recording_status_changed.emit(False)
+        self.vtt_formatting = False
         self.go_home()
 
     # def _on_transcription_token(self, chunk: str) -> None:
