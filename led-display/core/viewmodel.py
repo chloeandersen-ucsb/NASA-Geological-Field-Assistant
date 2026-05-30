@@ -1217,7 +1217,9 @@ class ViewModel(QObject):
 
         self._transcription_target = "voice"
         self.vtt_active = True
+        self.vtt_formatting = False
         self._was_session_finalized = False
+        self._is_redoing = False
         self.transcription_text = "" 
         self.transcription_changed.emit("")
         
@@ -1234,7 +1236,10 @@ class ViewModel(QObject):
         print("[VIEWMODEL] stop_voice_to_text() called", file=sys.stderr)
         self.vtt_active = False #!!!!!
         
-        # --- NEW: Track exactly when we hit stop ---
+        # --- PREVENT STRAY REDO STARTS ---
+        self._redo_pending = False
+        
+        # --- TRACK EXACT STOP TIME ---
         self._stop_time = time.time()
         
         self.transcriber.stop_recording()
@@ -1257,7 +1262,8 @@ class ViewModel(QObject):
         self.mission_name_recording_status_changed.emit(True)
 
     def stop_mission_name_recording(self, abort: bool = False) -> None:
-        if self._transcription_target != "mission" and not self.transcriber.is_recording:
+        # if self._transcription_target != "mission" and not self.transcriber.is_recording:
+        if self._transcription_target != "mission":
             return
         if abort:
             self._mission_name_accept_transcript = False
@@ -1268,15 +1274,26 @@ class ViewModel(QObject):
 
     def redo_voice_to_text(self) -> None:
         import sys
+        import time
         print("[VIEWMODEL] Redo requested", file=sys.stderr)
+
+        self._stop_time = time.time() 
+        self._is_redoing = True 
+        
+        # --- TRACK PENDING START ---
+        self._redo_pending = True 
         
         self.transcriber.stop_recording()
         self._transcription_target = None
+        self._was_session_finalized = True 
+        
         self.transcription_text = ""
         self.transcription_changed.emit("")
         self.recording_status_changed.emit(False)
         was_on_vtt = (self.state == AppStateType.VOICE_TO_TEXT)
-        QTimer.singleShot(300, lambda: self.start_voice_to_text(silent=not was_on_vtt))
+        
+        # Safely execute the delayed start ONLY if we haven't hit stop since clicking redo
+        QTimer.singleShot(300, lambda: self.start_voice_to_text(silent=not was_on_vtt) if getattr(self, '_redo_pending', False) else None)
 
     def save_transcription(self) -> None:
         self._was_session_finalized = True
@@ -1299,6 +1316,7 @@ class ViewModel(QObject):
 
         self.transcription_changed.emit("")
         self.recording_status_changed.emit(False)
+        self.vtt_formatting = False
         self.go_home()
     
     def make_rock_current(self, entry: RockEntry) -> None:
@@ -1389,6 +1407,7 @@ class ViewModel(QObject):
         self.transcription_text = ""
         self.transcription_changed.emit("")
         self.recording_status_changed.emit(False)
+        self.vtt_formatting = False
         self.go_home()
 
     # def _on_transcription_token(self, chunk: str) -> None:
@@ -1410,6 +1429,14 @@ class ViewModel(QObject):
     def _on_transcription_token(self, chunk: str) -> None:
         import sys
         print(f"[VIEWMODEL] Received transcription token: '{chunk}'", file=sys.stderr)
+
+        if self._transcription_target == "mission":
+            if not self._mission_name_accept_transcript:
+                return
+            self.mission_name_text += chunk
+            self.mission_name_transcription_changed.emit(self.mission_name_text)
+            return
+
         if self._was_session_finalized:
             return
         self.transcription_text += chunk
@@ -1431,18 +1458,21 @@ class ViewModel(QObject):
             
         if self._was_session_finalized:
             return
+
+        # --- 1. NEW SESSION BLOCKER ---
+        # If we receive a completed signal but are actively recording a new session, drop it!
+        if getattr(self.transcriber, 'is_recording', False):
+            print("[VIEWMODEL] Ignoring late signal because a new recording is active.", file=sys.stderr)
+            return
             
-        # --- THE REAL FIX ---
-        # The background service instantly fires a 'completed' signal the millisecond you hit stop, 
-        # passing the raw, unformatted text. If we let it through, it instantly kills the loading screen.
-        # Since we know the LLM takes at least a few seconds to run, we just ignore any non-empty 
-        # completed signal that arrives within 2.0 seconds of hitting stop!
+        # --- 2. PHANTOM SIGNAL BLOCKER ---
+        # Blocks the instant raw-text signal the wrapper sends on 'stop' to preserve the spinner
         if hasattr(self, '_stop_time'):
             elapsed = time.time() - self._stop_time
-            if elapsed < 2.0 and final_text.strip() and "No audio recorded" not in final_text:
-                print(f"[VIEWMODEL] Ignoring premature raw text. Waiting for LLM...", file=sys.stderr)
+            if elapsed < 0.5 and final_text.strip() and "No audio recorded" not in final_text:
+                print(f"[VIEWMODEL] Ignoring instant phantom signal ({elapsed:.3f}s).", file=sys.stderr)
                 return
-        # --------------------
+        # ------------------------------
             
         if not final_text or not final_text.strip() or "No audio recorded" in final_text:
             self.transcription_text = ""

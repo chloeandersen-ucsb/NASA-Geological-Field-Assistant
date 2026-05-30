@@ -305,11 +305,39 @@ class HomePage(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
 
-        self.setStyleSheet("""
-            background-color: #586e5d;
-            color: #cad2c5;
+        # --- NEW: MISSION BANNER AT THE TOP ---
+        self.mission_banner = QWidget()
+        self.mission_banner.setMinimumHeight(50) 
+        banner_layout = QVBoxLayout(self.mission_banner)
+        banner_layout.setContentsMargins(15, 10, 15, 0)
+        
+        self.lbl_current_mission = QLabel()
+        self.lbl_current_mission.setAlignment(Qt.AlignCenter)
+        self.lbl_current_mission.setStyleSheet("""
+            font-size: 18px; 
+            font-weight: bold; 
+            color: #344f41; /* Matches the dark green buttons below */
+            background: transparent; 
+            border: none;
         """)
-
+        
+        self.btn_create_mission = QPushButton("Create New Mission")
+        self.btn_create_mission.setMinimumHeight(45)
+        self.btn_create_mission.setStyleSheet("""
+            font-size: 18px; 
+            font-weight: bold; 
+            background-color: transparent; 
+            color: #344f41; 
+            border-radius: 8px;
+        """)
+        
+        banner_layout.addWidget(self.lbl_current_mission)
+        banner_layout.addWidget(self.btn_create_mission)
+        
+        # Insert it at the very top of the main layout, before the stretch
+        layout.insertWidget(0, self.mission_banner)
+        # --------------------------------------
+        
         # Add a small spacer so the logo doesn't crash into the top
         layout.addStretch(1)
 
@@ -332,6 +360,15 @@ class HomePage(QWidget):
         layout.addWidget(self.btn_trip)
         layout.addSpacing(60)
         layout.addWidget(self.btn_quit)
+
+    def update_mission_display(self, mission_name: str | None) -> None:
+        if mission_name:
+            self.lbl_current_mission.setText(f"Current Mission:\n{mission_name}")
+            self.lbl_current_mission.show()
+            self.btn_create_mission.hide()
+        else:
+            self.lbl_current_mission.hide()
+            self.btn_create_mission.show()
 
 
 class LoadingPage(QWidget):
@@ -1463,7 +1500,8 @@ class AppWindow(QMainWindow):
             
         elif mode == "formatting":
             # Fire up the gray screen, spinner, and animated text!
-            v.loading_overlay.start()
+            if self.stack.currentWidget() == self.voice:
+                v.loading_overlay.start()
             
         elif mode == "review":
             v.btn_stop.setText("Edit")
@@ -1637,6 +1675,7 @@ class AppWindow(QMainWindow):
         self.home.btn_trip.clicked.connect(self.vm.open_trip_load)
         self.home.btn_quit.clicked.connect(self._quit_application)
 
+        self.home.btn_create_mission.clicked.connect(self._open_create_mission_page)
         self.camera_preview.btn_capture.clicked.connect(self.vm.trigger_capture)
         self.camera_preview.btn_cancel.clicked.connect(self.vm.cancel_camera)
         self.capture_review.btn_classify.clicked.connect(self.vm.confirm_captures_and_classify)
@@ -1731,6 +1770,7 @@ class AppWindow(QMainWindow):
 
     def _on_transcription_formatted(self):
         """Called when the LLM finishes formatting the text."""
+        self.vm.vtt_formatting = False
         if self.stack.currentWidget() == self.voice:
             # Turn off the overlay and show the buttons!
             if not self.vm.transcription_text.strip():
@@ -1783,10 +1823,22 @@ class AppWindow(QMainWindow):
         if state == AppStateType.HOME:
             self.vm.stop_mission_name_recording(abort=True)
             self.mission_keyboard.hide()
+
+            current_id = self.vm.store.get_current_mission_id()
+            mission_name = None
+            if current_id:
+                for m in self.vm.store.list_missions():
+                    if m.mission_id == current_id:
+                        mission_name = m.name
+                        break
+            self.home.update_mission_display(mission_name)
+
             # FIX: Check vtt_active instead of the background process state!
             if not getattr(self.vm, 'vtt_active', False):
                 self.voice.text.clear()
                 self.vm.transcription_text = ""  # Wipes ghost text from memory!
+
+                self.vm.vtt_formatting = False
                 
                 # Reset the little camera-preview voice button
                 self.camera_preview.mic_ctrl.trigger_btn.setText("🎤")
@@ -1818,7 +1870,7 @@ class AppWindow(QMainWindow):
 
             # --- THE FIX: Wipe ghost text from late LLM flushes ---
             # If we enter this page and are NOT actively recording, start fresh!
-            if not getattr(self.vm, 'vtt_active', False):
+            if not getattr(self.vm, 'vtt_active', False) and not getattr(self.vm, 'transcription_text', '').strip():
                 self.vm.transcription_text = ""
                 self.voice.text.clear()
             # ------------------------------------------------------
@@ -1830,6 +1882,8 @@ class AppWindow(QMainWindow):
             # --- NEW: Trigger Dynamic Layout ---
             if getattr(self.vm, 'vtt_active', False):
                 self._update_voice_buttons("recording")
+            elif getattr(self.vm, 'vtt_formatting', False):
+                self._update_voice_buttons("formatting")
             elif current_text.strip():
                 self._update_voice_buttons("review")
             else:
@@ -2560,6 +2614,7 @@ class AppWindow(QMainWindow):
         self.camera_preview.mic_ctrl._update_ui_state(is_recording)
         
         if is_recording:
+            self.vm.vtt_formatting = False
             self.voice.btn_stop.setText("Stop")
             self.inline_keyboard.hide()
             self.voice.text.setReadOnly(True)
@@ -2568,6 +2623,10 @@ class AppWindow(QMainWindow):
             if self.stack.currentWidget() == self.voice:
                 self._update_voice_buttons("recording")
         else:
+            if getattr(self.vm, '_is_redoing', False):
+                return
+                
+            self.vm.vtt_formatting = True
             self.voice.btn_stop.setText("Edit")
             self.voice.btn_save.setEnabled(False)
             
