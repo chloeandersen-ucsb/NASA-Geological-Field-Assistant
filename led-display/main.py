@@ -11,6 +11,14 @@ from PySide6.QtCore import Qt, QTimer, QThread, Signal
 
 import connector
 
+_led_display_dir = Path(__file__).parent
+sys.path.insert(0, str(_led_display_dir / "ui"))
+import importlib.util as _ilu
+_spec = _ilu.spec_from_file_location("joystick_navigator", _led_display_dir / "ui" / "joystick_navigator.py")
+_jmod = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(_jmod)
+JoystickNavigator = _jmod.JoystickNavigator
+
 # ---------------------------------------------------------
 # 1. BACKGROUND LOADER THREAD
 # ---------------------------------------------------------
@@ -178,6 +186,10 @@ def main() -> int:
     else:
         splash.show()
 
+    splash_joystick = JoystickNavigator(splash, bus=1)
+    splash_joystick.start()
+    QTimer.singleShot(200, splash_joystick._focus_first)
+
     # We must keep a reference to the main window in this scope 
     # so it isn't destroyed by Python's garbage collector.
     active_windows = []
@@ -187,19 +199,20 @@ def main() -> int:
     def on_models_ready(vm):
         # 1. Check if the user pressed Esc on the splash screen
         was_fullscreen = splash.isFullScreen()
-        
+
         splash.finish_progress()
-        
+        splash_joystick.stop()
+
         # Now import the UI and launch it
         from ui.app_window import AppWindow
         win = AppWindow(vm)
-        
+
         # 2. If they exited full screen, force the main app to match!
         if not was_fullscreen:
             win._exit_fullscreen()
-            
-        active_windows.append(win) 
-        
+
+        active_windows.append(win)
+
         splash.close()
 
     def on_error(err_msg):

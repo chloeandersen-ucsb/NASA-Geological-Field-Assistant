@@ -286,7 +286,7 @@ class JoystickNavigator(QObject):
 
     def _get_page(self) -> Optional[QWidget]:
         if not hasattr(self.window, "stack"):
-            return None
+            return self.window
         return self.window.stack.currentWidget()
 
     def _buttons_on_page(self) -> list:
