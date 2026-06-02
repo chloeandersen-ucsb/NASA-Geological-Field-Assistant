@@ -640,8 +640,13 @@ class TranscriptionService(ProcessService):
                 self._streaming_complete_received = True
                 self.completed.emit(final_text)
 
-                self._text_parts = []
+                # Always discard stale final phrases so they can't contaminate the next session.
+                # Only discard streaming tokens if this is the current session's stop —
+                # if _user_stopped is False, a new session has already started and its
+                # accumulated tokens must be preserved.
                 self._final_phrases = []
+                if self._user_stopped:
+                    self._text_parts = []
                 continue
             
             # transcriber_fine_tuned.py startup/shutdown chatter (and mock "Using device:", "RECORDING NOW")
