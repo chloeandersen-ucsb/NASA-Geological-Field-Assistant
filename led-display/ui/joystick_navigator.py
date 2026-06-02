@@ -600,7 +600,7 @@ class JoystickNavigator(QObject):
 
     def _move_left(self):
         if self._in_list():
-            self._exit_list_to_buttons(-1)
+            self._exit_list_to_buttons(1)
             return
 
         # Return to list row if we navigated right from a list to a dot button

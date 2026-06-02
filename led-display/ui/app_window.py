@@ -798,13 +798,6 @@ class TripLoadPage(QWidget):
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
         layout.addWidget(title)
 
-        self.btn_create_new_mission = light_button("Create New Mission")
-        layout.addWidget(self.btn_create_new_mission)
-
-        # --- Delete All Button ---
-        self.btn_delete_all = dark_green_button("Delete All Missions")
-        layout.addWidget(self.btn_delete_all)
-
         self.lbl_current_mission = QLabel("Current mission: --")
         self.lbl_current_mission.setAlignment(Qt.AlignCenter)
         self.lbl_current_mission.setStyleSheet("font-size: 12px;")
@@ -813,15 +806,21 @@ class TripLoadPage(QWidget):
         missions_label = QLabel("Missions:")
         missions_label.setStyleSheet("font-size: 18px; font-weight: 600;")
         layout.addWidget(missions_label)
-        
+
         self.list = QListWidget()
         self.list.setStyleSheet("font-size: 16px;")
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(self.list, stretch=1)
 
+        self.btn_create_new_mission = light_button("Create New Mission")
+        layout.addWidget(self.btn_create_new_mission)
+
+        self.btn_delete_all = dark_green_button("Delete All Missions")
+        layout.addWidget(self.btn_delete_all)
+
         self.btn_back = dark_green_button("Back")
         layout.addWidget(self.btn_back)
-        
+
         self._missions_data = []
         self._summary = None
 
