@@ -34,6 +34,9 @@ import connector
 from core.viewmodel import AppStateType, ClassificationResult, MissionSummary, TripSummary
 
 class SummaryPopupOverlay(QWidget):
+    popup_shown = Signal()
+    popup_hidden = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, False) # Blocks clicks to the background!
@@ -83,11 +86,16 @@ class SummaryPopupOverlay(QWidget):
     def mousePressEvent(self, event):
         self.hide()
         
+    def hideEvent(self, event):
+        self.popup_hidden.emit()
+        super().hideEvent(event)
+
     def show_popup(self, title: str, content: str):
         self.lbl_title.setText(title)
         self.lbl_content.setText(content)
         self.raise_()
         self.show()
+        self.popup_shown.emit()
 
 class BatteryInputDialog(QDialog):
     def __init__(self, parent=None):
@@ -463,6 +471,7 @@ class CameraPreviewPage(QWidget):
         
         self.btn_capture = light_button("Capture")
         self.btn_cancel = dark_green_button("Back")
+        self.btn_cancel.setObjectName("joystick_secondary")
 
         row = QHBoxLayout()
         row.addWidget(self.btn_cancel)
@@ -509,6 +518,7 @@ class CaptureReviewPage(QWidget):
 
         btns = QHBoxLayout()
         self.btn_retake = blue_button("Retake")
+        self.btn_retake.setObjectName("joystick_secondary")
         self.btn_classify = light_button("Classify")
         btns.addWidget(self.btn_retake)
         btns.addWidget(self.btn_classify)
@@ -1195,6 +1205,7 @@ class ExpandingVoiceWidget(QWidget):
         self.trigger_btn = QPushButton("🎤")
         self.trigger_btn.setFixedSize(50, 50)
         self.trigger_btn.setStyleSheet("background-color: #344f41; color: white; border-radius: 25px; font-size: 20px;")
+        self.trigger_btn.setObjectName("joystick_secondary")
         self.main_layout.addWidget(self.trigger_btn)
         self._panel_visible = False
         self.trigger_btn.clicked.connect(self._toggle_panel)
@@ -1471,8 +1482,14 @@ class AppWindow(QMainWindow):
         if entry and notes:
             table_data = self.rock_detail._parse_summary_to_table_data("Generating AI summary...")
             self.rock_detail._populate_buttons(table_data)
-            
-            self.vm.request_rock_summary(entry, notes, force=True)   
+
+            self.vm.request_rock_summary(entry, notes, force=True)
+
+    def _on_summary_popup_shown(self) -> None:
+        QTimer.singleShot(50, lambda: self.joystick._highlight_btn(self.rock_detail.popup_overlay.btn_cancel))
+
+    def _on_summary_popup_hidden(self) -> None:
+        QTimer.singleShot(50, self.joystick._focus_first)   
    
     def _update_voice_buttons(self, mode: str) -> None:
         """Dynamically hides/shows Voice to Text buttons based on the current phase."""
@@ -1712,6 +1729,9 @@ class AppWindow(QMainWindow):
         self.rock_detail.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(self.mission_detail))
         self.rock_detail.btn_force_summary.clicked.connect(self._on_force_summary_clicked)
         self.voice_note_detail.btn_back.clicked.connect(lambda: self.stack.setCurrentWidget(self.mission_detail))
+
+        self.rock_detail.popup_overlay.popup_shown.connect(self._on_summary_popup_shown)
+        self.rock_detail.popup_overlay.popup_hidden.connect(self._on_summary_popup_hidden)
         
     def _on_stop_or_edit_clicked(self) -> None:
         if self.voice.btn_stop.text() == "Stop":
