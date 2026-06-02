@@ -1697,18 +1697,21 @@ try:
                 if full_audio_buffer:
                     print("Processing full audio buffer for maximum accuracy...")
                     full_audio = np.concatenate(full_audio_buffer, axis=0).astype(np.float32)
+                    print(f"[DEBUG] full_audio_buffer: {len(full_audio_buffer)} chunks, {len(full_audio)} samples ({len(full_audio)/SAMPLE_RATE:.1f}s)", file=sys.stderr)
                     max_val = np.max(np.abs(full_audio))
                     if max_val > 0: full_audio = full_audio / (max_val + 1e-9)
                     full_signal = torch.tensor(full_audio, dtype=torch.float32, device=device).unsqueeze(0)
                     full_len = torch.tensor([full_signal.shape[1]], dtype=torch.int64, device=device)
- 
+
                     with torch.no_grad():
                         logits = asr_model.forward(input_signal=full_signal, input_signal_length=full_len)
                         if isinstance(logits, tuple): logits = logits[0]
                         pred_tokens = logits.argmax(dim=-1)
                         transcripts = asr_model.decoding.ctc_decoder_predictions_tensor(pred_tokens)
                         final_raw = transcripts[0].text if hasattr(transcripts[0], 'text') else str(transcripts[0])
-                        
+                        print(f"[DEBUG] final_raw from full-buffer ASR: '{final_raw[:300]}'", file=sys.stderr)
+                        print(f"[DEBUG] final_transcript at stop: '{final_transcript[:300]}'", file=sys.stderr)
+
                         if not final_raw.strip() and final_transcript.strip():
                             print("\n[WARNING] Mic pop squashed buffer. Sending live text to LLM...")
                             final_raw = final_transcript
@@ -1740,11 +1743,12 @@ try:
  
                     visual_context = get_current_visual_context()
                     dictionary_cleaned_text = multimodal_correction(final_raw, visual_context).replace("⁇", "")
-                    
+                    print(f"[DEBUG] dictionary_cleaned_text after correction: '{dictionary_cleaned_text[:300]}'", file=sys.stderr)
+
                     sys.stdout.flush() # TEST
-                    
+
                     final_clean_text = dictionary_cleaned_text
-                    
+
                     if llm and dictionary_cleaned_text.strip():
                         print("Running LLM formatting...")
                         if confidence_hint:

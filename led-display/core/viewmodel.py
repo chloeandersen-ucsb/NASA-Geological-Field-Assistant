@@ -1465,6 +1465,8 @@ class ViewModel(QObject):
         target = self._completing_target
         self._completing_target = None
 
+        print(f"[VIEWMODEL] _on_transcription_completed: target={target!r} was_finalized={self._was_session_finalized} is_recording={getattr(self.transcriber,'is_recording',False)} text='{final_text[:80]}'", file=sys.stderr)
+
         if target == "mission":
             if not self._mission_name_accept_transcript:
                 return

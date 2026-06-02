@@ -639,6 +639,11 @@ class TranscriptionService(ProcessService):
                 self._in_final_dump = False
 
                 final_text = " ".join(self._final_phrases) if self._final_phrases else self.full_text()
+                print(f"[VOICE-TO-TEXT] EMIT source: {'final_phrases' if self._final_phrases else 'full_text(streaming)'}", file=sys.stderr)
+                print(f"[VOICE-TO-TEXT] EMIT final_phrases={self._final_phrases}", file=sys.stderr)
+                print(f"[VOICE-TO-TEXT] EMIT full_text='{self.full_text()[:150]}'", file=sys.stderr)
+                print(f"[VOICE-TO-TEXT] EMIT final_text='{final_text[:150]}'", file=sys.stderr)
+                print(f"[VOICE-TO-TEXT] EMIT _user_stopped={self._user_stopped}", file=sys.stderr)
                 self._streaming_complete_received = True
                 self.completed.emit(final_text)
 
