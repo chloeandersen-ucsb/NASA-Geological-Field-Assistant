@@ -1893,6 +1893,7 @@ class AppWindow(QMainWindow):
             self._show_trip_home()
             
     def _on_classification(self, result: ClassificationResult) -> None:
+        self.joystick._page_memory.pop(id(self.classified), None)
         has_side = result.side_image_path and os.path.exists(result.side_image_path)
         if has_side:
             self.classified.lbl_side_image.show()
@@ -1950,7 +1951,7 @@ class AppWindow(QMainWindow):
                 btn.setStyleSheet(
                     "font-size: 14px; background-color: #95b7dc; color: #385573;"
                 )
-                btn.setObjectName("joystick_skip")
+                btn.setObjectName("joystick_secondary")
                 alt_buttons.append(btn)
                 self.classified.alternatives_layout.addWidget(btn)
 
@@ -2349,7 +2350,8 @@ class AppWindow(QMainWindow):
         action = QWidgetAction(menu)
         action.setDefaultWidget(container)
         menu.addAction(action)
-        button.clicked.connect(lambda checked=False, b=button, m=menu: self._show_bounded_menu(b, m))
+        btns = [btn_current, btn_delete]
+        button.clicked.connect(lambda checked=False, b=button, m=menu, bs=btns: self._show_bounded_menu(b, m, bs))
 
     def _attach_timeline_menu_to_button(self, button, item_dict):
         from PySide6.QtWidgets import QMenu, QWidgetAction
@@ -2391,9 +2393,13 @@ class AppWindow(QMainWindow):
         action = QWidgetAction(menu)
         action.setDefaultWidget(container)
         menu.addAction(action)
-        button.clicked.connect(lambda checked=False, b=button, m=menu: self._show_bounded_menu(b, m))
+        if item_dict["type"] == "rock":
+            btns = [btn_current, btn_delete]
+        else:
+            btns = [btn_assign, btn_delete]
+        button.clicked.connect(lambda checked=False, b=button, m=menu, bs=btns: self._show_bounded_menu(b, m, bs))
 
-    def _show_bounded_menu(self, button: QPushButton, menu) -> None:
+    def _show_bounded_menu(self, button: QPushButton, menu, menu_buttons: list = None) -> None:
         menu.ensurePolished()
         menu_size = menu.sizeHint()
 
@@ -2420,6 +2426,8 @@ class AppWindow(QMainWindow):
             y = available.top()
 
         menu.popup(QPoint(x, y))
+        if menu_buttons and hasattr(self, "joystick"):
+            self.joystick.open_menu(menu, menu_buttons)
 
     def _delete_mission(self, mission_id: str, mission_name: str) -> None:
         def on_confirm():

@@ -192,6 +192,11 @@ class JoystickNavigator(QObject):
         self._page_memory: dict = {}
         self._list_origin: Optional[tuple] = None  # (QListWidget, row) when focused on a row's dot button
 
+        self._active_menu = None
+        self._menu_btns: list = []
+        self._menu_btn_idx: int = 0
+        self._menu_btn_original_styles: list = []
+
         self._thread = QThread(self)
         self._worker = _JoystickWorker(bus, addr)
         self._worker.moveToThread(self._thread)
@@ -281,6 +286,55 @@ class JoystickNavigator(QObject):
             self._focused_list = None
             self._focused_list_row = -1
             self._focused_list_original_style = ""
+
+    # ── Menu navigation ──────────────────────────────────────────────────────
+
+    def open_menu(self, menu, buttons: list):
+        """Called when a popup menu opens; routes joystick input to menu items."""
+        self._active_menu = menu
+        self._menu_btns = list(buttons)
+        self._menu_btn_original_styles = [btn.styleSheet() for btn in buttons]
+        self._menu_btn_idx = 0
+        menu.aboutToHide.connect(self._on_menu_closed)
+        if buttons:
+            self._set_menu_highlight(0)
+
+    def _set_menu_highlight(self, idx: int):
+        for i, btn in enumerate(self._menu_btns):
+            try:
+                original = self._menu_btn_original_styles[i]
+                if i == idx:
+                    btn.setStyleSheet(_apply_highlight(btn, original))
+                else:
+                    btn.setStyleSheet(original)
+            except RuntimeError:
+                pass
+        self._menu_btn_idx = idx
+
+    def _on_menu_closed(self):
+        if self._active_menu:
+            try:
+                self._active_menu.aboutToHide.disconnect(self._on_menu_closed)
+            except RuntimeError:
+                pass
+        for i, btn in enumerate(self._menu_btns):
+            try:
+                btn.setStyleSheet(self._menu_btn_original_styles[i])
+            except RuntimeError:
+                pass
+        self._active_menu = None
+        self._menu_btns = []
+        self._menu_btn_idx = 0
+        self._menu_btn_original_styles = []
+        if self._list_origin:
+            lst, row = self._list_origin
+            try:
+                if lst.isVisible() and row < lst.count():
+                    self._highlight_list_row(lst, row)
+                    return
+            except RuntimeError:
+                pass
+        self._focus_first()
 
     # ── Widget discovery ─────────────────────────────────────────────────────
 
@@ -607,18 +661,43 @@ class JoystickNavigator(QObject):
     # ── Slots ────────────────────────────────────────────────────────────────
 
     def _on_up(self):
+        if self._active_menu and self._menu_btns:
+            idx = (self._menu_btn_idx - 1) % len(self._menu_btns)
+            self._set_menu_highlight(idx)
+            return
         self._move_up()
 
     def _on_down(self):
+        if self._active_menu and self._menu_btns:
+            idx = (self._menu_btn_idx + 1) % len(self._menu_btns)
+            self._set_menu_highlight(idx)
+            return
         self._move_down()
 
     def _on_left(self):
+        if self._active_menu:
+            self._active_menu.close()
+            return
         self._move_left()
 
     def _on_right(self):
+        if self._active_menu:
+            self._active_menu.close()
+            return
         self._move_right()
 
     def _on_click(self):
+        if self._active_menu and self._menu_btns:
+            idx = self._menu_btn_idx
+            if 0 <= idx < len(self._menu_btns):
+                btn = self._menu_btns[idx]
+                try:
+                    if btn.isVisible() and btn.isEnabled():
+                        btn.click()
+                except RuntimeError:
+                    pass
+            return
+
         if self._in_list():
             lst = self._focused_list
             row = self._focused_list_row
@@ -693,7 +772,8 @@ class JoystickNavigator(QObject):
         self._clear_list_highlight()
         buttons = self._buttons_on_page()
         if buttons:
-            self._highlight_btn(buttons[0])
+            primary = [b for b in buttons if b.objectName() != "joystick_secondary"]
+            self._highlight_btn((primary or buttons)[0])
 
     def _on_error(self, message: str):
         print(f"[JoystickNavigator] {message}", file=sys.stderr)
