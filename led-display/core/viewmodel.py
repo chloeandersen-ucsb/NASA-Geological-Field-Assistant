@@ -1307,6 +1307,7 @@ class ViewModel(QObject):
 
     def save_transcription(self) -> None:
         self._was_session_finalized = True
+        self._completing_target = None
         text = self.transcription_text.strip()
         if text:
             mission = self.store.ensure_current_mission()
@@ -1320,13 +1321,13 @@ class ViewModel(QObject):
             )
             self._publish_trip()
 
-        self.stop_voice_to_text()
+        # Recording is already stopped by the time Save is reachable (review mode only).
+        # Do NOT call stop_voice_to_text() here — it resets _stop_time, sends a spurious
+        # "stop\n" to the subprocess, and emits recording_status_changed which flashes
+        # the "Finalizing" overlay right before home navigation.
         self.vtt_active = False
-        self.transcription_text = ""
-
-        self.transcription_changed.emit("")
-        self.recording_status_changed.emit(False)
         self.vtt_formatting = False
+        self.transcription_text = ""
         self.go_home()
     
     def make_rock_current(self, entry: RockEntry) -> None:
@@ -1408,16 +1409,17 @@ class ViewModel(QObject):
         worker.start()
 
     def delete_transcription(self) -> None:
-        import sys
         self._was_session_finalized = True
+        self._completing_target = None
         self.vtt_active = False
-        self.transcriber.stop_recording()
+        self.vtt_formatting = False
+        # Guard: stop the subprocess if somehow called while still recording.
+        # Does NOT emit recording_status_changed — that would flash the formatting overlay.
         if self._transcription_target == "voice":
             self._transcription_target = None
+        self.transcriber.stop_recording()
         self.transcription_text = ""
         self.transcription_changed.emit("")
-        self.recording_status_changed.emit(False)
-        self.vtt_formatting = False
         self.go_home()
 
     # def _on_transcription_token(self, chunk: str) -> None:
