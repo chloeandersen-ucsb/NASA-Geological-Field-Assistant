@@ -1102,10 +1102,12 @@ class RockDetailPage(QWidget):
         res = entry.result
         self.lbl_title.setText(f"{res.label.upper()} ({int(res.confidence * 100)}%)")
 
-        w, h = 300, 225
+        w, h = 200, 150
 
+        self.lbl_top.setVisible(True)
         if res.image_path and os.path.exists(res.image_path):
             self.lbl_top.setPixmap(QPixmap(res.image_path).scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self.lbl_top.setText("")
         else:
             self.lbl_top.setPixmap(QPixmap())
             self.lbl_top.setText("Top")
@@ -1114,6 +1116,7 @@ class RockDetailPage(QWidget):
         self.lbl_side.setVisible(has_side)
         if has_side:
             self.lbl_side.setPixmap(QPixmap(res.side_image_path).scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self.lbl_side.setText("")
         else:
             self.lbl_side.setPixmap(QPixmap())
             self.lbl_side.setText("Side")
@@ -1979,6 +1982,49 @@ class AppWindow(QMainWindow):
             original_conf  = result.confidence
             selected = [None]
 
+            def _restore_original_features():
+                while self.classified.features_layout.count():
+                    child = self.classified.features_layout.takeAt(0)
+                    if child.widget():
+                        child.widget().deleteLater()
+                if show_features and features:
+                    note_by_feature = {n["feature"]: n["note"] for n in geo_notes}
+                    displayed = [
+                        (feat_name, feat_data)
+                        for feat_name, feat_data in features.items()
+                        if feat_data.get("display")
+                    ]
+                    for idx, (feat_name, feat_data) in enumerate(displayed):
+                        value = feat_data["value"]
+                        conf = int(feat_data["confidence"] * 100)
+                        feat_lbl = QLabel(f"{feat_name.replace('_', ' ').title()}: {value}  ({conf}%)")
+                        feat_lbl.setAlignment(Qt.AlignLeft)
+                        feat_lbl.setWordWrap(True)
+                        feat_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
+                        feat_lbl.setStyleSheet("font-size: 14px; border: none; background: transparent; font-weight: bold;")
+                        self.classified.features_layout.addWidget(feat_lbl)
+                        note = note_by_feature.get(feat_name, "")
+                        if note:
+                            note_lbl = QLabel(note)
+                            note_lbl.setAlignment(Qt.AlignLeft)
+                            note_lbl.setWordWrap(True)
+                            note_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
+                            note_lbl.setStyleSheet("font-size: 11px; color: #888; border: none; background: transparent; font-weight: normal;")
+                            self.classified.features_layout.addWidget(note_lbl)
+                        if idx < len(displayed) - 1:
+                            sep = QFrame()
+                            sep.setFrameShape(QFrame.HLine)
+                            sep.setFixedHeight(1)
+                            sep.setStyleSheet("background-color: #ccc;")
+                            self.classified.features_layout.addWidget(sep)
+                            self.classified.features_layout.addSpacing(6)
+
+            def _clear_features():
+                while self.classified.features_layout.count():
+                    child = self.classified.features_layout.takeAt(0)
+                    if child.widget():
+                        child.widget().deleteLater()
+
             def _on_alt_clicked(_checked, chosen_label, chosen_conf, chosen_btn):
                 unselected_style = "font-size: 14px; background-color: #95b7dc; color: #385573;"
                 selected_style   = "font-size: 14px; background-color: #385573; color: #f5f6f4;"
@@ -1986,12 +2032,18 @@ class AppWindow(QMainWindow):
                     chosen_btn.setStyleSheet(unselected_style)
                     selected[0] = None
                     self.vm.override_classification_label(original_label, original_conf)
+                    self.classified.lbl_label.setText(original_label.upper())
+                    self.classified.lbl_conf.setText(f"Confidence: {int(original_conf * 100)}%")
+                    _restore_original_features()
                 else:
                     for b in alt_buttons:
                         b.setStyleSheet(unselected_style)
                     chosen_btn.setStyleSheet(selected_style)
                     selected[0] = chosen_btn
                     self.vm.override_classification_label(chosen_label, chosen_conf)
+                    self.classified.lbl_label.setText(chosen_label.upper())
+                    self.classified.lbl_conf.setText(f"Confidence: {int(chosen_conf * 100)}%")
+                    _clear_features()
 
             for btn, (alt_label, alt_conf) in zip(alt_buttons, alt_entries):
                 btn.clicked.connect(
