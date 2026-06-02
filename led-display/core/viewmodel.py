@@ -738,6 +738,7 @@ class ViewModel(QObject):
         self.vtt_active = False
         self._was_session_finalized = False
         self._transcription_target: str | None = None
+        self._completing_target: str | None = None  # frozen at stop-time so late signals route correctly
         self._mission_name_accept_transcript = True
         self._rock_summary_cache: dict[str, tuple[str, str]] = {}
         self._rock_summary_pending_request: Optional[tuple[str, str]] = None
@@ -1216,13 +1217,14 @@ class ViewModel(QObject):
             self.stop_mission_name_recording(abort=True)
 
         self._transcription_target = "voice"
+        self._completing_target = None
         self.vtt_active = True
         self.vtt_formatting = False
         self._was_session_finalized = False
         self._is_redoing = False
-        self.transcription_text = "" 
+        self.transcription_text = ""
         self.transcription_changed.emit("")
-        
+
         self.transcriber.start_recording()
         self.recording_status_changed.emit(True) 
         
@@ -1235,16 +1237,19 @@ class ViewModel(QObject):
         import time
         print("[VIEWMODEL] stop_voice_to_text() called", file=sys.stderr)
         self.vtt_active = False #!!!!!
-        
+
         # --- PREVENT STRAY REDO STARTS ---
         self._redo_pending = False
-        
+
         # --- TRACK EXACT STOP TIME ---
         self._stop_time = time.time()
-        
-        self.transcriber.stop_recording()
+
+        # Freeze the target so the async completed signal routes correctly even
+        # if _transcription_target changes before finalization finishes.
         if self._transcription_target == "voice":
+            self._completing_target = "voice"
             self._transcription_target = None
+        self.transcriber.stop_recording()
         self.recording_status_changed.emit(False)
 
     def start_mission_name_recording(self) -> None:
@@ -1255,6 +1260,7 @@ class ViewModel(QObject):
                 self.stop_mission_name_recording(abort=True)
 
         self._transcription_target = "mission"
+        self._completing_target = None
         self._mission_name_accept_transcript = True
         self.mission_name_text = ""
         self.mission_name_transcription_changed.emit("")
@@ -1267,6 +1273,9 @@ class ViewModel(QObject):
             return
         if abort:
             self._mission_name_accept_transcript = False
+            self._completing_target = None  # discard in-flight result
+        else:
+            self._completing_target = "mission"  # freeze so late signal routes correctly
         self.transcriber.stop_recording()
         if self._transcription_target == "mission":
             self._transcription_target = None
@@ -1285,8 +1294,9 @@ class ViewModel(QObject):
         
         self.transcriber.stop_recording()
         self._transcription_target = None
-        self._was_session_finalized = True 
-        
+        self._completing_target = None  # discard any in-flight finalization
+        self._was_session_finalized = True
+
         self.transcription_text = ""
         self.transcription_changed.emit("")
         self.recording_status_changed.emit(False)
@@ -1446,8 +1456,14 @@ class ViewModel(QObject):
     def _on_transcription_completed(self, final_text: str) -> None:
         import sys
         import time
-        
-        if self._transcription_target == "mission":
+
+        # Use the target frozen at stop-time so the async signal routes correctly
+        # even if _transcription_target has already changed (e.g. user opened
+        # Create New Mission while voice finalization was still in flight).
+        target = self._completing_target
+        self._completing_target = None
+
+        if target == "mission":
             if not self._mission_name_accept_transcript:
                 return
             if not final_text or not final_text.strip() or "No audio recorded" in final_text:
@@ -1469,8 +1485,10 @@ class ViewModel(QObject):
         # Blocks the instant raw-text signal the wrapper sends on 'stop' to preserve the spinner
         if hasattr(self, '_stop_time'):
             elapsed = time.time() - self._stop_time
-            if elapsed < 0.5 and final_text.strip() and "No audio recorded" not in final_text:
-                print(f"[VIEWMODEL] Ignoring instant phantom signal ({elapsed:.3f}s).", file=sys.stderr)
+            # Only block empty signals — true phantoms have no content.
+            # Real completions (including fast raw-ASR finalization) must pass through.
+            if elapsed < 0.5 and not final_text.strip():
+                print(f"[VIEWMODEL] Ignoring empty phantom signal ({elapsed:.3f}s).", file=sys.stderr)
                 return
         # ------------------------------
             

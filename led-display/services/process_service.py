@@ -490,6 +490,7 @@ class TranscriptionService(ProcessService):
         self._active = False
         self._in_final_dump = False
         self._user_stopped = False
+        self._streaming_complete_received = False  # guards against double completed emission
         # self.process.stateChanged.connect(self._on_state_changed)
         # self.proc.stateChanged.connect(self._on_state_changed)
         
@@ -563,6 +564,7 @@ class TranscriptionService(ProcessService):
         self._final_phrases = []
         self._in_final_dump = False
         self._user_stopped = False
+        self._streaming_complete_received = False
         
         if self.proc.state() == QProcess.Running:
             print("[VOICE-TO-TEXT] Sending START command...", file=sys.stderr)
@@ -633,10 +635,11 @@ class TranscriptionService(ProcessService):
             if "STREAMING COMPLETE" in line:
                 print("[VOICE-TO-TEXT] Engine finished processing. Emitting completed.", file=sys.stderr)
                 self._in_final_dump = False
-                
+
                 final_text = " ".join(self._final_phrases) if self._final_phrases else self.full_text()
+                self._streaming_complete_received = True
                 self.completed.emit(final_text)
-                
+
                 self._text_parts = []
                 self._final_phrases = []
                 continue
@@ -742,7 +745,13 @@ class TranscriptionService(ProcessService):
             print(f"[VOICE-TO-TEXT] Emitting failed signal: {err}", file=sys.stderr)
             self.failed.emit(err)
             return
-        
+
+        # _on_stdout already emitted completed when it saw "STREAMING COMPLETE".
+        # Emitting again here would wipe the transcription with an empty signal.
+        if self._streaming_complete_received:
+            print("[VOICE-TO-TEXT] completed already emitted via stdout; skipping duplicate.", file=sys.stderr)
+            return
+
         print(f"[VOICE-TO-TEXT] Emitting completed signal with text: '{final_text}'", file=sys.stderr)
         self.completed.emit(final_text)
     
