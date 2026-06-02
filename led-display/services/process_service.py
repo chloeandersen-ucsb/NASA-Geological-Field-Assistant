@@ -565,6 +565,7 @@ class TranscriptionService(ProcessService):
         self._in_final_dump = False
         self._user_stopped = False
         self._streaming_complete_received = False
+        self._active = True
         
         if self.proc.state() == QProcess.Running:
             print("[VOICE-TO-TEXT] Sending START command...", file=sys.stderr)
@@ -600,6 +601,7 @@ class TranscriptionService(ProcessService):
   
     def stop_recording(self) -> None:
         """Sends the 'stop' command to the engine."""
+        self._active = False
         if self.proc.state() == QProcess.Running:
             print("[VOICE-TO-TEXT] Sending STOP command...", file=sys.stderr)
             self._user_stopped = True
@@ -701,7 +703,10 @@ class TranscriptionService(ProcessService):
                 if not line:
                     continue
                 
-                if "FINAL TRANSCRIPT" in line or "STREAMING COMPLETE" in line:
+                if "STREAMING COMPLETE" in line:
+                    self._in_final_dump = False
+                    break  # nothing meaningful after this marker
+                if "FINAL TRANSCRIPT" in line:
                     self._in_final_dump = True
                     continue
                 
