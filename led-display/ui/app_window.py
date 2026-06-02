@@ -810,6 +810,7 @@ class TripLoadPage(QWidget):
         self.list = QListWidget()
         self.list.setStyleSheet("font-size: 16px;")
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.list.setSpacing(4)
         layout.addWidget(self.list, stretch=1)
 
         self.btn_create_new_mission = light_button("Create New Mission")
@@ -853,6 +854,7 @@ class MissionDetailPage(QWidget):
         self.list = QListWidget()
         self.list.setStyleSheet("font-size: 16px;")
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.list.setSpacing(4)
         layout.addWidget(self.list, stretch=1)
 
         self.btn_back = dark_green_button("Back")
