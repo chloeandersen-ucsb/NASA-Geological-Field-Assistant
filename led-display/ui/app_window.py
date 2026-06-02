@@ -1405,6 +1405,7 @@ class AppWindow(QMainWindow):
         self._wire_vm()
 
         self.joystick = JoystickNavigator(self, bus=1)
+        self.joystick.relaunch_requested.connect(self._relaunch_application)
         self.joystick.start()
 
         self._show_state(AppStateType.HOME)
@@ -1703,7 +1704,6 @@ class AppWindow(QMainWindow):
         self.home.btn_voice.clicked.connect(lambda: self.vm.state_changed.emit(AppStateType.VOICE_TO_TEXT))
         self.home.btn_trip.clicked.connect(self.vm.open_trip_load)
         self.home.btn_quit.clicked.connect(self._quit_application)
-        self.joystick.relaunch_requested.connect(self._relaunch_application)
 
         self.home.btn_create_mission.clicked.connect(self._open_create_mission_page)
         self.camera_preview.btn_capture.clicked.connect(self.vm.trigger_capture)
