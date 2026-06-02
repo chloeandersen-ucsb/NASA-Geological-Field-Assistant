@@ -179,6 +179,8 @@ class JoystickNavigator(QObject):
     - Click: fires the focused button or emits itemClicked on the focused list row.
     """
 
+    relaunch_requested = Signal()
+
     def __init__(self, window, bus: int = 8, addr: int = JOYSTICK_ADDR):
         super().__init__(window)
         self.window = window
@@ -196,6 +198,13 @@ class JoystickNavigator(QObject):
         self._menu_btns: list = []
         self._menu_btn_idx: int = 0
         self._menu_btn_original_styles: list = []
+
+        self._sleeping = False
+        self._relaunch_clicks = 0
+        self._relaunch_timer = QTimer(self)
+        self._relaunch_timer.setSingleShot(True)
+        self._relaunch_timer.setInterval(3000)
+        self._relaunch_timer.timeout.connect(self._reset_relaunch_count)
 
         self._thread = QThread(self)
         self._worker = _JoystickWorker(bus, addr)
@@ -219,6 +228,20 @@ class JoystickNavigator(QObject):
         self._worker.stop()
         self._thread.quit()
         self._thread.wait(2000)
+
+    def sleep_mode(self):
+        """Suspend normal navigation; count clicks for relaunch sequence."""
+        self._sleeping = True
+        self._relaunch_clicks = 0
+
+    def wake_mode(self):
+        """Resume normal navigation."""
+        self._sleeping = False
+        self._relaunch_clicks = 0
+        self._relaunch_timer.stop()
+
+    def _reset_relaunch_count(self):
+        self._relaunch_clicks = 0
 
     # ── State helpers ────────────────────────────────────────────────────────
 
@@ -687,6 +710,15 @@ class JoystickNavigator(QObject):
         self._move_right()
 
     def _on_click(self):
+        if self._sleeping:
+            self._relaunch_clicks += 1
+            self._relaunch_timer.start()
+            if self._relaunch_clicks >= 5:
+                self._relaunch_clicks = 0
+                self._relaunch_timer.stop()
+                self.relaunch_requested.emit()
+            return
+
         if self._active_menu and self._menu_btns:
             idx = self._menu_btn_idx
             if 0 <= idx < len(self._menu_btns):
