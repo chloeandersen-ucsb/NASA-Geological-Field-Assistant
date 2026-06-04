@@ -40,8 +40,19 @@ rotate_screen() {
     if [[ "$output" == DSI* ]] || { [[ -n "$min_dim_mm" ]] && (( min_dim_mm < 120 )); }; then
         echo "[sage] Small display detected ($output, min dim: ${min_dim_mm:-unknown}mm) — rotating inverted"
         xrandr --output "$output" --rotate inverted
+        SAGE_SMALL_DISPLAY=1
+        # Hide mouse cursor on root window (covers the desktop before the app opens)
+        xsetroot -cursor /tmp/sage_blank.xbm /tmp/sage_blank.xbm 2>/dev/null || true
+        # Suppress desktop notification banners
+        DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}" \
+            gsettings set org.gnome.desktop.notifications show-banners false 2>/dev/null || true
     else
         echo "[sage] Large display detected ($output, min dim: ${min_dim_mm:-unknown}mm) — skipping rotation"
+        SAGE_SMALL_DISPLAY=0
+        # Restore cursor and notifications in case we previously ran with the small display
+        xsetroot -cursor_name left_ptr 2>/dev/null || true
+        DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}" \
+            gsettings set org.gnome.desktop.notifications show-banners true 2>/dev/null || true
     fi
 }
 
@@ -106,7 +117,7 @@ main() {
     install_if_needed
     rotate_screen
     cd "$SCRIPT_DIR"
-    exec sudo -u "${SUDO_USER:-$USER}" make run
+    exec sudo -u "${SUDO_USER:-$USER}" env SAGE_SMALL_DISPLAY="${SAGE_SMALL_DISPLAY:-0}" make run
 }
 
 main "$@"

@@ -684,6 +684,9 @@ class JoystickNavigator(QObject):
     # ── Slots ────────────────────────────────────────────────────────────────
 
     def _on_up(self):
+        if self._sleeping:
+            self.relaunch_requested.emit()
+            return
         if self._active_menu and self._menu_btns:
             idx = (self._menu_btn_idx - 1) % len(self._menu_btns)
             self._set_menu_highlight(idx)
@@ -691,6 +694,9 @@ class JoystickNavigator(QObject):
         self._move_up()
 
     def _on_down(self):
+        if self._sleeping:
+            self.relaunch_requested.emit()
+            return
         if self._active_menu and self._menu_btns:
             idx = (self._menu_btn_idx + 1) % len(self._menu_btns)
             self._set_menu_highlight(idx)
@@ -698,12 +704,18 @@ class JoystickNavigator(QObject):
         self._move_down()
 
     def _on_left(self):
+        if self._sleeping:
+            self.relaunch_requested.emit()
+            return
         if self._active_menu:
             self._active_menu.close()
             return
         self._move_left()
 
     def _on_right(self):
+        if self._sleeping:
+            self.relaunch_requested.emit()
+            return
         if self._active_menu:
             self._active_menu.close()
             return
@@ -711,12 +723,7 @@ class JoystickNavigator(QObject):
 
     def _on_click(self):
         if self._sleeping:
-            self._relaunch_clicks += 1
-            self._relaunch_timer.start()
-            if self._relaunch_clicks >= 5:
-                self._relaunch_clicks = 0
-                self._relaunch_timer.stop()
-                self.relaunch_requested.emit()
+            self.relaunch_requested.emit()
             return
 
         if self._active_menu and self._menu_btns:

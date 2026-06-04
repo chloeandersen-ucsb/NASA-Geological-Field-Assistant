@@ -6,7 +6,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QProgressBar, QPushButton
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QCursor
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
 
 import connector
@@ -175,6 +175,8 @@ def main() -> int:
 
     try:
         app = QApplication(sys.argv)
+        if os.environ.get("SAGE_SMALL_DISPLAY") == "1":
+            app.setOverrideCursor(QCursor(Qt.BlankCursor))
     except Exception as e:
         print(f"ERROR: Failed to create QApplication: {e}", file=sys.stderr)
         return 1

@@ -1,4 +1,4 @@
-.PHONY: help setup run run-fine-tuned run-raw run-base run-base-raw run-mock run-mock-ml clean check
+.PHONY: help setup run run-fine-tuned run-raw run-base run-base-raw run-mock run-mock-ml clean check kill
 
 # Project configuration
 PYTHON := python3
@@ -39,46 +39,13 @@ else
 	@echo "Setup complete"
 endif
 
-run:
-	@echo "Platform: $(JETSON_DETECT)"
-	@echo "Data directory: $(SAGE_STORE_DIR)"
-	@echo "Mode: Base NeMo model"
-	@cd "$(LED_DISPLAY_DIR)" && \
-		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
-		export SAGE_USE_BASE_MODEL=1 && \
-		export JETSON_PLATFORM=$(IS_JETSON) && \
-		$(PYTHON) main.py
+kill:
+	-@ps aux | grep '[t]ranscriber_fine_tuned' | awk '{print $$2}' | xargs -r kill -9
+	-@ps aux | grep '[r]ocknet_daemon'          | awk '{print $$2}' | xargs -r kill -9
+	-@ps aux | grep '[m]ain.py'                 | awk '{print $$2}' | xargs -r kill -9
+	@echo "Stale SAGE processes cleared."
 
-run-fine-tuned:
-	@echo "Platform: $(JETSON_DETECT)"
-	@echo "Data directory: $(SAGE_STORE_DIR)"
-	@echo "Mode: Fine-tuned model (with full post-processing)"
-	@cd "$(LED_DISPLAY_DIR)" && \
-		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
-		export JETSON_PLATFORM=$(IS_JETSON) && \
-		$(PYTHON) main.py
-
-run-phase-1:
-	@echo "Platform: $(JETSON_DETECT)"
-	@echo "Data directory: $(SAGE_STORE_DIR)"
-	@echo "Mode: Phase 1 Fine-tuned model (Geology Vocabulary)"
-	@cd "$(LED_DISPLAY_DIR)" && \
-		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
-		export SAGE_MODEL_FILENAME="geology_fastconformer_v1_phase1.nemo" && \
-		export JETSON_PLATFORM=$(IS_JETSON) && \
-		$(PYTHON) main.py
-
-run-phase-2:
-	@echo "Platform: $(JETSON_DETECT)"
-	@echo "Data directory: $(SAGE_STORE_DIR)"
-	@echo "Mode: Phase 2 Fine-tuned model (Geology Vocab + Acoustic Adaptation)"
-	@cd "$(LED_DISPLAY_DIR)" && \
-		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
-		export SAGE_MODEL_FILENAME="geology_fastconformer_v1_final.nemo" && \
-		export JETSON_PLATFORM=$(IS_JETSON) && \
-		$(PYTHON) main.py
-
-run-phase-2-raw:
+run: kill
 	@echo "Platform: $(JETSON_DETECT)"
 	@echo "Data directory: $(SAGE_STORE_DIR)"
 	@echo "Mode: Phase 2 (RAW ASR - No Spellchecker Sabotage)"
@@ -89,7 +56,47 @@ run-phase-2-raw:
 		export JETSON_PLATFORM=$(IS_JETSON) && \
 		$(PYTHON) main.py
 
-run-raw:
+run-fine-tuned: kill
+	@echo "Platform: $(JETSON_DETECT)"
+	@echo "Data directory: $(SAGE_STORE_DIR)"
+	@echo "Mode: Fine-tuned model (with full post-processing)"
+	@cd "$(LED_DISPLAY_DIR)" && \
+		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
+		export JETSON_PLATFORM=$(IS_JETSON) && \
+		$(PYTHON) main.py
+
+run-phase-1: kill
+	@echo "Platform: $(JETSON_DETECT)"
+	@echo "Data directory: $(SAGE_STORE_DIR)"
+	@echo "Mode: Phase 1 Fine-tuned model (Geology Vocabulary)"
+	@cd "$(LED_DISPLAY_DIR)" && \
+		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
+		export SAGE_MODEL_FILENAME="geology_fastconformer_v1_phase1.nemo" && \
+		export JETSON_PLATFORM=$(IS_JETSON) && \
+		$(PYTHON) main.py
+
+run-phase-2: kill
+	@echo "Platform: $(JETSON_DETECT)"
+	@echo "Data directory: $(SAGE_STORE_DIR)"
+	@echo "Mode: Phase 2 Fine-tuned model (Geology Vocab + Acoustic Adaptation)"
+	@cd "$(LED_DISPLAY_DIR)" && \
+		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
+		export SAGE_MODEL_FILENAME="geology_fastconformer_v1_final.nemo" && \
+		export JETSON_PLATFORM=$(IS_JETSON) && \
+		$(PYTHON) main.py
+
+run-phase-2-raw: kill
+	@echo "Platform: $(JETSON_DETECT)"
+	@echo "Data directory: $(SAGE_STORE_DIR)"
+	@echo "Mode: Phase 2 (RAW ASR - No Spellchecker Sabotage)"
+	@cd "$(LED_DISPLAY_DIR)" && \
+		export SAGE_STORE_DIR="$(SAGE_STORE_DIR)" && \
+		export SAGE_MODEL_FILENAME="geology_fastconformer_v1_final.nemo" && \
+		export SAGE_RAW_ASR=1 && \
+		export JETSON_PLATFORM=$(IS_JETSON) && \
+		$(PYTHON) main.py
+
+run-raw: kill
 	@echo "Platform: $(JETSON_DETECT)"
 	@echo "Data directory: $(SAGE_STORE_DIR)"
 	@echo "Mode: Fine-tuned model (RAW ASR - No Post-Processing)"
@@ -99,7 +106,7 @@ run-raw:
 		export JETSON_PLATFORM=$(IS_JETSON) && \
 		$(PYTHON) main.py
 
-run-base-raw:
+run-base-raw: kill
 	@echo "Platform: $(JETSON_DETECT)"
 	@echo "Data directory: $(SAGE_STORE_DIR)"
 	@echo "Mode: Base NeMo model (RAW ASR - No Post-Processing)"

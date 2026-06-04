@@ -1288,6 +1288,108 @@ class ExpandingVoiceWidget(QWidget):
             self.button_container.hide()
         super().leaveEvent(event)
 
+class SleepOverlay(QWidget):
+    """Full-window black overlay shown while the app is in sleep mode."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background-color: black;")
+        self.hide()
+
+    def paintEvent(self, event):
+        from PySide6.QtGui import QPainter, QColor
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(0, 0, 0))
+
+
+class ReLaunchSplash(QWidget):
+    """Full-window loading overlay shown while models reload after sleep."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background-color: #cbd2c5; color: #cad2c5; font-family: 'Courier New';")
+        self.hide()
+
+        layout = QVBoxLayout(self)
+
+        import pathlib
+        logo = QLabel()
+        logo_path = pathlib.Path(__file__).parent / "newlogo.png"
+        if logo_path.exists():
+            from PySide6.QtGui import QPixmap
+            logo.setPixmap(QPixmap(str(logo_path)).scaled(500, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setAlignment(Qt.AlignCenter)
+        logo.setStyleSheet("background: transparent; border: none;")
+
+        self.loading_text = QLabel("Loading SAGE...")
+        self.loading_text.setStyleSheet("font-size: 24px; font-weight: bold; background: transparent;")
+        self.loading_text.setAlignment(Qt.AlignCenter)
+        self.loading_text.setWordWrap(True)
+        self.loading_text.setMaximumWidth(460)
+
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("font-size: 13px; color: #344f41; background: transparent;")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setWordWrap(True)
+        self.status_label.setMaximumWidth(460)
+
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.progress.setTextVisible(True)
+        self.progress.setAlignment(Qt.AlignCenter)
+        self.progress.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #cad2c5; border-radius: 5px;
+                background-color: #577d6a; height: 30px;
+                text-align: center; font-weight: bold; font-size: 16px;
+            }
+            QProgressBar::chunk { background-color: #344f41; border-radius: 3px; }
+        """)
+
+        quit_btn = QPushButton("QUIT")
+        quit_btn.setMinimumHeight(50)
+        quit_btn.setStyleSheet("font-size: 20px; background-color: #344f41; color: #cad2c5;")
+        quit_btn.clicked.connect(QApplication.quit)
+
+        layout.addStretch(1)
+        layout.addWidget(logo)
+        layout.addSpacing(40)
+        layout.addWidget(self.loading_text)
+        layout.addSpacing(8)
+        layout.addWidget(self.status_label)
+        layout.addSpacing(10)
+        layout.addWidget(self.progress)
+        layout.addStretch(1)
+        layout.addWidget(quit_btn)
+
+        self._exact_progress = 0.0
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+
+    def _tick(self):
+        if self._exact_progress < 95.0:
+            self._exact_progress += (95.0 - self._exact_progress) * 0.01
+            self.progress.setValue(int(self._exact_progress))
+
+    def start(self):
+        self._exact_progress = 0.0
+        self.progress.setValue(0)
+        self.loading_text.setText("Loading SAGE...")
+        self.status_label.setText("Loading models (this may take a moment)...")
+        self._timer.start(33)
+        self.show()
+        self.raise_()
+
+    def finish(self):
+        self._timer.stop()
+        self.progress.setValue(100)
+        self.loading_text.setText("Ready!")
+
+    def paintEvent(self, event):
+        from PySide6.QtGui import QPainter, QColor
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(0xcb, 0xd2, 0xc5))
+
+
 class AppWindow(QMainWindow):
     def __init__(self, vm):
         super().__init__()
@@ -1408,6 +1510,9 @@ class AppWindow(QMainWindow):
         self.joystick = JoystickNavigator(self, bus=1)
         self.joystick.relaunch_requested.connect(self._relaunch_application)
         self.joystick.start()
+
+        self.sleep_overlay = SleepOverlay(self)
+        self.relaunch_splash = ReLaunchSplash(self)
 
         self._show_state(AppStateType.HOME)
 
@@ -1688,17 +1793,49 @@ class AppWindow(QMainWindow):
             self.setFixedSize(sim_w, sim_h)
 
     def _quit_application(self) -> None:
+        try:
+            self.vm.transcriber.kill()
+        except Exception:
+            pass
+
+        self.sleep_overlay.setGeometry(self.rect())
+        self.sleep_overlay.show()
+        self.sleep_overlay.raise_()
+        QApplication.processEvents()
+
         self.joystick.sleep_mode()
-        self.hide()
+        QApplication.instance().installEventFilter(self)
 
     def _relaunch_application(self) -> None:
+        if not self.joystick._sleeping:
+            return
+
+        QApplication.instance().removeEventFilter(self)
         self.joystick.wake_mode()
-        if connector.is_jetson():
-            self._apply_fullscreen_geometry()
-            self.showFullScreen()
-        else:
-            self.show()
+
+        self.relaunch_splash.setGeometry(self.rect())
+        self.relaunch_splash.start()
+        self.relaunch_splash.raise_()
+        self.sleep_overlay.hide()
+        QApplication.processEvents()
+
+        try:
+            self.vm.transcriber.boot_model()
+        except Exception as e:
+            print(f"[SLEEP] Model reboot failed: {e}", file=sys.stderr)
+
+        self.relaunch_splash.finish()
+        QTimer.singleShot(400, self.relaunch_splash.hide)
+
+        self._show_state(AppStateType.HOME)
         QTimer.singleShot(100, self.joystick._focus_first)
+
+    def eventFilter(self, obj, event) -> bool:
+        from PySide6.QtCore import QEvent
+        if event.type() == QEvent.KeyPress and self.joystick._sleeping:
+            self._relaunch_application()
+            return True
+        return super().eventFilter(obj, event)
 
     def _wire_ui(self) -> None:
         self.home.btn_classify.clicked.connect(self.vm.open_camera_preview)

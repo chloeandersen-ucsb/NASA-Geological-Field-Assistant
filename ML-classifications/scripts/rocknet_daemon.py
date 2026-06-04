@@ -22,16 +22,8 @@ from rocknet_v2 import load_checkpoint, run_inference
 
 
 def select_device() -> torch.device:
-    try:
-        import connector
-        if connector.is_jetson():
-            return torch.device("cuda")
-    except ImportError:
-        pass
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
+    # NeMo (ASR) occupies most of the Jetson's unified GPU memory.
+    # Running RockNet on CPU avoids CUDA OOM and camera NVMM starvation.
     return torch.device("cpu")
 
 
@@ -56,14 +48,15 @@ def main() -> None:
     model, metadata = load_checkpoint(args.weights, device=device)
     model.eval()
 
-    emit({"status": "ready"})
-
-    # Pre-compile CUDA kernels so the first real inference isn't slow (~6s → ~200ms).
+    # Finish CUDA warm-up before signalling ready so the camera never starts
+    # while heavy GPU work is in flight.
     with torch.no_grad():
         dummy = torch.zeros(1, 3, 640, 640, device=device)
         model(dummy)
     if device.type == "cuda":
         torch.cuda.synchronize()
+
+    emit({"status": "ready"})
 
     for line in sys.stdin:
         line = line.strip()

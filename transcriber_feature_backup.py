@@ -1,5 +1,4 @@
 import time
-time.sleep(5)
 app_start_time = time.time()
  
 import sounddevice as sd
@@ -8,6 +7,7 @@ import numpy as np
 import queue
 import sys
 import torch
+torch.cuda.set_per_process_memory_fraction(0.4, 0)
 import os
 import difflib
 import jellyfish 
@@ -74,7 +74,7 @@ GEOLOGY_WHITELIST = {
     "hydrothermal", "alteration", "mineralization", "diagenesis",
     "stratigraphy", "orogeny", "subduction", "anticline", "syncline",
     "felsic", "ultramafic", "peridotite", "hematite", "magnetite",
-    "recrystallized", "recrystallization", "geomorphology",
+    "recrystallized", "recrystallization", "geomorphology", "anorthosite"
 }
  
 # Pre-load the geology whitelist into the spellchecker so it never
@@ -111,6 +111,10 @@ EXPLICIT_CORRECTIONS = [
     (_re.compile(r"\bqu[ao]r[dt]z?[sz]?[iy]+te?\b", _re.I), "quartzite"),
     # amphibolite variants
     (_re.compile(r"\bamphi[bv]o[lh][iy]+te?\b", _re.I), "amphibolite"),
+    # anorthosite — ASR splits it across 2-4 words.
+    # Observed: "on north side site", "on north side sideite", "a north site", "anortho site"
+    (_re.compile(r"\ban\s*[ao]rth[ao]\s*s[iy]+te?\b", _re.I), "anorthosite"),
+    (_re.compile(r"\b(?:on|an?)\s+north\s+(?:side?\s+)?s(?:ite?|ideite?|ight)\b", _re.I), "anorthosite"),
 ]
  
 def apply_explicit_corrections(text: str) -> str:
@@ -118,15 +122,87 @@ def apply_explicit_corrections(text: str) -> str:
     for pattern, replacement in EXPLICIT_CORRECTIONS:
         text = pattern.sub(replacement, text)
     return text
- 
- 
+
+
+def _repair_visual_context(text: str, visual_keywords: list) -> str:
+    """
+    General-purpose repair for visual context keywords mangled by ASR.
+    The ASR splits geology terms across 2-6 words in unpredictable ways
+    (e.g. "anorthosite" → "in the north a yes not"). Regex can't cover all
+    variants, so we use character-level SequenceMatcher on sliding windows.
+
+    Only fires when the keyword is absent from the transcript — never replaces
+    an already-correct word. Tries large windows first so the entire mangled
+    span is replaced, not just part of it.
+    """
+    if not text or not visual_keywords:
+        return text
+
+    words = text.split()
+
+    for phrase in visual_keywords:
+        target = phrase.lower().strip()
+        target_sq = target.replace(" ", "")
+        if len(target_sq) < 5:
+            continue  # too short — false-positive risk not worth it
+
+        # Already present? Nothing to do.
+        if target_sq in "".join(w.lower().strip(".,!?") for w in words):
+            continue
+
+        best_score = 0.0
+        best_start = -1
+        best_size = 0
+
+        # Scan ALL window sizes and keep the globally best-scoring match.
+        # Early-break-on-large-window was wrong: a 5-word window that includes
+        # an extra real word (e.g. "rock") scores lower than the correct 4-word
+        # window that covers only the mangled span.
+        # Length-ratio guard: chunk must be 0.6–2.2× the target length to
+        # avoid matching a completely unrelated long sentence.
+        # Scan ALL window sizes, down to 0 so we actually check 1-word chunks!
+        for wsize in range(min(7, len(words)), 0, -1):
+            for start in range(len(words) - wsize + 1):
+                chunk = "".join(w.lower().strip(".,!?") for w in words[start:start + wsize])
+                ratio = len(chunk) / len(target_sq)
+                
+                # STRICTER LENGTH RATIO: The chunk cannot be wildly longer or shorter than the target
+                if not (0.75 <= ratio <= 1.4):
+                    continue
+                    
+                score = difflib.SequenceMatcher(None, target_sq, chunk).ratio()
+                if score > best_score:
+                    best_score = score
+                    best_start = start
+                    best_size = wsize
+
+        # 1-word window: needs high confidence (0.78) but not 0.82 — that was
+        # too tight and caused "anothersite" (score ≈ 0.82) to fail on floating-point.
+        # Multi-word window: 0.60 — these squish differently so a lower bar is fine.
+        required_score = 0.78 if best_size == 1 else 0.60
+
+        if best_score >= required_score and best_start >= 0:
+            print(
+                f"[CONTEXT REPAIR] '{' '.join(words[best_start:best_start+best_size])}'"
+                f" → '{target}' (score={best_score:.2f})",
+                file=sys.stderr
+            )
+            words = (words[:best_start] + [target] + words[best_start + best_size:])
+
+    return " ".join(words)
+
+
 def multimodal_correction(transcript, visual_keywords):
     if not transcript: return ""
- 
+
     # Always apply explicit regex corrections first — even in raw_asr mode,
     # since these fix known systematic model errors, not English spelling.
     transcript = apply_explicit_corrections(transcript)
- 
+
+    # Visual context repair also runs before the raw_asr gate — it's not a
+    # spellchecker, it's a targeted fix for the specific rock type being observed.
+    transcript = _repair_visual_context(transcript, visual_keywords)
+
     if args.raw_asr: return transcript
  
     # 1. MASTER TARGET LIST — always includes geology whitelist so the
@@ -188,26 +264,33 @@ def multimodal_correction(transcript, visual_keywords):
         max_skip = 0
  
         # 2. SLIDING N-GRAM WINDOW
-        for window_size in [3, 2, 1]:
+        # Use window=4 for visual context keywords only — ASR can split a single
+        # technical word (e.g. "anorthosite") into up to 4 tokens. The wider window
+        # is gated on visual_keywords to avoid false positives on common words.
+        visual_targets = [kw.replace(" ", "").lower() for phrase in visual_keywords
+                          for kw in ([phrase] + phrase.split())]
+        window_sizes = [4, 3, 2, 1] if visual_targets else [3, 2, 1]
+        for window_size in window_sizes:
             if i + window_size <= len(words):
                 chunk = "".join(words[i:i+window_size]).lower().strip(".,?!")
-                
-                for target in targets:
+
+                # For window=4, only check visual context targets to keep it tight
+                candidate_targets = visual_targets if window_size == 4 else targets
+
+                for target in candidate_targets:
                     target_squished = target.replace(" ", "")
                     spelling_score = jellyfish.jaro_winkler_similarity(chunk, target_squished)
                     sounds_alike = (jellyfish.metaphone(chunk) == jellyfish.metaphone(target_squished))
-                    
-                    # --- NEW: Stricter Thresholds & Length Checks ---
-                    # Make the long-word threshold stricter (0.85 instead of 0.78)
+
                     threshold = 0.88 if len(target_squished) <= 4 else 0.85
-                    
+
                     length_ratio = min(len(chunk), len(target_squished)) / max(len(chunk), len(target_squished))
-                    
+
                     if length_ratio > 0.5 and (sounds_alike or spelling_score > threshold):
                         best_match = target
                         max_skip = window_size - 1
                         break
-                
+
                 if best_match:
                     break
  
@@ -265,20 +348,41 @@ asr_model.freeze()
 asr_model = asr_model.to(device)
 asr_model.eval()
 sys.stdout.flush()
- 
-# --- NEW: BOOT THE HEAVIER LLM ---
-from llama_cpp import Llama
- 
-LLM_MODEL_PATH = os.path.join(PROJECT_ROOT, "led-display", "models", "Phi-3-mini-4k-instruct-q4.gguf")
- 
+
+# Warmup: force cuBLAS to allocate its workspace now, while GPU memory is free,
+# before the LLM loads. Without this, the first recording triggers cublasCreate()
+# with less headroom and hits CUBLAS_STATUS_ALLOC_FAILED on the Jetson.
 try:
-    # n_gpu_layers=-1 offloads it to the Jetson's GPU for maximum speed
-    # n_ctx=2048 gives enough room for prompt + long transcripts without cutoff
+    _w_signal = torch.zeros(1, SAMPLE_RATE, dtype=torch.float32, device=device)
+    _w_len = torch.tensor([SAMPLE_RATE], dtype=torch.int64, device=device)
+    with torch.no_grad():
+        asr_model.forward(input_signal=_w_signal, input_signal_length=_w_len)
+    del _w_signal, _w_len
+    print("NeMo warmup complete.")
+    sys.stdout.flush()
+except Exception as _warmup_err:
+    print(f"NeMo warmup failed (non-fatal): {_warmup_err}", file=sys.stderr)
+
+# Load the LLM BEFORE signalling ready to the UI.
+# The LLM maps ~2.2 GB into memory; if it loads concurrently with the camera
+# pipeline the two compete for NVMM and the camera gets ENOMEM.
+# Loading here (during the loading screen) ensures all memory is settled before
+# the user can open the camera preview.
+from llama_cpp import Llama
+
+LLM_MODEL_PATH = os.path.join(PROJECT_ROOT, "led-display", "models", "Phi-3-mini-4k-instruct-q4.gguf")
+
+try:
     llm = Llama(model_path=LLM_MODEL_PATH, n_ctx=4096, n_gpu_layers=0, verbose=False)
     print("LLM loaded successfully!")
 except Exception as e:
     print(f"Warning: Could not load LLM. Falling back to standard correction. Error: {e}")
     llm = None
+sys.stdout.flush()
+
+# Signal the UI that everything is ready. The home screen appears here, AFTER
+# both NeMo and the LLM are fully in memory.
+print("READY")
 sys.stdout.flush()
  
 # ------------------------------------------------------------------
@@ -381,29 +485,50 @@ full_audio_buffer = []
 def audio_callback(indata, frames, time_info, status):
     audio_q.put(indata.copy())
  
-# Check for Sennheiser or default
+# Check for Sennheiser → then explicit "pulse" PA device → then system default.
+# The "default" ALSA device (via pulse plugin) can hang on Jetson; the "pulse"
+# PortAudio device routes through PulseAudio correctly and supports multiplexing.
 DEVICE_INDEX = None
 for i, dev in enumerate(sd.query_devices()):
-    if 'Sennheiser' in dev['name']:
+    if 'Sennheiser' in dev['name'] and dev['max_input_channels'] > 0:
         DEVICE_INDEX = i
         break
 if DEVICE_INDEX is None:
+    for i, dev in enumerate(sd.query_devices()):
+        if dev['name'] == 'pulse' and dev['max_input_channels'] > 0:
+            DEVICE_INDEX = i
+            break
+if DEVICE_INDEX is None:
     DEVICE_INDEX = sd.default.device[0]
  
+# Start the stream once and leave it running permanently.
+# Stopping/restarting causes PulseAudio to buffer audio during the gap and
+# deliver it as "stale" frames at the start of the next recording, which
+# contaminates the full-buffer NeMo pass with the previous session's audio.
+# Instead, we keep the stream alive and drain-and-discard the audio queue
+# whenever recording_active is False.
 stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, device=DEVICE_INDEX, callback=audio_callback)
+stream.start()
  
 chunk_size = int(SAMPLE_RATE * CHUNK_DURATION)
 window_size = int(SAMPLE_RATE * WINDOW_DURATION)
 rolling_buffer = np.zeros((1, 0), dtype=np.float32)
 final_transcript = ""
-last_llm_output = ""   # tracks previous recording's LLM output for cache-replay detection
 recording_active = False
- 
+
 total_frames_recorded = 0
+fresh_frames = 0          # frames added to rolling_buffer AFTER the stale-discard phase
 last_inference_frames = 0
+# PulseAudio has ~200 ms of internal latency even with a persistent stream.
+# Discard the first 200 ms from the rolling buffer (live inference only) as a
+# lightweight guard. The audio buffers themselves are fully reset on every start,
+# so this is purely defensive against the OS audio stack, not saved recordings.
+_STALE_DISCARD_FRAMES = int(SAMPLE_RATE * 0.2)
+_frames_discarded = 0
  
 last_raw_text = ""
 stable_chunks = 0
+last_llm_output = ""   # track previous recording's LLM output for cache-replay detection
  
 try:
     while True:
@@ -425,17 +550,29 @@ try:
                 full_audio_buffer = []
                 rolling_buffer = np.zeros((1,0), dtype=np.float32)
                 total_frames_recorded = 0
+                fresh_frames = 0
                 last_inference_frames = 0
                 silence_chunks = 0
+                _frames_discarded = 0
+
+                stable_chunks = 0
                 last_raw_text = ""
                 final_transcript = ""
-                stream.start()
+
+                if llm:
+                    try: llm.reset()
+                    except Exception: pass
+                    try: llm._ctx.kv_cache_clear()
+                    except Exception: pass
+
+                # Stream is always running — nothing to start.
                 print("\nRECORDING NOW... (Fine-tuned Model)\n")
                 sys.stdout.flush()
             elif line == "stop":
                 if not recording_active:
                     continue
-                stream.stop()
+                # Stream stays running; audio collected while not recording is
+                # continuously discarded by the idle drain below.
                 recording_active = False
  
                 if last_raw_text:
@@ -450,13 +587,13 @@ try:
                         new_full_transcript, new_part = smart_merge(final_transcript, corrected_text)
                         if new_part:
                             timestamp = datetime.now().strftime('%H:%M:%S')
-                            print(f"[{timestamp}] {new_part}")
+                            print(f"[{timestamp}] {new_full_transcript}")
                         final_transcript = new_full_transcript
 
                 import select
                 import time
-                # Wait up to 0.45s to ensure we catch the delayed 300ms 'start' from the UI
-                if select.select([sys.stdin], [], [], 0.45)[0]:
+                # Wait up to 0.55s to ensure we catch the delayed 50ms 'start' from the UI
+                if select.select([sys.stdin], [], [], 0.55)[0]:
                     # Vacuum up ALL queued commands in the pipe
                     pending = []
                     while select.select([sys.stdin], [], [], 0.0)[0]:
@@ -464,6 +601,7 @@ try:
                         if cmd in ["start", "stop"]: 
                             pending.append(cmd)
                         
+                    # Only start fresh if the VERY LAST command was a start
                     # Only start fresh if the VERY LAST command was a start
                     if pending and pending[-1] == "start":
                         print("\n[REDO DETECTED] Discarding audio. Starting fresh...\n")
@@ -476,17 +614,23 @@ try:
                         full_audio_buffer = []
                         rolling_buffer = np.zeros((1,0), dtype=np.float32)
                         total_frames_recorded = 0
+                        fresh_frames = 0
                         last_inference_frames = 0
                         silence_chunks = 0
+                        _frames_discarded = 0
+
+                        stable_chunks = 0
                         last_raw_text = ""
                         final_transcript = ""
+
+                        if llm:
+                            try: llm.reset()
+                            except Exception: pass
+                            try: llm._ctx.kv_cache_clear()
+                            except Exception: pass
                         
-                        time.sleep(0.2) 
-                        try:
-                            stream.start()
-                            print("\nRECORDING NOW... (Fine-tuned Model)\n")
-                        except Exception as e:
-                            print(f"\n[MIC ERROR] Failed to restart mic: {e}\n")
+                        time.sleep(0.2)
+                        print("\nRECORDING NOW... (Fine-tuned Model)\n")
                             
                         sys.stdout.flush()
                         continue
@@ -516,6 +660,22 @@ try:
                             print("\n[WARNING] Mic pop squashed buffer. Sending live text to LLM...")
                             final_raw = final_transcript
 
+                        # Sanity-check the full-buffer pass against the live rolling-window
+                        # transcript. If word overlap is < 30%, NeMo hallucinated (this happens
+                        # on very short recordings or after the GPU processed a different session).
+                        # Fall back to the live transcript which we know was tracking the audio.
+                        if final_transcript.strip() and final_raw.strip():
+                            import re as _re2
+                            def _words(s): return set(_re2.sub(r'[^\w\s]', '', s.lower()).split())
+                            fb_words = _words(final_raw)
+                            live_words = _words(final_transcript)
+                            if fb_words and live_words:
+                                overlap = len(fb_words & live_words) / max(len(fb_words), len(live_words))
+                                if overlap < 0.3:
+                                    print(f"[WARN] Full-buffer NeMo output shares only {overlap:.0%} words with live transcript — likely hallucination. Using live transcript.", file=sys.stderr)
+                                    sys.stderr.flush()
+                                    final_raw = final_transcript
+
                         probs = torch.softmax(logits, dim=-1)
                         top_probs, top_indices = torch.topk(probs, k=4, dim=-1)
                         vocab = asr_model.decoder.vocabulary
@@ -544,22 +704,25 @@ try:
                     visual_context = get_current_visual_context()
                     dictionary_cleaned_text = multimodal_correction(final_raw, visual_context).replace("⁇", "")
 
-                    # If full-buffer NeMo returned only ⁇ tokens, fall back to live transcript
+                    # NeMo sometimes returns only ⁇ tokens for non-geology speech — stripping
+                    # them leaves an empty string, which bypasses the LLM and produces a blank
+                    # final transcript. Fall back to the live streaming text in that case.
                     if not dictionary_cleaned_text.strip() and final_transcript.strip():
-                        print("[WARN] Full-buffer empty after cleaning — using live transcript.", file=sys.stderr)
+                        print("[WARN] Full-buffer transcription was empty after cleaning — using live transcript.", file=sys.stderr)
+                        sys.stderr.flush()
                         dictionary_cleaned_text = final_transcript
 
-                    sys.stdout.flush()
-
+                    sys.stdout.flush() # TEST
+                    
                     final_clean_text = dictionary_cleaned_text
-
+                    
                     if llm and dictionary_cleaned_text.strip():
                         print(f"NeMo full-buffer: {dictionary_cleaned_text}")
                         print("Running LLM formatting...")
                         sys.stdout.flush()
 
-                        unique_id = time.time()  # cache-buster: unique token forces fresh KV state
-
+                        unique_id = time.time() # <--- NEW: Cache buster
+                        
                         if confidence_hint:
                             print("Passing confidence notes to LLM...")
                             context_str = ", ".join(visual_context)
@@ -580,7 +743,8 @@ System Time: {unique_id}
 You are a robotic text formatter. Your ONLY job is to add proper capitalization and punctuation to the text.
 Output ONLY the formatted text. Do not add conversational filler. Do not change the words.<|end|>"""
 
-                        if confidence_hint and visual_context:
+                        # Few-shot example for context-correction path: shows silent word fix
+                        if confidence_hint and context_str:
                             prompt = f"""{system_prompt}
 <|user|>
 Raw ASR: i found a granit rock here<|end|>
@@ -610,74 +774,123 @@ Raw ASR: {dictionary_cleaned_text}<|end|>
  
                         try:
                             response = llm(
-                                prompt, 
-                                max_tokens=llm_max_tokens, 
+                                prompt,
+                                max_tokens=llm_max_tokens,
                                 stop=["<|end|>"],
                                 temperature=0.1 if not confidence_hint else 0.2
                             )
-                            
-                            llm_output = response["choices"][0]["text"].strip()
 
-                            import re as _re_llm
-                            llm_output = _re_llm.split(r'\s*\*{0,2}Note\b', llm_output, flags=_re_llm.I)[0].strip()
+                            llm_output = response["choices"][0]["text"].strip()
+                            print(f"[LLM] raw output: {repr(llm_output)}", file=sys.stderr)
+                            sys.stderr.flush()
 
                             if "Here is the formatted text:" in llm_output:
                                 llm_output = llm_output.split("Here is the formatted text:")[-1].strip()
                             elif "Here is the corrected text:" in llm_output:
                                 llm_output = llm_output.split("Here is the corrected text:")[-1].strip()
+                            # Strip any **Note:** / *Note:* / Note: meta-commentary Phi-3 sometimes adds
+                            import re as _re_llm
+                            llm_output = _re_llm.split(r'\s*\*{0,2}Note\b', llm_output, flags=_re_llm.I)[0].strip()
 
                             # --- CACHE CORRUPTION GUARD ---
-                            import re as _re_cache
-                            def _get_words(s): return _re_cache.sub(r'[^\w\s]', '', s.lower()).split()
-                            dict_words = _get_words(dictionary_cleaned_text)
-                            llm_words  = _get_words(llm_output)
-                            prev_words = _get_words(last_llm_output)
+                            import re
+                            def get_words(s): return re.sub(r'[^\w\s]', '', s.lower()).split()
+
+                            dict_words = get_words(dictionary_cleaned_text)
+                            llm_words = get_words(llm_output)
+                            prev_llm_words = get_words(last_llm_output)
 
                             asr_vs_llm = difflib.SequenceMatcher(None, dict_words, llm_words).ratio() if (dict_words and llm_words) else 1.0
-                            llm_vs_prev = difflib.SequenceMatcher(None, llm_words, prev_words).ratio() if (llm_words and prev_words) else 0.0
+                            llm_vs_prev = difflib.SequenceMatcher(None, llm_words, prev_llm_words).ratio() if (llm_words and prev_llm_words) else 0.0
 
-                            cache_replay   = (llm_vs_prev > 0.65)
+                            # Threshold lowered to 0.65: a partial replay (e.g. same opening
+                            # phrase with slight word differences) now triggers a reload.
+                            cache_replay = (llm_vs_prev > 0.65)
                             cache_diverged = (dict_words and llm_words and asr_vs_llm < 0.4)
-                            cache_biased   = (prev_words and dict_words and llm_words and
-                                              llm_vs_prev > asr_vs_llm + 0.2 and llm_vs_prev > 0.45)
+                            # Catch the case where LLM output matches last session more than it
+                            # matches the current NeMo transcript — the hallmark of a partial
+                            # cache replay that slips under the absolute threshold.
+                            cache_biased = (prev_llm_words and dict_words and llm_words and
+                                            llm_vs_prev > asr_vs_llm + 0.2 and llm_vs_prev > 0.45)
 
                             if cache_diverged or cache_replay or cache_biased:
-                                reason = (f"replay (llm_vs_prev={llm_vs_prev:.2f})" if cache_replay
-                                          else f"biased (llm_vs_prev={llm_vs_prev:.2f} > asr={asr_vs_llm:.2f})" if cache_biased
-                                          else f"diverged (sim={asr_vs_llm:.2f})")
+                                reason = (f"replay of previous output (llm_vs_prev={llm_vs_prev:.2f})" if cache_replay
+                                          else f"output biased toward previous session (llm_vs_prev={llm_vs_prev:.2f} > asr_vs_llm={asr_vs_llm:.2f})" if cache_biased
+                                          else f"diverged from ASR (sim={asr_vs_llm:.2f})")
                                 print(f"[LLM] Cache corruption detected ({reason}). Reloading LLM...", file=sys.stderr)
+                                sys.stderr.flush()
+
                                 print("[STATUS] Model rebooting due to cache interruption. Please hold on.")
                                 sys.stdout.flush()
+
+                                # Nuke and rebuild the LLM
                                 try:
                                     if hasattr(llm, 'close'): llm.close()
                                 except Exception: pass
                                 del llm
-                                import gc; gc.collect()
-                                from llama_cpp import Llama as _Llama
-                                llm = _Llama(model_path=LLM_MODEL_PATH, n_ctx=4096, n_gpu_layers=0, verbose=False)
-                                response2 = llm(prompt, max_tokens=llm_max_tokens, stop=["<|end|>"],
-                                                temperature=0.1 if not confidence_hint else 0.2)
-                                llm_output = response2["choices"][0]["text"].strip()
-                                print(f"[LLM] output after reload: {repr(llm_output)}", file=sys.stderr)
-                                # If still replaying, fall back to live streaming transcript
-                                if (difflib.SequenceMatcher(None, _get_words(llm_output), prev_words).ratio() > 0.85
-                                        and prev_words):
+                                import gc
+                                gc.collect()
+
+                                from llama_cpp import Llama
+                                llm = Llama(model_path=LLM_MODEL_PATH, n_ctx=4096, n_gpu_layers=0, verbose=False)
+
+                                # Retry inference on fresh model
+                                response = llm(
+                                    prompt,
+                                    max_tokens=llm_max_tokens,
+                                    stop=["<|end|>"],
+                                    temperature=0.1 if not confidence_hint else 0.2
+                                )
+
+                                llm_output = response["choices"][0]["text"].strip()
+                                print(f"[LLM] raw output after reload: {repr(llm_output)}", file=sys.stderr)
+
+                                if "Here is the formatted text:" in llm_output:
+                                    llm_output = llm_output.split("Here is the formatted text:")[-1].strip()
+                                elif "Here is the corrected text:" in llm_output:
+                                    llm_output = llm_output.split("Here is the corrected text:")[-1].strip()
+
+                                # After reload the fresh LLM STILL produces the same output
+                                # as last time → NeMo's full-buffer pass is biased/hallucinating.
+                                # Re-run the LLM with the live-streaming transcript as input instead.
+                                # Live inference uses independent 4-second windows so it doesn't
+                                # suffer the same long-range bias as the full-buffer NeMo pass.
+                                post_reload_words = get_words(llm_output)
+                                still_replay = (difflib.SequenceMatcher(None, post_reload_words, prev_llm_words).ratio() > 0.85
+                                                if (post_reload_words and prev_llm_words) else False)
+                                if still_replay:
                                     live_input = final_transcript.strip() or dictionary_cleaned_text
+                                    print(f"[LLM] Still replaying after reload — re-running with live transcript: {repr(live_input)}", file=sys.stderr)
+                                    sys.stderr.flush()
                                     live_prompt = prompt.replace(
-                                        f"Raw ASR: {dictionary_cleaned_text}", f"Raw ASR: {live_input}")
-                                    r3 = llm(live_prompt,
-                                             max_tokens=max(256, min(1024, int(len(live_input.split()) * 1.5))),
-                                             stop=["<|end|>"], temperature=0.1)
-                                    llm_output = r3["choices"][0]["text"].strip()
+                                        f"Raw ASR: {dictionary_cleaned_text}",
+                                        f"Raw ASR: {live_input}"
+                                    )
+                                    live_response = llm(
+                                        live_prompt,
+                                        max_tokens=max(256, min(1024, int(len(live_input.split()) * 1.5))),
+                                        stop=["<|end|>"],
+                                        temperature=0.1
+                                    )
+                                    llm_output = live_response["choices"][0]["text"].strip()
+                                    if "Here is the formatted text:" in llm_output:
+                                        llm_output = llm_output.split("Here is the formatted text:")[-1].strip()
+                                    elif "Here is the corrected text:" in llm_output:
+                                        llm_output = llm_output.split("Here is the corrected text:")[-1].strip()
+                                    print(f"[LLM] live-input output: {repr(llm_output)}", file=sys.stderr)
+                            # ------------------------------
 
                             if llm_output:
                                 final_clean_text = llm_output
+                                last_llm_output = llm_output
+                            else:
+                                print("[LLM] Empty output — keeping raw ASR as final text", file=sys.stderr)
+                                sys.stderr.flush()
                         except Exception as e:
-                            print(f"\n[LLM ERROR] Formatting failed: {e}")
-                            print("Falling back to dictionary cleaned text.")
-
-                    last_llm_output = final_clean_text
-
+                            print(f"\n[LLM ERROR] Formatting failed: {e}", file=sys.stderr)
+                            print("Falling back to dictionary cleaned text.", file=sys.stderr)
+                            sys.stderr.flush()
+    
                     print("\n" + "="*40)
                     print("FINAL TRANSCRIPT:")
                     print("="*40)
@@ -694,19 +907,35 @@ Raw ASR: {dictionary_cleaned_text}<|end|>
             while not audio_q.empty():
                 block = audio_q.get()
                 block_mono = block[:, 0].reshape(1, -1)
-                rolling_buffer = np.concatenate((rolling_buffer, block_mono), axis=1)
+                n_frames = block_mono.shape[1]
+
+                total_frames_recorded += n_frames
+
+                # Discard the first _STALE_DISCARD_FRAMES from BOTH buffers.
+                # Stale frames are PulseAudio latency from the previous recording —
+                # they must not reach the rolling buffer (live inference) or the
+                # full_audio_buffer (final NeMo pass), or NeMo hallucinates the
+                # previous session's words over the current transcript.
+                if _frames_discarded < _STALE_DISCARD_FRAMES:
+                    discard_n = min(n_frames, _STALE_DISCARD_FRAMES - _frames_discarded)
+                    _frames_discarded += discard_n
+                    block_mono = block_mono[:, discard_n:]
+                    if block_mono.shape[1] == 0:
+                        continue
+
                 full_audio_buffer.append(block_mono.flatten())
-                
-                total_frames_recorded += block_mono.shape[1]
+                fresh_frames += block_mono.shape[1]
+                rolling_buffer = np.concatenate((rolling_buffer, block_mono), axis=1)
  
             # 2. Start inference ONLY after 2.0 seconds of audio is collected
-            if total_frames_recorded >= int(SAMPLE_RATE * 2.0):
-                
-                # 3. Prevent bursts: only trigger if 0.5s of NEW audio has arrived since the last inference
-                if total_frames_recorded - last_inference_frames >= chunk_size:
-                    
-                    # Sync the tracker directly to prevent the "inference bomb" lag
-                    last_inference_frames = total_frames_recorded
+            # Gate on fresh_frames (post-stale-discard) so the first NeMo inference
+            # only fires once the rolling buffer is filled with genuinely new audio.
+            if fresh_frames >= int(SAMPLE_RATE * 2.0):
+
+                # Prevent bursts: only trigger if 0.5s of NEW audio has arrived since the last inference
+                if fresh_frames - last_inference_frames >= chunk_size:
+
+                    last_inference_frames = fresh_frames
  
                     # Cap the buffer to the maximum window size (4.0s)
                     if rolling_buffer.shape[1] > window_size:
@@ -745,7 +974,7 @@ Raw ASR: {dictionary_cleaned_text}<|end|>
                         raw_words = raw_words[:-1]
                         
                     # Head Drop: If the buffer is sliding (4.0s+), the FIRST word is an artifact of the old audio cut. Drop it!
-                    if total_frames_recorded > window_size and len(raw_words) > 1:
+                    if fresh_frames > window_size and len(raw_words) > 1:
                         raw_words = raw_words[1:]
                         
                     raw_text = " ".join(raw_words)
@@ -755,16 +984,32 @@ Raw ASR: {dictionary_cleaned_text}<|end|>
                     
                     if corrected_text:
                         new_full_transcript, new_part = smart_merge(final_transcript, corrected_text)
-                        
+
                         if new_part:
                             timestamp = datetime.now().strftime('%H:%M:%S')
-                            # Standard print statement with a newline, safe for IDEs and PySide6
-                            print(f"[{timestamp}] {new_part}")
+                            # Emit full transcript so the UI can replace (not append) its state.
+                            # Emitting only new_part caused stale words to persist when smart_merge
+                            # self-corrected an earlier error (e.g. "fourth" → "fifth").
+                            print(f"[{timestamp}] {new_full_transcript}")
                             sys.stdout.flush()
-                                
+
                         final_transcript = new_full_transcript
                         
+        else:
+            # Not recording: drain and discard so the queue never accumulates
+            # stale audio that would bleed into the next recording's full_audio_buffer.
+            while not audio_q.empty():
+                try:
+                    audio_q.get_nowait()
+                except queue.Empty:
+                    break
+
         time.sleep(0.01)
- 
+
 except KeyboardInterrupt:
     stream.stop()
+except Exception as _crash:
+    import traceback
+    traceback.print_exc()
+    sys.stderr.flush()
+    sys.exit(1)
